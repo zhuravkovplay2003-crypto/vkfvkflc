@@ -3519,12 +3519,18 @@ function showExactTimeSelectionModal(timeSlot) {
         const endHourInt = parseInt(endHour);
         const endMinInt = parseInt(endMin || 0);
         
+        // Генерируем времена от начала до конца включительно
         while (true) {
             const timeStr = `${currentHour < 10 ? '0' : ''}${currentHour}:${currentMin < 10 ? '0' : ''}${currentMin}`;
             timeSlots.push(timeStr);
             
-            // Проверяем, достигли ли мы конечного времени (не включая конечное время)
-            if (currentHour > endHourInt || (currentHour === endHourInt && currentMin >= endMinInt)) {
+            // Проверяем, достигли ли мы конечного времени
+            if (currentHour === endHourInt && currentMin === endMinInt) {
+                break;
+            }
+            
+            // Если прошли конечное время, выходим
+            if (currentHour > endHourInt || (currentHour === endHourInt && currentMin > endMinInt)) {
                 break;
             }
             
@@ -4946,12 +4952,16 @@ function checkOrderStatus(orderId) {
                         
                         if (data.status === 'confirmed') {
                             showToast('Заказ подтвержден менеджером!', 'success', 4000);
-                            // Обновляем отображение заказов ВСЕГДА
-                            showOrders();
+                            // Обновляем отображение заказов только если пользователь уже на странице заказов
+                            if (currentPage === 'orders') {
+                                showOrders();
+                            }
                         } else if (data.status === 'rejected') {
                             showToast('Заказ отклонен менеджером', 'error', 4000);
-                            // Обновляем отображение заказов ВСЕГДА
-                            showOrders();
+                            // Обновляем отображение заказов только если пользователь уже на странице заказов
+                            if (currentPage === 'orders') {
+                                showOrders();
+                            }
                         } else if (data.status === 'transferred') {
                             // Начисляем Vape Coins за заказ (только если еще не начислены)
                             if (data.order && data.order.vapeCoinsEarned !== undefined && data.order.vapeCoinsEarned !== null) {
@@ -5045,10 +5055,17 @@ function checkOrderStatus(orderId) {
                                     showToast(`Бонус за штампы!\n+ ${bonusCoins} коинов`, 'success', 4000);
                                 }, 3500);
                             }
+                            
+                            // Обновляем отображение заказов только если пользователь уже на странице заказов
+                            if (currentPage === 'orders') {
+                                showOrders();
+                            }
                         }
                         
-                        // Обновляем отображение заказов ВСЕГДА при изменении статуса
-                        showOrders();
+                        // Обновляем отображение заказов только если пользователь уже на странице заказов
+                        if (currentPage === 'orders') {
+                            showOrders();
+                        }
                         
                         // Обновляем баланс Vape Coins, если пользователь на странице Vape Coins
                         if (currentPage === 'vapeCoins') {
@@ -6471,18 +6488,25 @@ function showOrders() {
                                     let timeCreated = '';
                                     if (order.createdAt) {
                                         // Используем сохраненное время создания заказа
+                                        // createdAt создается через: getMoscowTime().toISOString()
+                                        // getMoscowTime() делает: new Date(now.getTime() + 3 часа)
+                                        // Это создает Date объект, который в UTC показывает время на 3 часа больше текущего UTC
+                                        // Например: если сейчас UTC 12:00 (15:00 по Москве), getMoscowTime() вернет Date с UTC 15:00
+                                        // Но это неправильно! Нужно использовать локальное время браузера
+                                        // createdAt.toISOString() возвращает UTC время, которое на 3 часа больше реального UTC
+                                        // Поэтому нужно вычесть 3 часа из UTC времени, чтобы получить правильное московское время
                                         const createdDate = new Date(order.createdAt);
-                                        // Добавляем 3 часа для московского времени (UTC+3)
+                                        // Вычитаем 3 часа, чтобы получить правильное московское время
                                         const moscowOffset = 3 * 60 * 60 * 1000;
-                                        const moscowTime = new Date(createdDate.getTime() + moscowOffset);
-                                        const hours = String(moscowTime.getUTCHours()).padStart(2, '0');
-                                        const minutes = String(moscowTime.getUTCMinutes()).padStart(2, '0');
+                                        const correctMoscowTime = new Date(createdDate.getTime() - moscowOffset);
+                                        const hours = String(correctMoscowTime.getUTCHours()).padStart(2, '0');
+                                        const minutes = String(correctMoscowTime.getUTCMinutes()).padStart(2, '0');
                                         timeCreated = `${hours}:${minutes}`;
                                     } else {
                                         // Fallback: используем текущее московское время
-                                        const moscowTime = getMoscowTime();
-                                        const hours = String(moscowTime.getUTCHours()).padStart(2, '0');
-                                        const minutes = String(moscowTime.getUTCMinutes()).padStart(2, '0');
+                                        const now = new Date();
+                                        const hours = String(now.getHours()).padStart(2, '0');
+                                        const minutes = String(now.getMinutes()).padStart(2, '0');
                                         timeCreated = `${hours}:${minutes}`;
                                     }
                                     return `<div style="font-size: 11px; opacity: 0.7; margin-top: 4px; margin-left: 18px;">Создан: ${timeCreated}</div>`;
@@ -6778,10 +6802,14 @@ function cancelOrder(orderId) {
     const order = orders.find(o => o.id === orderId);
     if (!order) return;
     
-    // Можно отменить только заказы в ожидании или обработке (не подтвержденные)
-    if (order.status !== 'pending' && order.status !== 'processing') {
-        if (order.status === 'confirmed') {
-            showToast('Нельзя отменить подтвержденный заказ', 'warning', 3000);
+    // Можно отменить только заказы в ожидании, обработке или подтвержденные (но не переданные, отклоненные или отмененные)
+    if (order.status !== 'pending' && order.status !== 'processing' && order.status !== 'confirmed') {
+        if (order.status === 'transferred') {
+            showToast('Заказ уже передан, его нельзя отменить', 'warning', 3000);
+        } else if (order.status === 'rejected') {
+            showToast('Заказ уже отклонен', 'warning', 3000);
+        } else if (order.status === 'cancelled') {
+            showToast('Заказ уже отменен', 'warning', 3000);
         } else {
             showToast('Этот заказ нельзя отменить', 'warning', 3000);
         }
