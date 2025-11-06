@@ -135,13 +135,25 @@ app.post('/api/orders', (req, res) => {
         
         // Определяем дату заказа
         let orderDate;
-        if (orderData.deliveryTime && orderData.deliveryTime.includes('|')) {
+        console.log('Order data received:', {
+            deliveryTime: orderData.deliveryTime,
+            selectedDeliveryDay: orderData.selectedDeliveryDay,
+            deliveryExactTime: orderData.deliveryExactTime
+        });
+        
+        if (orderData.selectedDeliveryDay) {
+            // Приоритет: selectedDeliveryDay
+            orderDate = new Date(orderData.selectedDeliveryDay + 'T12:00:00').toISOString();
+            console.log('Using selectedDeliveryDay:', orderDate);
+        } else if (orderData.deliveryTime && orderData.deliveryTime.includes('|')) {
+            // Если deliveryTime содержит дату (формат 'YYYY-MM-DD|HH:MM-HH:MM')
             const [dateStr] = orderData.deliveryTime.split('|');
             orderDate = new Date(dateStr + 'T12:00:00').toISOString();
-        } else if (orderData.selectedDeliveryDay) {
-            orderDate = new Date(orderData.selectedDeliveryDay + 'T12:00:00').toISOString();
+            console.log('Using deliveryTime date:', orderDate);
         } else {
+            // Иначе используем текущую дату
             orderDate = new Date().toISOString();
+            console.log('Using current date:', orderDate);
         }
         
         const order = {
@@ -169,7 +181,10 @@ app.post('/api/orders', (req, res) => {
         const city = getCityFromLocation(order.location);
         const managerIds = managers[city] || managers['default'] || [];
         
+        console.log(`Sending order to managers. City: ${city}, Managers: ${managerIds.length}`);
+        
         if (managerIds.length > 0) {
+            let sentCount = 0;
             managerIds.forEach(managerId => {
                 bot.telegram.sendMessage(managerId, formatOrderForManager(order), {
                     parse_mode: 'HTML',
@@ -184,12 +199,34 @@ app.post('/api/orders', (req, res) => {
                             ]
                         ]
                     }
+                }).then(() => {
+                    sentCount++;
+                    console.log(`Order sent to manager ${managerId} successfully`);
                 }).catch(err => {
-                    console.error(`Error sending to manager ${managerId}:`, err);
+                    console.error(`Error sending to manager ${managerId}:`, err.message);
                 });
             });
+            console.log(`Order notification sent to ${sentCount} managers`);
         } else {
-            console.warn(`No managers found for city: ${city}`);
+            console.warn(`No managers found for city: ${city}. Order saved but not sent.`);
+            // Отправляем администраторам, если нет менеджеров
+            ADMIN_IDS.forEach(adminId => {
+                bot.telegram.sendMessage(adminId, 
+                    `⚠️ <b>Новый заказ, но нет менеджеров для города: ${city}</b>\n\n` +
+                    formatOrderForManager(order), {
+                    parse_mode: 'HTML',
+                    reply_markup: {
+                        inline_keyboard: [
+                            [
+                                { text: '✅ Подтвердить', callback_data: `confirm_${order.id}` },
+                                { text: '❌ Отклонить', callback_data: `reject_${order.id}` }
+                            ]
+                        ]
+                    }
+                }).catch(err => {
+                    console.error(`Error sending to admin ${adminId}:`, err.message);
+                });
+            });
         }
         
         res.json({ success: true, orderId: order.id });
@@ -244,10 +281,32 @@ app.post('/api/managers', (req, res) => {
 // Обработка действий менеджера в боте
 bot.on('callback_query', async (ctx) => {
     try {
-        const [action, orderId] = ctx.callbackQuery.data.split('_');
+        const data = ctx.callbackQuery.data;
+        console.log('Callback data received:', data);
+        
+        // Используем более надежный способ разделения
+        let action, orderId;
+        if (data.startsWith('confirm_')) {
+            action = 'confirm';
+            orderId = data.substring(8); // Убираем "confirm_"
+        } else if (data.startsWith('reject_')) {
+            action = 'reject';
+            orderId = data.substring(7); // Убираем "reject_"
+        } else if (data.startsWith('details_')) {
+            action = 'details';
+            orderId = data.substring(8); // Убираем "details_"
+        } else {
+            return ctx.answerCbQuery('❌ Неизвестное действие');
+        }
+        
+        console.log('Action:', action, 'OrderId:', orderId);
+        console.log('Total orders:', orders.length);
+        console.log('Order IDs:', orders.map(o => o.id));
+        
         const order = orders.find(o => o.id === orderId);
         
         if (!order) {
+            console.error('Order not found:', orderId);
             return ctx.answerCbQuery('❌ Заказ не найден');
         }
         
@@ -508,3 +567,5 @@ bot.launch().then(() => {
 // Graceful shutdown
 process.once('SIGINT', () => bot.stop('SIGINT'));
 process.once('SIGTERM', () => bot.stop('SIGTERM'));
+
+
