@@ -3420,6 +3420,15 @@ function selectLocationFromMap() {
 
 // Показать модальное окно выбора точного времени
 function showExactTimeSelectionModal(timeSlot) {
+    console.log('showExactTimeSelectionModal called with:', timeSlot);
+    
+    // Проверяем формат timeSlot
+    if (!timeSlot || !timeSlot.includes('|')) {
+        console.error('Invalid timeSlot format:', timeSlot);
+        showToast('Ошибка: неправильный формат времени', 'error', 3000);
+        return;
+    }
+    
     // Сохраняем обработчик BackButton для восстановления
     let originalBackButtonHandler = null;
     if (tg && tg.BackButton) {
@@ -3589,11 +3598,13 @@ function showExactTimeSelectionModal(timeSlot) {
     document.body.appendChild(modal);
     document.body.style.overflow = 'hidden';
     
-    // Плавное появление модального окна
+    // Плавное появление модального окна - используем двойной requestAnimationFrame для надежности
     requestAnimationFrame(() => {
-        modal.style.opacity = '1';
-        modalContent.style.transform = 'scale(1)';
-        modalContent.style.opacity = '1';
+        requestAnimationFrame(() => {
+            modal.style.opacity = '1';
+            modalContent.style.transform = 'scale(1)';
+            modalContent.style.opacity = '1';
+        });
     });
     
     if (tg && tg.HapticFeedback) {
@@ -6438,9 +6449,24 @@ function showOrders() {
         return `
             <div style="background: ${darkMode ? 'linear-gradient(135deg, #2a2a2a 0%, #1a1a1a 100%)' : 'linear-gradient(135deg, #ffffff 0%, #f8f9fa 100%)'}; padding: 20px; border-radius: 16px; margin-bottom: 16px; 
                 border: 2px solid ${colors.border}; box-shadow: 0 4px 12px rgba(0,0,0,${darkMode ? '0.3' : '0.08'}); color: ${colors.text};">
+                <!-- Статус заказа - отдельный блок для лучшей видимости -->
+                <div style="background: ${statusBg}; padding: 16px; border-radius: 12px; margin-bottom: 16px; border: 2px solid ${statusColor}; box-shadow: 0 4px 12px rgba(0,0,0,0.1);">
+                    <div style="display: flex; align-items: center; gap: 12px;">
+                        <div style="width: 40px; height: 40px; background: ${statusColor}; border-radius: 50%; display: flex; align-items: center; justify-content: center; flex-shrink: 0;">
+                            <span style="width: 24px; height: 24px; display: flex; align-items: center; justify-content: center;">${statusIcon.replace('width="24" height="24"', 'width="24" height="24"')}</span>
+                        </div>
+                        <div style="flex: 1;">
+                            <div style="font-size: 14px; color: #666; margin-bottom: 4px;">Статус заказа</div>
+                            <div style="font-size: 18px; font-weight: 700; color: ${statusColor};">
+                                ${statusText}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
                 <!-- Заголовок заказа -->
                 <div style="background: linear-gradient(135deg, #007AFF 0%, #0056b3 100%); padding: 16px; border-radius: 12px; margin-bottom: 16px; color: white; box-shadow: 0 4px 12px rgba(0, 122, 255, 0.3);">
-                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                    <div style="display: flex; justify-content: space-between; align-items: center;">
                         <div style="flex: 1;">
                             <div style="font-weight: 700; font-size: 18px; margin-bottom: 4px; display: flex; align-items: center; gap: 8px;">
                                 <span style="width: 20px; height: 20px; display: flex; align-items: center; justify-content: center;">${getPackageIcon('#ffffff').replace('width="24" height="24"', 'width="20" height="20"')}</span>
@@ -6452,19 +6478,17 @@ function showOrders() {
                                     <span>${formattedDate}${timeDisplay ? ` • ${timeDisplay}` : ''}</span>
                                 </div>
                                 ${(() => {
-                                    // Показываем время создания заказа
+                                    // Показываем время создания заказа в московском времени
                                     const orderDate = new Date(order.date);
-                                    const moscowOffset = 3 * 60 * 60 * 1000;
-                                    const moscowDate = new Date(orderDate.getTime() + moscowOffset);
-                                    const timeCreated = moscowDate.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
+                                    // order.date это ISO строка в UTC, добавляем 3 часа для московского времени
+                                    const moscowOffset = 3 * 60 * 60 * 1000; // 3 часа в миллисекундах
+                                    const moscowTime = new Date(orderDate.getTime() + moscowOffset);
+                                    const hours = String(moscowTime.getUTCHours()).padStart(2, '0');
+                                    const minutes = String(moscowTime.getUTCMinutes()).padStart(2, '0');
+                                    const timeCreated = `${hours}:${minutes}`;
                                     return `<div style="font-size: 11px; opacity: 0.7; margin-top: 4px; margin-left: 18px;">Создан: ${timeCreated}</div>`;
                                 })()}
                             </div>
-                        </div>
-                        <div style="padding: 8px 14px; background: rgba(255,255,255,0.2); border-radius: 10px; font-size: 13px; font-weight: 600; 
-                            display: flex; align-items: center; gap: 6px;">
-                            <span style="width: 16px; height: 16px; display: flex; align-items: center; justify-content: center;">${statusIcon.replace('width="24" height="24"', 'width="16" height="16"')}</span>
-                            <span>${statusText}</span>
                         </div>
                     </div>
                 </div>
@@ -6539,23 +6563,21 @@ function showOrders() {
                                     <span>${order.deliveryType === 'delivery' ? 'Доставка' : 'Самовывоз'}</span>
                         </div>
                                 <div style="font-size: 13px; font-weight: 600; opacity: 0.95; word-wrap: break-word; overflow-wrap: break-word;">
-                                    ${order.deliveryType === 'selfPickup' ? (order.pickupLocation || order.location || 'Не указано') : (order.deliveryAddress || order.location || 'Не указано')}
+                                    ${order.deliveryType === 'selfPickup' ? (order.pickupLocation || 'Не указано') : (order.deliveryAddress || 'Не указано')}
                             </div>
                             ${order.selectedDeliveryDay ? (() => {
-                                const deliveryDate = new Date(order.selectedDeliveryDay + 'T12:00:00');
-                                const today = new Date();
-                                today.setHours(0, 0, 0, 0);
-                                const tomorrow = new Date(today);
-                                tomorrow.setDate(tomorrow.getDate() + 1);
-                                const deliveryDateOnly = new Date(deliveryDate);
-                                deliveryDateOnly.setHours(0, 0, 0, 0);
-                                const dateText = deliveryDateOnly.getTime() === tomorrow.getTime() 
-                                    ? 'Завтра' 
-                                    : deliveryDate.toLocaleDateString('ru-RU', { day: '2-digit', month: '2-digit', year: 'numeric' });
+                                // Используем функцию isTomorrow для правильного определения "Завтра" в московском времени
+                                let dateText = '';
+                                if (isTomorrow(order.selectedDeliveryDay)) {
+                                    dateText = 'Завтра';
+                                } else {
+                                    const deliveryDate = new Date(order.selectedDeliveryDay + 'T12:00:00');
+                                    dateText = deliveryDate.toLocaleDateString('ru-RU', { day: '2-digit', month: '2-digit', year: 'numeric' });
+                                }
                                 return `
                                     <div style="font-size: 11px; opacity: 0.8; margin-top: 6px; display: flex; align-items: center; gap: 4px;">
                                         <span style="width: 12px; height: 12px; display: flex; align-items: center; justify-content: center;">${getClockIcon('#ffffff').replace('width="24" height="24"', 'width="12" height="12"')}</span>
-                                        <span>📅 ${dateText}${order.deliveryTime ? `, ${typeof order.deliveryTime === 'string' && order.deliveryTime.includes('|') ? order.deliveryTime.split('|')[1] : order.deliveryTime}${order.deliveryExactTime ? ` (${order.deliveryExactTime})` : ''}` : ''}</span>
+                                        <span>${dateText}${order.deliveryTime ? `, ${typeof order.deliveryTime === 'string' && order.deliveryTime.includes('|') ? order.deliveryTime.split('|')[1] : order.deliveryTime}${order.deliveryExactTime ? ` (${order.deliveryExactTime})` : ''}` : ''}</span>
                                     </div>
                                 `;
                             })() : order.deliveryTime ? `
