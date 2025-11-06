@@ -40,6 +40,7 @@ let referrals = []; // Список рефералов
 let referralsData = { total: 0, active: 0 }; // Статистика рефералов
 let activePageAnimationTimeout = null; // Таймер для анимации страницы
 let orderStatusCheckIntervals = {}; // Интервалы для проверки статусов заказов
+let backButtonPressCount = 0; // Счетчик нажатий кнопки "Назад"
 
 // URL сервера (измените на ваш адрес сервера)
 // const SERVER_URL = 'http://localhost:3000'; // Для разработки
@@ -1129,6 +1130,18 @@ function showPage(page, skipHistory = false, resetCatalog = false) {
 
 // Назад
 function goBack() {
+    // Увеличиваем счетчик нажатий
+    backButtonPressCount++;
+    
+    // Если нажали больше 2 раз, закрываем приложение
+    if (backButtonPressCount > 2) {
+        if (tg && tg.close) {
+            tg.close();
+        }
+        return;
+    }
+    
+    // Сбрасываем счетчик при успешной навигации
     if (viewingProduct) {
         // Если открыт товар, возвращаемся на предыдущую страницу из истории
         const previousPage = pageHistory.length > 0 ? pageHistory.pop() : 'catalog';
@@ -1153,14 +1166,17 @@ function goBack() {
                 favoritesScrollPosition = 0;
             }
         }
+        backButtonPressCount = 0; // Сбрасываем счетчик при успешной навигации
     } else {
         // Если есть история навигации, возвращаемся на предыдущую страницу
         if (pageHistory.length > 0) {
             const previousPage = pageHistory.pop();
             showPage(previousPage, true); // skipHistory = true, чтобы не добавлять в историю
+            backButtonPressCount = 0; // Сбрасываем счетчик при успешной навигации
         } else {
             // Если истории нет, возвращаемся на каталог
             showPage('catalog', true);
+            backButtonPressCount = 0; // Сбрасываем счетчик при успешной навигации
         }
     }
 }
@@ -3486,19 +3502,42 @@ function showExactTimeSelectionModal(timeSlot) {
             `);
         });
     } else {
-        // Для обычных промежутков времени
-        let currentTime = new Date();
-        currentTime.setHours(parseInt(startHour), parseInt(startMin), 0, 0);
-        const endTimeObj = new Date();
-        endTimeObj.setHours(parseInt(endHour), parseInt(endMin || 0), 0, 0);
+        // Для обычных промежутков времени - используем фиксированный массив
+        const timeSlots = [];
+        let currentHour = parseInt(startHour);
+        let currentMin = parseInt(startMin);
+        const endHourInt = parseInt(endHour);
+        const endMinInt = parseInt(endMin || 0);
+        
+        while (true) {
+            const timeStr = `${currentHour < 10 ? '0' : ''}${currentHour}:${currentMin < 10 ? '0' : ''}${currentMin}`;
+            timeSlots.push(timeStr);
+            
+            // Проверяем, достигли ли мы конечного времени
+            if (currentHour === endHourInt && currentMin === endMinInt) {
+                break;
+            }
+            
+            // Увеличиваем время на 10 минут
+            currentMin += 10;
+            if (currentMin >= 60) {
+                currentMin = 0;
+                currentHour++;
+                if (currentHour >= 24) {
+                    currentHour = 0;
+                }
+            }
+            
+            // Защита от бесконечного цикла
+            if (timeSlots.length > 144) { // Максимум 24 часа * 6 слотов в час
+                break;
+            }
+        }
         
         // Получаем занятые времена для этой даты
         const bookedTimes = getBookedTimesForDate(dateKey);
         
-        while (currentTime <= endTimeObj) {
-            const hours = currentTime.getHours();
-            const minutes = currentTime.getMinutes();
-            const timeStr = `${hours < 10 ? '0' : ''}${hours}:${minutes < 10 ? '0' : ''}${minutes}`;
+        timeSlots.forEach(timeStr => {
             const isSelected = deliveryExactTime === timeStr;
             const isBooked = bookedTimes.includes(timeStr);
             const buttonStyle = isBooked 
@@ -3511,8 +3550,7 @@ function showExactTimeSelectionModal(timeSlot) {
                     ${timeStr}${isBooked ? ' (занято)' : ''}
                 </button>
             `);
-            currentTime.setMinutes(currentTime.getMinutes() + 10);
-        }
+        });
     }
     
     // Контейнер для слотов времени
@@ -4717,18 +4755,19 @@ function checkout() {
             });
             localStorage.setItem('vapeCoinsHistory', JSON.stringify(vapeCoinsHistory));
         }
-        // Определяем дату заказа: если выбрана дата доставки, используем её, иначе текущую дату
+        // Определяем дату заказа: приоритет selectedDeliveryDay, иначе из deliveryTime, иначе московское время
         let orderDate;
-        if (deliveryTime && deliveryTime.includes('|')) {
+        if (selectedDeliveryDay) {
+            // Приоритет: selectedDeliveryDay (уже в формате YYYY-MM-DD)
+            orderDate = new Date(selectedDeliveryDay + 'T12:00:00').toISOString();
+        } else if (deliveryTime && deliveryTime.includes('|')) {
             // Если deliveryTime содержит дату (формат 'YYYY-MM-DD|HH:MM-HH:MM')
             const [dateStr] = deliveryTime.split('|');
             orderDate = new Date(dateStr + 'T12:00:00').toISOString();
-        } else if (selectedDeliveryDay) {
-            // Если выбран день доставки
-            orderDate = new Date(selectedDeliveryDay + 'T12:00:00').toISOString();
         } else {
-            // Иначе используем текущую дату
-            orderDate = new Date().toISOString();
+            // Иначе используем текущую дату в московском времени
+            const moscowDate = getMoscowDateString();
+            orderDate = new Date(moscowDate + 'T12:00:00').toISOString();
         }
         
         // Отправляем заказ на сервер
@@ -4837,7 +4876,7 @@ function checkout() {
         });
         
         // Показываем сообщение об успешном создании заказа
-        showToast(`Заказ отправлен менеджеру\nНомер: #${finalOrderId.slice(-6)}`, 'success', 4000);
+        showToast(`Заказ оформлен!\nПеремещен в раздел "Мои заказы"\nНомер: #${finalOrderId.slice(-6)}`, 'success', 4000);
         
         // Обновляем отображение корзины (покажем пустую корзину)
         if (currentPage === 'cart') {
@@ -4888,16 +4927,12 @@ function checkOrderStatus(orderId) {
                         
                         if (data.status === 'confirmed') {
                             showToast('Заказ подтвержден менеджером!', 'success', 4000);
-                            // Обновляем отображение заказов
-                            if (currentPage === 'orders') {
-                                showOrders();
-                            }
+                            // Обновляем отображение заказов ВСЕГДА
+                            showOrders();
                         } else if (data.status === 'rejected') {
                             showToast('Заказ отклонен менеджером', 'error', 4000);
-                            // Обновляем отображение заказов
-                            if (currentPage === 'orders') {
-                                showOrders();
-                            }
+                            // Обновляем отображение заказов ВСЕГДА
+                            showOrders();
                         } else if (data.status === 'transferred') {
                             // Начисляем Vape Coins за заказ (только если еще не начислены)
                             if (data.order && data.order.vapeCoinsEarned !== undefined && data.order.vapeCoinsEarned !== null) {
@@ -4993,10 +5028,8 @@ function checkOrderStatus(orderId) {
                             }
                         }
                         
-                        // Обновляем отображение, если пользователь на странице заказов
-                        if (currentPage === 'orders') {
-                            showOrders();
-                        }
+                        // Обновляем отображение заказов ВСЕГДА при изменении статуса
+                        showOrders();
                         
                         // Обновляем баланс Vape Coins, если пользователь на странице Vape Coins
                         if (currentPage === 'vapeCoins') {
