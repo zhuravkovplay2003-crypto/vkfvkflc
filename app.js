@@ -206,6 +206,45 @@ const products = [
     }
 ];
 
+// Функции для работы с московским временем (UTC+3)
+function getMoscowTime() {
+    const now = new Date();
+    // Получаем московское время (UTC+3)
+    const moscowOffset = 3 * 60 * 60 * 1000; // 3 часа в миллисекундах
+    const moscowTime = new Date(now.getTime() + moscowOffset);
+    return moscowTime;
+}
+
+function getMoscowDateString() {
+    const moscowTime = getMoscowTime();
+    const year = moscowTime.getUTCFullYear();
+    const month = String(moscowTime.getUTCMonth() + 1).padStart(2, '0');
+    const day = String(moscowTime.getUTCDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+}
+
+function formatMoscowDate(dateString) {
+    const date = new Date(dateString);
+    // Добавляем 3 часа для московского времени
+    const moscowOffset = 3 * 60 * 60 * 1000;
+    const moscowDate = new Date(date.getTime() + moscowOffset);
+    const year = moscowDate.getUTCFullYear();
+    const month = String(moscowDate.getUTCMonth() + 1).padStart(2, '0');
+    const day = String(moscowDate.getUTCDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+}
+
+function isTomorrow(dateString) {
+    const today = getMoscowDateString();
+    // Получаем завтрашнюю дату в московском времени
+    const [year, month, day] = today.split('-').map(Number);
+    const todayDate = new Date(Date.UTC(year, month - 1, day));
+    const tomorrowDate = new Date(todayDate);
+    tomorrowDate.setUTCDate(tomorrowDate.getUTCDate() + 1);
+    const tomorrowStr = `${tomorrowDate.getUTCFullYear()}-${String(tomorrowDate.getUTCMonth() + 1).padStart(2, '0')}-${String(tomorrowDate.getUTCDate()).padStart(2, '0')}`;
+    return dateString === tomorrowStr;
+}
+
 // Инициализация
 function init() {
     console.log('Init function called');
@@ -3097,6 +3136,21 @@ function setDeliveryExactTime(time) {
         });
     }
     
+    // Обновляем отображение времени в корзине
+    if (currentPage === 'cart') {
+        const timeDisplay = document.getElementById('selected-delivery-time-display');
+        const timeDisplayDelivery = document.getElementById('selected-delivery-time-display-delivery');
+        const timeText = deliveryTime ? (deliveryTime.includes('|') ? deliveryTime.split('|')[1] : deliveryTime) : '';
+        const exactText = time ? ` (${time})` : '';
+        
+        if (timeDisplay) {
+            timeDisplay.textContent = timeText + exactText;
+        }
+        if (timeDisplayDelivery) {
+            timeDisplayDelivery.textContent = timeText + exactText;
+        }
+    }
+    
     // Закрываем модальное окно после выбора точного времени с плавной анимацией
     setTimeout(() => {
         const modal = document.querySelector('.exact-time-modal-overlay');
@@ -3623,11 +3677,16 @@ function setDeliveryTime(time) {
     if (time.includes('|')) {
         // Новый формат с датой
         timeToStore = time;
+        const [dateKey] = time.split('|');
+        selectedDeliveryDay = dateKey;
+        localStorage.setItem('selectedDeliveryDay', selectedDeliveryDay);
     } else {
         // Старый формат - преобразуем в новый с сегодняшней датой
         const today = new Date();
         const dateKey = today.toISOString().split('T')[0];
         timeToStore = `${dateKey}|${time}`;
+        selectedDeliveryDay = dateKey;
+        localStorage.setItem('selectedDeliveryDay', selectedDeliveryDay);
     }
     
     deliveryTime = timeToStore;
@@ -3635,6 +3694,20 @@ function setDeliveryTime(time) {
     // Сбрасываем точное время при выборе нового промежутка
     deliveryExactTime = null;
     localStorage.removeItem('deliveryExactTime');
+    
+    // Обновляем отображение времени в корзине
+    if (currentPage === 'cart') {
+        const timeDisplay = document.getElementById('selected-delivery-time-display');
+        const timeDisplayDelivery = document.getElementById('selected-delivery-time-display-delivery');
+        const timeText = time.includes('|') ? time.split('|')[1] : time;
+        
+        if (timeDisplay) {
+            timeDisplay.textContent = timeText;
+        }
+        if (timeDisplayDelivery) {
+            timeDisplayDelivery.textContent = timeText;
+        }
+    }
     
     // Плавно закрываем текущее модальное окно
     const currentModal = document.querySelector('.time-selection-modal-overlay');
@@ -3807,16 +3880,17 @@ function showCart() {
                                         if (!deliveryTime && !selectedDeliveryDay) return 'Выбрать время';
                                         let timeText = '';
                                         if (selectedDeliveryDay) {
-                                            const deliveryDate = new Date(selectedDeliveryDay + 'T12:00:00');
-                                            const today = new Date();
-                                            today.setHours(0, 0, 0, 0);
-                                            const tomorrow = new Date(today);
-                                            tomorrow.setDate(tomorrow.getDate() + 1);
-                                            const deliveryDateOnly = new Date(deliveryDate);
-                                            deliveryDateOnly.setHours(0, 0, 0, 0);
-                                            const dateText = deliveryDateOnly.getTime() === tomorrow.getTime() 
+                                            // Используем московское время для определения "Завтра"
+                                            const today = getMoscowDateString();
+                                            const [year, month, day] = today.split('-').map(Number);
+                                            const todayDate = new Date(Date.UTC(year, month - 1, day));
+                                            const tomorrowDate = new Date(todayDate);
+                                            tomorrowDate.setUTCDate(tomorrowDate.getUTCDate() + 1);
+                                            const tomorrowStr = `${tomorrowDate.getUTCFullYear()}-${String(tomorrowDate.getUTCMonth() + 1).padStart(2, '0')}-${String(tomorrowDate.getUTCDate()).padStart(2, '0')}`;
+                                            
+                                            const dateText = selectedDeliveryDay === tomorrowStr 
                                                 ? 'Завтра' 
-                                                : deliveryDate.toLocaleDateString('ru-RU', { day: '2-digit', month: '2-digit', year: 'numeric' });
+                                                : new Date(selectedDeliveryDay + 'T12:00:00').toLocaleDateString('ru-RU', { day: '2-digit', month: '2-digit', year: 'numeric' });
                                             timeText = dateText;
                                         }
                                         if (deliveryTime) {
@@ -3936,16 +4010,17 @@ function showCart() {
                                         if (!deliveryTime && !selectedDeliveryDay) return 'Выбрать время';
                                         let timeText = '';
                                         if (selectedDeliveryDay) {
-                                            const deliveryDate = new Date(selectedDeliveryDay + 'T12:00:00');
-                                            const today = new Date();
-                                            today.setHours(0, 0, 0, 0);
-                                            const tomorrow = new Date(today);
-                                            tomorrow.setDate(tomorrow.getDate() + 1);
-                                            const deliveryDateOnly = new Date(deliveryDate);
-                                            deliveryDateOnly.setHours(0, 0, 0, 0);
-                                            const dateText = deliveryDateOnly.getTime() === tomorrow.getTime() 
+                                            // Используем московское время для определения "Завтра"
+                                            const today = getMoscowDateString();
+                                            const [year, month, day] = today.split('-').map(Number);
+                                            const todayDate = new Date(Date.UTC(year, month - 1, day));
+                                            const tomorrowDate = new Date(todayDate);
+                                            tomorrowDate.setUTCDate(tomorrowDate.getUTCDate() + 1);
+                                            const tomorrowStr = `${tomorrowDate.getUTCFullYear()}-${String(tomorrowDate.getUTCMonth() + 1).padStart(2, '0')}-${String(tomorrowDate.getUTCDate()).padStart(2, '0')}`;
+                                            
+                                            const dateText = selectedDeliveryDay === tomorrowStr 
                                                 ? 'Завтра' 
-                                                : deliveryDate.toLocaleDateString('ru-RU', { day: '2-digit', month: '2-digit', year: 'numeric' });
+                                                : new Date(selectedDeliveryDay + 'T12:00:00').toLocaleDateString('ru-RU', { day: '2-digit', month: '2-digit', year: 'numeric' });
                                             timeText = dateText;
                                         }
                                         if (deliveryTime) {
@@ -4572,20 +4647,13 @@ function checkout() {
     if (deliveryType === 'selfPickup') {
         orderText += `\nLOCATION Точка самовывоза: ${selectedPickupLocation}`;
         
-        // Определяем дату доставки
+        // Определяем дату доставки с учетом московского времени
         let dateText = '';
         if (selectedDeliveryDay) {
-            const deliveryDate = new Date(selectedDeliveryDay + 'T12:00:00');
-            const today = new Date();
-            today.setHours(0, 0, 0, 0);
-            const tomorrow = new Date(today);
-            tomorrow.setDate(tomorrow.getDate() + 1);
-            const deliveryDateOnly = new Date(deliveryDate);
-            deliveryDateOnly.setHours(0, 0, 0, 0);
-            
-            if (deliveryDateOnly.getTime() === tomorrow.getTime()) {
+            if (isTomorrow(selectedDeliveryDay)) {
                 dateText = 'Завтра';
             } else {
+                const deliveryDate = new Date(selectedDeliveryDay + 'T12:00:00');
                 dateText = deliveryDate.toLocaleDateString('ru-RU', { day: '2-digit', month: '2-digit', year: 'numeric' });
             }
         }
@@ -4597,20 +4665,13 @@ function checkout() {
         orderText += `\nPACKAGE Доставка курьером`;
         orderText += `\nLOCATION Адрес доставки: ${deliveryAddress}`;
         
-        // Определяем дату доставки
+        // Определяем дату доставки с учетом московского времени
         let dateText = '';
         if (selectedDeliveryDay) {
-            const deliveryDate = new Date(selectedDeliveryDay + 'T12:00:00');
-            const today = new Date();
-            today.setHours(0, 0, 0, 0);
-            const tomorrow = new Date(today);
-            tomorrow.setDate(tomorrow.getDate() + 1);
-            const deliveryDateOnly = new Date(deliveryDate);
-            deliveryDateOnly.setHours(0, 0, 0, 0);
-            
-            if (deliveryDateOnly.getTime() === tomorrow.getTime()) {
+            if (isTomorrow(selectedDeliveryDay)) {
                 dateText = 'Завтра';
             } else {
+                const deliveryDate = new Date(selectedDeliveryDay + 'T12:00:00');
                 dateText = deliveryDate.toLocaleDateString('ru-RU', { day: '2-digit', month: '2-digit', year: 'numeric' });
             }
         }
@@ -4722,8 +4783,16 @@ function checkout() {
                 orders.unshift(order);
                 localStorage.setItem('orders', JSON.stringify(orders));
                 
+                // Показываем уведомление о перемещении в заказы
+                showToast('Заказ оформлен!\nПеремещен в раздел "Мои заказы"', 'success', 4000);
+                
                 // Запускаем проверку статуса заказа
                 checkOrderStatus(result.orderId);
+                
+                // Обновляем отображение заказов, если пользователь на странице заказов
+                if (currentPage === 'orders') {
+                    showOrders();
+                }
             } else {
                 throw new Error(result.error || 'Ошибка при отправке заказа');
             }
@@ -4819,8 +4888,16 @@ function checkOrderStatus(orderId) {
                         
                         if (data.status === 'confirmed') {
                             showToast('Заказ подтвержден менеджером!', 'success', 4000);
+                            // Обновляем отображение заказов
+                            if (currentPage === 'orders') {
+                                showOrders();
+                            }
                         } else if (data.status === 'rejected') {
                             showToast('Заказ отклонен менеджером', 'error', 4000);
+                            // Обновляем отображение заказов
+                            if (currentPage === 'orders') {
+                                showOrders();
+                            }
                         } else if (data.status === 'transferred') {
                             // Начисляем Vape Coins за заказ (только если еще не начислены)
                             if (data.order && data.order.vapeCoinsEarned !== undefined && data.order.vapeCoinsEarned !== null) {
@@ -4843,16 +4920,74 @@ function checkOrderStatus(orderId) {
                                         orderId: orderId
                                     });
                                     localStorage.setItem('vapeCoinsHistory', JSON.stringify(vapeCoinsHistory));
+                                }
+                                
+                                // Обновляем баланс в заказе
+                                order.vapeCoinsEarned = coinsEarned;
+                            }
+                            
+                            // Начисляем штампы за заказ (2 товара = 1 штамп, только за товары оплаченные деньгами)
+                            const totalItems = order.items.reduce((sum, item) => {
+                                const paymentMethod = item.paymentMethod || 'money';
+                                if (paymentMethod === 'money') {
+                                    return sum + item.quantity;
+                                }
+                                return sum;
+                            }, 0);
+                            
+                            if (totalItems > 0) {
+                                const stampsToAdd = Math.floor(totalItems / 2);
+                                if (stampsToAdd > 0) {
+                                    const totalStamps = completedStampSets * 10 + stamps;
+                                    const newTotalStamps = totalStamps + stampsToAdd;
+                                    completedStampSets = Math.floor(newTotalStamps / 10);
+                                    stamps = newTotalStamps % 10;
+                                    localStorage.setItem('stamps', newTotalStamps.toString());
                                     
-                                    showToast(`Заказ передан! Начислено ${coinsEarned.toFixed(1)} Vape Coins`, 'success', 5000);
+                                    // Проверяем бонус за 10 штампов
+                                    let bonusCoins = 0;
+                                    const newCompletedSets = Math.floor(newTotalStamps / 10) - Math.floor(totalStamps / 10);
+                                    if (newCompletedSets > 0) {
+                                        bonusCoins = newCompletedSets * 10;
+                                        vapeCoins += bonusCoins;
+                                        localStorage.setItem('vapeCoins', vapeCoins.toString());
+                                        
+                                        vapeCoinsHistory.unshift({
+                                            id: `vc_${Date.now()}`,
+                                            date: new Date().toISOString(),
+                                            type: 'earned',
+                                            amount: bonusCoins,
+                                            description: `Бонус за ${newCompletedSets} ${newCompletedSets === 1 ? 'набор из 10 штампов' : 'наборов из 10 штампов'}`,
+                                            orderId: orderId
+                                        });
+                                        localStorage.setItem('vapeCoinsHistory', JSON.stringify(vapeCoinsHistory));
+                                    }
+                                    
+                                    let toastMessage = '';
+                                    if (coinsEarned > 0 && stampsToAdd > 0) {
+                                        toastMessage = `Заказ передан!\n+ ${stampsToAdd} ${stampsToAdd === 1 ? 'штамп' : stampsToAdd < 5 ? 'штампа' : 'штампов'}\n+ ${coinsEarned.toFixed(1)} коинов`;
+                                    } else if (stampsToAdd > 0) {
+                                        toastMessage = `Заказ передан!\n+ ${stampsToAdd} ${stampsToAdd === 1 ? 'штамп' : stampsToAdd < 5 ? 'штампа' : 'штампов'}`;
+                                    } else if (coinsEarned > 0) {
+                                        toastMessage = `Заказ передан! Начислено ${coinsEarned.toFixed(1)} Vape Coins`;
+                                    } else {
+                                        toastMessage = 'Заказ передан клиенту';
+                                    }
+                                    
+                                    if (bonusCoins > 0) {
+                                        setTimeout(() => {
+                                            showToast(`Бонус за штампы!\n+ ${bonusCoins} коинов`, 'success', 4000);
+                                        }, 3500);
+                                    }
+                                    
+                                    showToast(toastMessage, 'success', 5000);
                                 } else if (coinsEarned > 0) {
                                     showToast(`Заказ передан! Начислено ${coinsEarned.toFixed(1)} Vape Coins`, 'success', 5000);
                                 } else {
                                     showToast('Заказ передан клиенту', 'success', 4000);
                                 }
-                                
-                                // Обновляем баланс в заказе
-                                order.vapeCoinsEarned = coinsEarned;
+                            } else if (coinsEarned > 0) {
+                                showToast(`Заказ передан! Начислено ${coinsEarned.toFixed(1)} Vape Coins`, 'success', 5000);
                             } else {
                                 showToast('Заказ передан клиенту', 'success', 4000);
                             }
@@ -6198,14 +6333,40 @@ function showOrders() {
                 <div style="font-size: 14px; color: ${colors.textSecondary};">Ваши заказы появятся здесь</div>
             </div>
         ` : filteredOrders.map((order, index) => {
-        const orderDate = new Date(order.date);
-        const formattedDate = orderDate.toLocaleDateString('ru-RU', {
-            day: '2-digit',
-            month: '2-digit',
-            year: 'numeric',
-            hour: '2-digit',
-            minute: '2-digit'
-        });
+        // Форматируем дату заказа с учетом московского времени
+        let formattedDate = '';
+        if (order.selectedDeliveryDay) {
+            // Если есть выбранная дата доставки
+            if (isTomorrow(order.selectedDeliveryDay)) {
+                formattedDate = 'Завтра';
+            } else {
+                const deliveryDate = new Date(order.selectedDeliveryDay + 'T12:00:00');
+                formattedDate = deliveryDate.toLocaleDateString('ru-RU', {
+                    day: '2-digit',
+                    month: '2-digit',
+                    year: 'numeric'
+                });
+            }
+        } else {
+            // Используем дату заказа с московским временем
+            const orderDate = new Date(order.date);
+            const moscowOffset = 3 * 60 * 60 * 1000;
+            const moscowDate = new Date(orderDate.getTime() + moscowOffset);
+            formattedDate = moscowDate.toLocaleDateString('ru-RU', {
+                day: '2-digit',
+                month: '2-digit',
+                year: 'numeric'
+            });
+        }
+        
+        // Форматируем время доставки
+        let timeDisplay = '';
+        if (order.deliveryTime) {
+            timeDisplay = order.deliveryTime.includes('|') ? order.deliveryTime.split('|')[1] : order.deliveryTime;
+            if (order.deliveryExactTime) {
+                timeDisplay += ` (${order.deliveryExactTime})`;
+            }
+        }
         
         const statusText = order.status === 'pending' ? 'В обработке' :
                           order.status === 'processing' ? 'В обработке' : 
@@ -6679,6 +6840,30 @@ function cancelOrder(orderId) {
                     });
                     localStorage.setItem('vapeCoinsHistory', JSON.stringify(vapeCoinsHistory));
                 }
+                
+                // Отправляем уведомление на сервер об отмене заказа
+                (async () => {
+                    try {
+                        const response = await fetch(`${SERVER_URL}/api/orders/${order.id}/cancel`, {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json'
+                            },
+                            body: JSON.stringify({
+                                orderId: order.id,
+                                userId: tg?.initDataUnsafe?.user?.id?.toString() || 'unknown'
+                            })
+                        });
+                        
+                        if (response.ok) {
+                            const result = await response.json();
+                            console.log('Order cancellation sent to server:', result);
+                        }
+                    } catch (error) {
+                        console.error('Error sending cancellation to server:', error);
+                        // Продолжаем выполнение даже если сервер недоступен
+                    }
+                })();
                 
                 // Меняем статус заказа на "отменен" вместо удаления
                 order.status = 'cancelled';
