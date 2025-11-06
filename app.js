@@ -3767,11 +3767,15 @@ function setDeliveryTime(time) {
             currentModal.remove();
             document.body.style.overflow = '';
             // Открываем новое модальное окно для выбора точного времени
-            showExactTimeSelectionModal(timeToStore);
+            setTimeout(() => {
+                showExactTimeSelectionModal(timeToStore);
+            }, 50);
         }, 200);
     } else {
         // Если нет текущего модального окна, открываем сразу
-        showExactTimeSelectionModal(timeToStore);
+        setTimeout(() => {
+            showExactTimeSelectionModal(timeToStore);
+        }, 50);
     }
     
     if (tg && tg.HapticFeedback) {
@@ -4962,69 +4966,69 @@ function checkOrderStatus(orderId) {
                             }
                             
                             // Начисляем штампы за заказ (2 товара = 1 штамп, только за товары оплаченные деньгами)
-                            const totalItems = order.items.reduce((sum, item) => {
-                                const paymentMethod = item.paymentMethod || 'money';
-                                if (paymentMethod === 'money') {
-                                    return sum + item.quantity;
-                                }
-                                return sum;
-                            }, 0);
+                            // Проверяем, не начислены ли уже штампы за этот заказ
+                            const stampsAlreadyAdded = localStorage.getItem(`stamps_added_${orderId}`);
+                            let stampsToAdd = 0;
+                            let bonusCoins = 0;
                             
-                            if (totalItems > 0) {
-                                const stampsToAdd = Math.floor(totalItems / 2);
-                                if (stampsToAdd > 0) {
-                                    const totalStamps = completedStampSets * 10 + stamps;
-                                    const newTotalStamps = totalStamps + stampsToAdd;
-                                    completedStampSets = Math.floor(newTotalStamps / 10);
-                                    stamps = newTotalStamps % 10;
-                                    localStorage.setItem('stamps', newTotalStamps.toString());
-                                    
-                                    // Проверяем бонус за 10 штампов
-                                    let bonusCoins = 0;
-                                    const newCompletedSets = Math.floor(newTotalStamps / 10) - Math.floor(totalStamps / 10);
-                                    if (newCompletedSets > 0) {
-                                        bonusCoins = newCompletedSets * 10;
-                                        vapeCoins += bonusCoins;
-                                        localStorage.setItem('vapeCoins', vapeCoins.toString());
+                            if (!stampsAlreadyAdded) {
+                                const totalItems = order.items.reduce((sum, item) => {
+                                    const paymentMethod = item.paymentMethod || 'money';
+                                    if (paymentMethod === 'money') {
+                                        return sum + item.quantity;
+                                    }
+                                    return sum;
+                                }, 0);
+                                
+                                if (totalItems > 0) {
+                                    stampsToAdd = Math.floor(totalItems / 2);
+                                    if (stampsToAdd > 0) {
+                                        const totalStamps = completedStampSets * 10 + stamps;
+                                        const newTotalStamps = totalStamps + stampsToAdd;
+                                        completedStampSets = Math.floor(newTotalStamps / 10);
+                                        stamps = newTotalStamps % 10;
+                                        localStorage.setItem('stamps', newTotalStamps.toString());
+                                        localStorage.setItem(`stamps_added_${orderId}`, 'true'); // Помечаем что штампы начислены
                                         
-                                        vapeCoinsHistory.unshift({
-                                            id: `vc_${Date.now()}`,
-                                            date: new Date().toISOString(),
-                                            type: 'earned',
-                                            amount: bonusCoins,
-                                            description: `Бонус за ${newCompletedSets} ${newCompletedSets === 1 ? 'набор из 10 штампов' : 'наборов из 10 штампов'}`,
-                                            orderId: orderId
-                                        });
-                                        localStorage.setItem('vapeCoinsHistory', JSON.stringify(vapeCoinsHistory));
+                                        // Проверяем бонус за 10 штампов
+                                        const newCompletedSets = Math.floor(newTotalStamps / 10) - Math.floor(totalStamps / 10);
+                                        if (newCompletedSets > 0) {
+                                            bonusCoins = newCompletedSets * 10;
+                                            vapeCoins += bonusCoins;
+                                            localStorage.setItem('vapeCoins', vapeCoins.toString());
+                                            
+                                            vapeCoinsHistory.unshift({
+                                                id: `vc_${Date.now()}`,
+                                                date: new Date().toISOString(),
+                                                type: 'earned',
+                                                amount: bonusCoins,
+                                                description: `Бонус за ${newCompletedSets} ${newCompletedSets === 1 ? 'набор из 10 штампов' : 'наборов из 10 штампов'}`,
+                                                orderId: orderId
+                                            });
+                                            localStorage.setItem('vapeCoinsHistory', JSON.stringify(vapeCoinsHistory));
+                                        }
                                     }
-                                    
-                                    let toastMessage = '';
-                                    if (coinsEarned > 0 && stampsToAdd > 0) {
-                                        toastMessage = `Заказ передан!\n+ ${stampsToAdd} ${stampsToAdd === 1 ? 'штамп' : stampsToAdd < 5 ? 'штампа' : 'штампов'}\n+ ${coinsEarned.toFixed(1)} коинов`;
-                                    } else if (stampsToAdd > 0) {
-                                        toastMessage = `Заказ передан!\n+ ${stampsToAdd} ${stampsToAdd === 1 ? 'штамп' : stampsToAdd < 5 ? 'штампа' : 'штампов'}`;
-                                    } else if (coinsEarned > 0) {
-                                        toastMessage = `Заказ передан! Начислено ${coinsEarned.toFixed(1)} Vape Coins`;
-                                    } else {
-                                        toastMessage = 'Заказ передан клиенту';
-                                    }
-                                    
-                                    if (bonusCoins > 0) {
-                                        setTimeout(() => {
-                                            showToast(`Бонус за штампы!\n+ ${bonusCoins} коинов`, 'success', 4000);
-                                        }, 3500);
-                                    }
-                                    
-                                    showToast(toastMessage, 'success', 5000);
-                                } else if (coinsEarned > 0) {
-                                    showToast(`Заказ передан! Начислено ${coinsEarned.toFixed(1)} Vape Coins`, 'success', 5000);
-                                } else {
-                                    showToast('Заказ передан клиенту', 'success', 4000);
                                 }
+                            }
+                            
+                            // Формируем сообщение
+                            let toastMessage = '';
+                            if (coinsEarned > 0 && stampsToAdd > 0) {
+                                toastMessage = `Заказ передан!\n+ ${stampsToAdd} ${stampsToAdd === 1 ? 'штамп' : stampsToAdd < 5 ? 'штампа' : 'штампов'}\n+ ${coinsEarned.toFixed(1)} коинов`;
+                            } else if (stampsToAdd > 0) {
+                                toastMessage = `Заказ передан!\n+ ${stampsToAdd} ${stampsToAdd === 1 ? 'штамп' : stampsToAdd < 5 ? 'штампа' : 'штампов'}`;
                             } else if (coinsEarned > 0) {
-                                showToast(`Заказ передан! Начислено ${coinsEarned.toFixed(1)} Vape Coins`, 'success', 5000);
+                                toastMessage = `Заказ передан! Начислено ${coinsEarned.toFixed(1)} Vape Coins`;
                             } else {
-                                showToast('Заказ передан клиенту', 'success', 4000);
+                                toastMessage = 'Заказ передан клиенту';
+                            }
+                            
+                            showToast(toastMessage, 'success', 5000);
+                            
+                            if (bonusCoins > 0) {
+                                setTimeout(() => {
+                                    showToast(`Бонус за штампы!\n+ ${bonusCoins} коинов`, 'success', 4000);
+                                }, 3500);
                             }
                         }
                         
@@ -6442,9 +6446,19 @@ function showOrders() {
                                 <span style="width: 20px; height: 20px; display: flex; align-items: center; justify-content: center;">${getPackageIcon('#ffffff').replace('width="24" height="24"', 'width="20" height="20"')}</span>
                                 <span>Заказ #${order.id.slice(-6)}</span>
                             </div>
-                            <div style="font-size: 12px; opacity: 0.9; display: flex; align-items: center; gap: 4px; margin-top: 4px;">
-                                <span style="width: 14px; height: 14px; display: flex; align-items: center; justify-content: center;">${getClockIcon('#ffffff').replace('width="24" height="24"', 'width="14" height="14"')}</span>
-                                <span>${formattedDate}</span>
+                            <div style="font-size: 12px; opacity: 0.9; display: flex; align-items: center; gap: 4px; margin-top: 4px; flex-direction: column; align-items: flex-start;">
+                                <div style="display: flex; align-items: center; gap: 4px;">
+                                    <span style="width: 14px; height: 14px; display: flex; align-items: center; justify-content: center;">${getClockIcon('#ffffff').replace('width="24" height="24"', 'width="14" height="14"')}</span>
+                                    <span>${formattedDate}${timeDisplay ? ` • ${timeDisplay}` : ''}</span>
+                                </div>
+                                ${(() => {
+                                    // Показываем время создания заказа
+                                    const orderDate = new Date(order.date);
+                                    const moscowOffset = 3 * 60 * 60 * 1000;
+                                    const moscowDate = new Date(orderDate.getTime() + moscowOffset);
+                                    const timeCreated = moscowDate.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
+                                    return `<div style="font-size: 11px; opacity: 0.7; margin-top: 4px; margin-left: 18px;">Создан: ${timeCreated}</div>`;
+                                })()}
                             </div>
                         </div>
                         <div style="padding: 8px 14px; background: rgba(255,255,255,0.2); border-radius: 10px; font-size: 13px; font-weight: 600; 
@@ -6525,7 +6539,7 @@ function showOrders() {
                                     <span>${order.deliveryType === 'delivery' ? 'Доставка' : 'Самовывоз'}</span>
                         </div>
                                 <div style="font-size: 13px; font-weight: 600; opacity: 0.95; word-wrap: break-word; overflow-wrap: break-word;">
-                                    ${order.location || order.deliveryAddress || 'Не указано'}
+                                    ${order.deliveryType === 'selfPickup' ? (order.pickupLocation || order.location || 'Не указано') : (order.deliveryAddress || order.location || 'Не указано')}
                             </div>
                             ${order.selectedDeliveryDay ? (() => {
                                 const deliveryDate = new Date(order.selectedDeliveryDay + 'T12:00:00');
@@ -6559,18 +6573,21 @@ function showOrders() {
                     </div>
                 </div>
                 
-                ${order.status === 'pending' ? `
+                ${order.status === 'pending' || order.status === 'processing' ? `
                     <div style="padding: 16px; background: linear-gradient(135deg, #FFF3E0 0%, #FFE0B2 100%); 
-                        border-radius: 12px; text-align: center; border: 2px solid #FF9800;">
+                        border-radius: 12px; text-align: center; border: 2px solid #FF9800; margin-bottom: 12px;">
                         <div style="width: 32px; height: 32px; margin: 0 auto 8px; display: flex; align-items: center; justify-content: center;">${getClockIcon('#FF9800')}</div>
-                        <div style="font-weight: 600; color: #F57C00; font-size: 14px; margin-bottom: 4px;">В обработке</div>
+                        <div style="font-weight: 600; color: #F57C00; font-size: 14px; margin-bottom: 4px;">${statusText}</div>
                         <div style="font-size: 12px; color: #666;">Заказ отправлен менеджеру и будет обработан в ближайшее время</div>
-                        <button onclick="cancelOrder('${order.id}')" style="margin-top: 12px; padding: 10px 20px; 
-                            background: linear-gradient(135deg, #f44336 0%, #d32f2f 100%); color: white; border: none; border-radius: 8px; 
-                            font-size: 14px; font-weight: 600; cursor: pointer;">
-                            Отменить заказ
-                        </button>
                     </div>
+                    <button onclick="cancelOrder('${order.id}')" style="width: 100%; padding: 16px; 
+                        background: linear-gradient(135deg, #f44336 0%, #d32f2f 100%); color: white; border: none; border-radius: 12px; 
+                        font-size: 16px; font-weight: 700; cursor: pointer; box-shadow: 0 4px 12px rgba(244,67,54,0.3);
+                        transition: all 0.2s;"
+                        onmouseover="this.style.transform='scale(1.02)'; this.style.boxShadow='0 6px 16px rgba(244,67,54,0.4)'"
+                        onmouseout="this.style.transform='scale(1)'; this.style.boxShadow='0 4px 12px rgba(244,67,54,0.3)'">
+                        Отменить заказ
+                    </button>
                 ` : order.status === 'confirmed' ? `
                     <div style="padding: 16px; background: linear-gradient(135deg, #E8F5E9 0%, #C8E6C9 100%); 
                         border-radius: 12px; text-align: center; border: 2px solid #4CAF50; margin-bottom: 12px;">
