@@ -1133,8 +1133,8 @@ function goBack() {
     // Увеличиваем счетчик нажатий
     backButtonPressCount++;
     
-    // Если нажали больше 2 раз, закрываем приложение
-    if (backButtonPressCount > 2) {
+    // Если нажали больше 3 раз, закрываем приложение
+    if (backButtonPressCount > 3) {
         if (tg && tg.close) {
             tg.close();
         }
@@ -1597,7 +1597,7 @@ function showProduct(productId, favoriteFlavor = null, favoriteStrength = null) 
                         <button onclick="addToCart(${product.id})" style="width: 100%; padding: 16px; 
                             background: #007AFF; color: white; border: none; border-radius: 12px; 
                             font-size: 16px; font-weight: 600; cursor: pointer; margin-top: 20px;">
-                            🛒 В корзину
+                            В корзину
                         </button>
                     `;
                 }
@@ -2971,17 +2971,18 @@ function selectLocation() {
 // Генерация слотов времени доставки/самовывоза (сегодня и завтра, с 9:00 до 23:00-00:00)
 function generateTimeSlots() {
     const slots = [];
-    const now = new Date();
-    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    // Используем московское время для определения сегодня/завтра
+    const moscowTime = getMoscowTime();
+    const today = new Date(Date.UTC(moscowTime.getUTCFullYear(), moscowTime.getUTCMonth(), moscowTime.getUTCDate()));
     const tomorrow = new Date(today);
-    tomorrow.setDate(tomorrow.getDate() + 1);
+    tomorrow.setUTCDate(tomorrow.getUTCDate() + 1);
     
-    const currentHour = now.getHours();
-    const currentMinute = now.getMinutes();
+    const currentHour = moscowTime.getUTCHours();
+    const currentMinute = moscowTime.getUTCMinutes();
     
-    // Определяем выбранный день
-    const todayKey = today.toISOString().split('T')[0];
-    const tomorrowKey = tomorrow.toISOString().split('T')[0];
+    // Определяем выбранный день в формате YYYY-MM-DD (московское время)
+    const todayKey = getMoscowDateString();
+    const tomorrowKey = `${tomorrow.getUTCFullYear()}-${String(tomorrow.getUTCMonth() + 1).padStart(2, '0')}-${String(tomorrow.getUTCDate()).padStart(2, '0')}`;
     const targetDay = selectedDeliveryDay || todayKey;
     
     // Вкладки дней
@@ -3522,8 +3523,8 @@ function showExactTimeSelectionModal(timeSlot) {
             const timeStr = `${currentHour < 10 ? '0' : ''}${currentHour}:${currentMin < 10 ? '0' : ''}${currentMin}`;
             timeSlots.push(timeStr);
             
-            // Проверяем, достигли ли мы конечного времени
-            if (currentHour === endHourInt && currentMin === endMinInt) {
+            // Проверяем, достигли ли мы конечного времени (не включая конечное время)
+            if (currentHour > endHourInt || (currentHour === endHourInt && currentMin >= endMinInt)) {
                 break;
             }
             
@@ -4817,9 +4818,14 @@ function checkout() {
             if (result.success) {
                 finalOrderId = result.orderId;
                 // Создаем локальный заказ со статусом 'pending'
+                // Получаем актуальное московское время для времени создания заказа
+                const moscowTimeNow = getMoscowTime();
+                const createdAt = moscowTimeNow.toISOString();
+                
                 const order = {
                     id: result.orderId,
                     date: orderDate,
+                    createdAt: createdAt, // Время создания заказа в московском времени
                     status: 'pending', // Ожидает подтверждения менеджером
                     items: [...cart],
                     location: deliveryType === 'selfPickup' ? selectedPickupLocation : deliveryAddress,
@@ -6462,12 +6468,23 @@ function showOrders() {
                                 </div>
                                 ${(() => {
                                     // Показываем время создания заказа в московском времени
-                                    const orderDate = new Date(order.date);
-                                    // order.date это ISO строка, конвертируем в московское время (UTC+3)
-                                    const moscowTime = new Date(orderDate.toLocaleString('en-US', { timeZone: 'Europe/Moscow' }));
-                                    const hours = String(moscowTime.getHours()).padStart(2, '0');
-                                    const minutes = String(moscowTime.getMinutes()).padStart(2, '0');
-                                    const timeCreated = `${hours}:${minutes}`;
+                                    let timeCreated = '';
+                                    if (order.createdAt) {
+                                        // Используем сохраненное время создания заказа
+                                        const createdDate = new Date(order.createdAt);
+                                        // Добавляем 3 часа для московского времени (UTC+3)
+                                        const moscowOffset = 3 * 60 * 60 * 1000;
+                                        const moscowTime = new Date(createdDate.getTime() + moscowOffset);
+                                        const hours = String(moscowTime.getUTCHours()).padStart(2, '0');
+                                        const minutes = String(moscowTime.getUTCMinutes()).padStart(2, '0');
+                                        timeCreated = `${hours}:${minutes}`;
+                                    } else {
+                                        // Fallback: используем текущее московское время
+                                        const moscowTime = getMoscowTime();
+                                        const hours = String(moscowTime.getUTCHours()).padStart(2, '0');
+                                        const minutes = String(moscowTime.getUTCMinutes()).padStart(2, '0');
+                                        timeCreated = `${hours}:${minutes}`;
+                                    }
                                     return `<div style="font-size: 11px; opacity: 0.7; margin-top: 4px; margin-left: 18px;">Создан: ${timeCreated}</div>`;
                                 })()}
                             </div>
@@ -6604,22 +6621,14 @@ function showOrders() {
                         <div style="font-weight: 600; color: #2E7D32; font-size: 14px; margin-bottom: 4px;">Заказ принят</div>
                         <div style="font-size: 12px; color: #666;">Ожидание подтверждения передачи товара</div>
                     </div>
-                    <div style="display: flex; gap: 12px;">
-                        <button onclick="cancelOrder('${order.id}')" style="flex: 1; padding: 16px; 
+                    <div>
+                        <button onclick="cancelOrder('${order.id}')" style="width: 100%; padding: 16px; 
                             background: linear-gradient(135deg, #f44336 0%, #d32f2f 100%); color: white; border: none; border-radius: 12px; 
                             font-size: 16px; font-weight: 700; cursor: pointer; box-shadow: 0 4px 12px rgba(244,67,54,0.3);
                             transition: all 0.2s; display: flex; align-items: center; justify-content: center; gap: 8px;"
                             onmouseover="this.style.transform='scale(1.02)'; this.style.boxShadow='0 6px 16px rgba(244,67,54,0.4)'"
                             onmouseout="this.style.transform='scale(1)'; this.style.boxShadow='0 4px 12px rgba(244,67,54,0.3)'">
                             <span>Отменить заказ</span>
-                        </button>
-                        <button onclick="markOrderAsReceived('${order.id}')" style="flex: 1; padding: 16px; 
-                            background: linear-gradient(135deg, #4CAF50 0%, #45a049 100%); color: white; border: none; border-radius: 12px; 
-                            font-size: 16px; font-weight: 700; cursor: pointer; box-shadow: 0 4px 12px rgba(76,175,80,0.3);
-                            transition: all 0.2s; display: flex; align-items: center; justify-content: center; gap: 8px;"
-                            onmouseover="this.style.transform='scale(1.02)'; this.style.boxShadow='0 6px 16px rgba(76,175,80,0.4)'"
-                            onmouseout="this.style.transform='scale(1)'; this.style.boxShadow='0 4px 12px rgba(76,175,80,0.3)'">
-                            <span>Получен</span>
                         </button>
                     </div>
                 ` : order.status === 'transferred' ? `
@@ -6651,22 +6660,14 @@ function showOrders() {
                         ` : ''}
                     </div>
                 ` : order.status === 'processing' ? `
-                    <div style="display: flex; gap: 12px;">
-                        <button onclick="cancelOrder('${order.id}')" style="flex: 1; padding: 16px; 
+                    <div>
+                        <button onclick="cancelOrder('${order.id}')" style="width: 100%; padding: 16px; 
                             background: linear-gradient(135deg, #f44336 0%, #d32f2f 100%); color: white; border: none; border-radius: 12px; 
                             font-size: 16px; font-weight: 700; cursor: pointer; box-shadow: 0 4px 12px rgba(244,67,54,0.3);
                             transition: all 0.2s; display: flex; align-items: center; justify-content: center; gap: 8px;"
                             onmouseover="this.style.transform='scale(1.02)'; this.style.boxShadow='0 6px 16px rgba(244,67,54,0.4)'"
                             onmouseout="this.style.transform='scale(1)'; this.style.boxShadow='0 4px 12px rgba(244,67,54,0.3)'">
                             <span>Отменить заказ</span>
-                        </button>
-                        <button onclick="markOrderAsReceived('${order.id}')" style="flex: 1; padding: 16px; 
-                            background: linear-gradient(135deg, #4CAF50 0%, #45a049 100%); color: white; border: none; border-radius: 12px; 
-                            font-size: 16px; font-weight: 700; cursor: pointer; box-shadow: 0 4px 12px rgba(76,175,80,0.3);
-                            transition: all 0.2s; display: flex; align-items: center; justify-content: center; gap: 8px;"
-                            onmouseover="this.style.transform='scale(1.02)'; this.style.boxShadow='0 6px 16px rgba(76,175,80,0.4)'"
-                            onmouseout="this.style.transform='scale(1)'; this.style.boxShadow='0 4px 12px rgba(76,175,80,0.3)'">
-                            <span>Получен</span>
                         </button>
                     </div>
                 ` : order.status === 'cancelled' ? `
