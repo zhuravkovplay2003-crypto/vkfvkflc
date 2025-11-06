@@ -332,11 +332,25 @@ bot.on('callback_query', async (ctx) => {
         }
         
         // Проверяем, не обработан ли уже заказ другим менеджером
-        if (order.status !== 'pending') {
+        // Для confirm и reject проверяем, что заказ еще pending
+        if ((action === 'confirm' || action === 'reject') && order.status !== 'pending') {
             if (order.status === 'confirmed' || order.status === 'transferred') {
                 return ctx.answerCbQuery('⚠️ Заказ уже подтвержден другим менеджером');
             } else if (order.status === 'rejected') {
                 return ctx.answerCbQuery('⚠️ Заказ уже отклонен другим менеджером');
+            }
+        }
+        
+        // Для transfer проверяем, что заказ подтвержден, но еще не передан
+        if (action === 'transfer') {
+            if (order.status !== 'confirmed') {
+                if (order.status === 'transferred') {
+                    return ctx.answerCbQuery('⚠️ Заказ уже передан клиенту');
+                } else if (order.status === 'pending') {
+                    return ctx.answerCbQuery('⚠️ Сначала нужно подтвердить заказ');
+                } else if (order.status === 'rejected') {
+                    return ctx.answerCbQuery('⚠️ Заказ был отклонен');
+                }
             }
         }
         
@@ -347,23 +361,49 @@ bot.on('callback_query', async (ctx) => {
             order.confirmedAt = new Date().toISOString();
             
             saveOrders(orders);
+            console.log(`Order ${order.id} confirmed. Status: ${order.status}`);
             
-            ctx.answerCbQuery('Заказ подтвержден');
-            ctx.editMessageText(
-                `<b>Заказ #${order.id.slice(-6)} подтвержден</b>\n\n` +
-                `Подтвердил: ${ctx.from.first_name}${ctx.from.username ? ` (@${ctx.from.username})` : ''}\n` +
-                `Время: ${new Date().toLocaleString('ru-RU')}`,
-                {
-                    parse_mode: 'HTML',
-                    reply_markup: {
-                        inline_keyboard: [
-                            [
-                                { text: '📦 Заказ передан', callback_data: `transfer_${order.id}` }
+            ctx.answerCbQuery('✅ Заказ подтвержден');
+            
+            // Обновляем сообщение с кнопкой "Заказ передан"
+            try {
+                await ctx.editMessageText(
+                    `<b>✅ Заказ #${order.id.slice(-6)} подтвержден</b>\n\n` +
+                    `Подтвердил: ${ctx.from.first_name}${ctx.from.username ? ` (@${ctx.from.username})` : ''}\n` +
+                    `Время: ${new Date().toLocaleString('ru-RU')}\n\n` +
+                    `Нажмите кнопку ниже, когда заказ будет передан клиенту:`,
+                    {
+                        parse_mode: 'HTML',
+                        reply_markup: {
+                            inline_keyboard: [
+                                [
+                                    { text: '📦 Заказ передан', callback_data: `transfer_${order.id}` }
+                                ]
                             ]
-                        ]
+                        }
                     }
-                }
-            );
+                );
+                console.log(`Message updated with transfer button for order ${order.id}`);
+            } catch (error) {
+                console.error('Error editing message after confirm:', error);
+                // Если не удалось обновить сообщение, отправляем новое
+                ctx.reply(
+                    `<b>✅ Заказ #${order.id.slice(-6)} подтвержден</b>\n\n` +
+                    `Подтвердил: ${ctx.from.first_name}${ctx.from.username ? ` (@${ctx.from.username})` : ''}\n` +
+                    `Время: ${new Date().toLocaleString('ru-RU')}\n\n` +
+                    `Нажмите кнопку ниже, когда заказ будет передан клиенту:`,
+                    {
+                        parse_mode: 'HTML',
+                        reply_markup: {
+                            inline_keyboard: [
+                                [
+                                    { text: '📦 Заказ передан', callback_data: `transfer_${order.id}` }
+                                ]
+                            ]
+                        }
+                    }
+                );
+            }
         } else if (action === 'reject') {
             order.status = 'rejected';
             order.rejectedBy = ctx.from.id;
@@ -381,6 +421,10 @@ bot.on('callback_query', async (ctx) => {
             );
         } else if (action === 'transfer') {
             // Заказ передан клиенту
+            if (order.status !== 'confirmed') {
+                return ctx.answerCbQuery('⚠️ Заказ должен быть сначала подтвержден');
+            }
+            
             order.status = 'transferred';
             order.transferredBy = ctx.from.id;
             order.transferredByUsername = ctx.from.username || ctx.from.first_name;
@@ -388,13 +432,20 @@ bot.on('callback_query', async (ctx) => {
             
             saveOrders(orders);
             
-            ctx.answerCbQuery('Заказ передан клиенту');
-            ctx.editMessageText(
-                `<b>Заказ #${order.id.slice(-6)} передан клиенту</b>\n\n` +
-                `Передал: ${ctx.from.first_name}${ctx.from.username ? ` (@${ctx.from.username})` : ''}\n` +
-                `Время: ${new Date().toLocaleString('ru-RU')}`,
-                { parse_mode: 'HTML' }
-            );
+            ctx.answerCbQuery('✅ Заказ передан клиенту');
+            
+            // Обновляем сообщение
+            try {
+                await ctx.editMessageText(
+                    `<b>Заказ #${order.id.slice(-6)} передан клиенту</b>\n\n` +
+                    `Передал: ${ctx.from.first_name}${ctx.from.username ? ` (@${ctx.from.username})` : ''}\n` +
+                    `Время: ${new Date().toLocaleString('ru-RU')}`,
+                    { parse_mode: 'HTML' }
+                );
+            } catch (error) {
+                console.error('Error editing message for transfer:', error);
+                // Если не удалось обновить сообщение, просто отвечаем на callback
+            }
         } else if (action === 'details') {
             const details = formatOrderForManager(order);
             ctx.answerCbQuery();
@@ -591,20 +642,44 @@ const webhookUrl = process.env.RENDER_EXTERNAL_URL ? `${process.env.RENDER_EXTER
 
 if (isProduction && webhookUrl) {
     // Используем webhook для продакшена
-    bot.telegram.setWebhook(webhookUrl).then(() => {
-        console.log('🤖 Telegram bot webhook set:', webhookUrl);
-    }).catch(err => {
-        console.error('❌ Error setting webhook:', err);
-    });
+    // Сначала удаляем webhook, если он был установлен ранее, чтобы избежать конфликтов
+    bot.telegram.deleteWebhook({ drop_pending_updates: true })
+        .then(() => {
+            console.log('✅ Old webhook removed');
+            // Затем устанавливаем новый webhook
+            return bot.telegram.setWebhook(webhookUrl);
+        })
+        .then(() => {
+            console.log('🤖 Telegram bot webhook set:', webhookUrl);
+        })
+        .catch(err => {
+            console.error('❌ Error setting webhook:', err);
+            // Пытаемся установить webhook напрямую, если удаление не удалось
+            bot.telegram.setWebhook(webhookUrl).catch(e => {
+                console.error('❌ Failed to set webhook after delete:', e);
+            });
+        });
 } else {
     // Используем polling для разработки
-    bot.launch().then(() => {
-        console.log('🤖 Telegram bot started (polling mode)');
-    }).catch(err => {
-        console.error('❌ Error starting bot:', err);
-        // Не завершаем процесс, чтобы сервер продолжал работать
-        console.log('⚠️ Bot failed to start, but server continues running');
-    });
+    // Сначала удаляем webhook, если он был установлен, чтобы избежать конфликта 409
+    bot.telegram.deleteWebhook({ drop_pending_updates: true })
+        .then(() => {
+            console.log('✅ Webhook removed, starting polling...');
+            return bot.launch();
+        })
+        .catch(err => {
+            // Если удаление webhook не удалось, все равно пытаемся запустить polling
+            console.log('⚠️ Webhook removal failed or not needed, trying to start polling...');
+            return bot.launch();
+        })
+        .then(() => {
+            console.log('🤖 Telegram bot started (polling mode)');
+        })
+        .catch(err => {
+            console.error('❌ Error starting bot:', err);
+            // Не завершаем процесс, чтобы сервер продолжал работать
+            console.log('⚠️ Bot failed to start, but server continues running');
+        });
 }
 
 // Запускаем автоматический ping каждые 10 минут
@@ -650,4 +725,3 @@ process.once('SIGTERM', () => {
         bot.stop('SIGTERM');
     }
 });
-
