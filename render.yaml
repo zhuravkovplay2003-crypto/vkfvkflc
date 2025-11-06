@@ -1,0 +1,15 @@
+services:
+  - type: web
+    name: vapeapp-backend
+    env: node
+    rootDir: serv
+    buildCommand: npm install
+    startCommand: npm start
+    envVars:
+      - key: BOT_TOKEN
+        value: 8411665754:AAEhjD46OhbFRXb_PrcZoCcmfYK8EO5sSWM
+      - key: ADMIN_IDS
+        value: 8248768964,838488118,8007023981
+      - key: NODE_VERSION
+        value: 18.x
+
