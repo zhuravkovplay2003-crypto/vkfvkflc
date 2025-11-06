@@ -579,51 +579,75 @@ app.listen(PORT, () => {
     console.log(`📡 API endpoint: http://localhost:${PORT}/api/orders`);
 });
 
-// Запуск бота
-bot.launch().then(() => {
-    console.log('🤖 Telegram bot started');
-    
-    // Запускаем автоматический ping каждые 10 минут (после запуска сервера)
-    const http = require('http');
-    setInterval(() => {
-        try {
-            const baseUrl = process.env.RENDER_EXTERNAL_URL || `http://localhost:${PORT}`;
-            const url = new URL(`${baseUrl}/keep-alive`);
-            const options = {
-                hostname: url.hostname,
-                port: url.port || (url.protocol === 'https:' ? 443 : 80),
-                path: url.pathname,
-                method: 'GET',
-                timeout: 5000
-            };
-            
-            const req = http.request(options, (res) => {
-                console.log('Keep-alive ping sent');
-            });
-            
-            req.on('error', (err) => {
-                console.log('Keep-alive ping failed (this is ok)');
-            });
-            
-            req.on('timeout', () => {
-                req.destroy();
-            });
-            
-            req.end();
-        } catch (error) {
-            console.log('Keep-alive ping failed (this is ok)');
-        }
-    }, 10 * 60 * 1000); // Каждые 10 минут
-}).catch(err => {
-    console.error('❌ Error starting bot:', err);
-    process.exit(1);
+// Webhook endpoint для Telegram
+app.post('/webhook', (req, res) => {
+    bot.handleUpdate(req.body);
+    res.sendStatus(200);
 });
 
+// Запуск бота
+const isProduction = process.env.NODE_ENV === 'production' || process.env.RENDER_EXTERNAL_URL;
+const webhookUrl = process.env.RENDER_EXTERNAL_URL ? `${process.env.RENDER_EXTERNAL_URL}/webhook` : null;
+
+if (isProduction && webhookUrl) {
+    // Используем webhook для продакшена
+    bot.telegram.setWebhook(webhookUrl).then(() => {
+        console.log('🤖 Telegram bot webhook set:', webhookUrl);
+    }).catch(err => {
+        console.error('❌ Error setting webhook:', err);
+    });
+} else {
+    // Используем polling для разработки
+    bot.launch().then(() => {
+        console.log('🤖 Telegram bot started (polling mode)');
+    }).catch(err => {
+        console.error('❌ Error starting bot:', err);
+        // Не завершаем процесс, чтобы сервер продолжал работать
+        console.log('⚠️ Bot failed to start, but server continues running');
+    });
+}
+
+// Запускаем автоматический ping каждые 10 минут
+const http = require('http');
+setInterval(() => {
+    try {
+        const baseUrl = process.env.RENDER_EXTERNAL_URL || `http://localhost:${PORT}`;
+        const url = new URL(`${baseUrl}/keep-alive`);
+        const options = {
+            hostname: url.hostname,
+            port: url.port || (url.protocol === 'https:' ? 443 : 80),
+            path: url.pathname,
+            method: 'GET',
+            timeout: 5000
+        };
+        
+        const req = http.request(options, (res) => {
+            console.log('Keep-alive ping sent');
+        });
+        
+        req.on('error', (err) => {
+            console.log('Keep-alive ping failed (this is ok)');
+        });
+        
+        req.on('timeout', () => {
+            req.destroy();
+        });
+        
+        req.end();
+    } catch (error) {
+        console.log('Keep-alive ping failed (this is ok)');
+    }
+}, 10 * 60 * 1000); // Каждые 10 минут
+
 // Graceful shutdown
-process.once('SIGINT', () => bot.stop('SIGINT'));
-process.once('SIGTERM', () => bot.stop('SIGTERM'));
-
-
-
-
+process.once('SIGINT', () => {
+    if (!isProduction || !webhookUrl) {
+        bot.stop('SIGINT');
+    }
+});
+process.once('SIGTERM', () => {
+    if (!isProduction || !webhookUrl) {
+        bot.stop('SIGTERM');
+    }
+});
 
