@@ -4639,6 +4639,8 @@ function checkout() {
             userId: tg?.initDataUnsafe?.user?.id?.toString() || 'unknown'
         };
         
+        let finalOrderId = orderId; // ID заказа для отображения
+        
         try {
             // Отправляем заказ на сервер
             const response = await fetch(`${SERVER_URL}/api/orders`, {
@@ -4652,6 +4654,7 @@ function checkout() {
             const result = await response.json();
             
             if (result.success) {
+                finalOrderId = result.orderId;
                 // Создаем локальный заказ со статусом 'pending'
                 const order = {
                     id: result.orderId,
@@ -4719,16 +4722,16 @@ function checkout() {
         });
         
         // Показываем сообщение об успешном создании заказа
-        const savedOrder = orders.find(o => o.id === (result?.orderId || orderId));
-        if (savedOrder) {
-            showToast(`Заказ отправлен менеджеру\nНомер: #${savedOrder.id.slice(-6)}`, 'success', 4000);
-        } else {
-            showToast('Заказ создан', 'success', 4000);
-        }
+        showToast(`Заказ отправлен менеджеру\nНомер: #${finalOrderId.slice(-6)}`, 'success', 4000);
         
         // Обновляем отображение корзины (покажем пустую корзину)
         if (currentPage === 'cart') {
             showCart();
+        }
+        
+        // Обновляем отображение заказов, если пользователь на странице заказов
+        if (currentPage === 'orders') {
+            showOrders();
         }
         
         // Тактильная обратная связь
