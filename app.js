@@ -3478,7 +3478,7 @@ function showExactTimeSelectionModal(timeSlot) {
     // Заголовок
     const header = document.createElement('div');
     header.style.cssText = 'margin-bottom: 20px;';
-    header.innerHTML = `<div style="font-size: 20px; font-weight: 700; margin-bottom: 8px;">⏰ Выберите точное время</div><div style="font-size: 14px; color: #666;">Промежуток: ${timeRange}</div>`;
+    header.innerHTML = `<div style="font-size: 20px; font-weight: 700; margin-bottom: 8px; display: flex; align-items: center; gap: 8px;"><span style="width: 24px; height: 24px; display: flex; align-items: center; justify-content: center;">${getClockIcon('#007AFF')}</span><span>Выберите точное время</span></div><div style="font-size: 14px; color: #666;">Промежуток: ${timeRange}</div>`;
     modalContent.appendChild(header);
     
     // Генерируем точные времена: каждые 10 минут
@@ -3668,7 +3668,7 @@ function showTimeSelectionModal() {
     // Заголовок
     const header = document.createElement('div');
     header.style.cssText = 'margin-bottom: 20px;';
-    header.innerHTML = `<div style="font-size: 20px; font-weight: 700; margin-bottom: 8px;">⏰ ${deliveryType === 'selfPickup' ? 'Время самовывоза' : 'Время доставки'}</div><div style="font-size: 14px; color: #666;">Выберите удобное время</div>`;
+    header.innerHTML = `<div style="font-size: 20px; font-weight: 700; margin-bottom: 8px; display: flex; align-items: center; gap: 8px;"><span style="width: 24px; height: 24px; display: flex; align-items: center; justify-content: center;">${getClockIcon('#007AFF')}</span><span>${deliveryType === 'selfPickup' ? 'Время самовывоза' : 'Время доставки'}</span></div><div style="font-size: 14px; color: #666;">Выберите удобное время</div>`;
     modalContent.appendChild(header);
     
     // Контейнер для слотов времени
@@ -3926,7 +3926,7 @@ function showCart() {
                         onmouseout="this.style.background='rgba(255,255,255,0.15)'">
                         <div style="display: flex; align-items: center; justify-content: space-between;">
                             <div style="display: flex; align-items: center; gap: 8px;">
-                                <span style="font-size: 18px;">⏰</span>
+                                <span style="width: 20px; height: 20px; display: flex; align-items: center; justify-content: center;">${getClockIcon('#ffffff')}</span>
                                 <div>
                                     <div style="font-size: 12px; opacity: 0.9; margin-bottom: 2px;">Время самовывоза</div>
                                     <div style="font-size: 16px; font-weight: 700;" id="selected-delivery-time-display">${(() => {
@@ -4056,7 +4056,7 @@ function showCart() {
                         onmouseout="this.style.background='#f5f5f5'; this.style.borderColor='#e5e5e5';">
                         <div style="display: flex; align-items: center; justify-content: space-between;">
                             <div style="display: flex; align-items: center; gap: 8px;">
-                                <span style="font-size: 18px;">⏰</span>
+                                <span style="width: 20px; height: 20px; display: flex; align-items: center; justify-content: center;">${getClockIcon('#007AFF')}</span>
                                 <div>
                                     <div style="font-size: 12px; color: #666; margin-bottom: 2px;">Время доставки</div>
                                     <div style="font-size: 16px; font-weight: 700; color: #000;" id="selected-delivery-time-display-delivery">${(() => {
@@ -4843,10 +4843,8 @@ function checkout() {
                 // Запускаем проверку статуса заказа
                 checkOrderStatus(result.orderId);
                 
-                // Обновляем отображение заказов, если пользователь на странице заказов
-                if (currentPage === 'orders') {
-                    showOrders();
-                }
+                // ВСЕГДА обновляем отображение заказов
+                showOrders();
             } else {
                 throw new Error(result.error || 'Ошибка при отправке заказа');
             }
@@ -6449,24 +6447,9 @@ function showOrders() {
         return `
             <div style="background: ${darkMode ? 'linear-gradient(135deg, #2a2a2a 0%, #1a1a1a 100%)' : 'linear-gradient(135deg, #ffffff 0%, #f8f9fa 100%)'}; padding: 20px; border-radius: 16px; margin-bottom: 16px; 
                 border: 2px solid ${colors.border}; box-shadow: 0 4px 12px rgba(0,0,0,${darkMode ? '0.3' : '0.08'}); color: ${colors.text};">
-                <!-- Статус заказа - отдельный блок для лучшей видимости -->
-                <div style="background: ${statusBg}; padding: 16px; border-radius: 12px; margin-bottom: 16px; border: 2px solid ${statusColor}; box-shadow: 0 4px 12px rgba(0,0,0,0.1);">
-                    <div style="display: flex; align-items: center; gap: 12px;">
-                        <div style="width: 40px; height: 40px; background: ${statusColor}; border-radius: 50%; display: flex; align-items: center; justify-content: center; flex-shrink: 0;">
-                            <span style="width: 24px; height: 24px; display: flex; align-items: center; justify-content: center;">${statusIcon.replace('width="24" height="24"', 'width="24" height="24"')}</span>
-                        </div>
-                        <div style="flex: 1;">
-                            <div style="font-size: 14px; color: #666; margin-bottom: 4px;">Статус заказа</div>
-                            <div style="font-size: 18px; font-weight: 700; color: ${statusColor};">
-                                ${statusText}
-                            </div>
-                        </div>
-                    </div>
-                </div>
-                
                 <!-- Заголовок заказа -->
                 <div style="background: linear-gradient(135deg, #007AFF 0%, #0056b3 100%); padding: 16px; border-radius: 12px; margin-bottom: 16px; color: white; box-shadow: 0 4px 12px rgba(0, 122, 255, 0.3);">
-                    <div style="display: flex; justify-content: space-between; align-items: center;">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
                         <div style="flex: 1;">
                             <div style="font-weight: 700; font-size: 18px; margin-bottom: 4px; display: flex; align-items: center; gap: 8px;">
                                 <span style="width: 20px; height: 20px; display: flex; align-items: center; justify-content: center;">${getPackageIcon('#ffffff').replace('width="24" height="24"', 'width="20" height="20"')}</span>
@@ -6480,15 +6463,19 @@ function showOrders() {
                                 ${(() => {
                                     // Показываем время создания заказа в московском времени
                                     const orderDate = new Date(order.date);
-                                    // order.date это ISO строка в UTC, добавляем 3 часа для московского времени
-                                    const moscowOffset = 3 * 60 * 60 * 1000; // 3 часа в миллисекундах
-                                    const moscowTime = new Date(orderDate.getTime() + moscowOffset);
-                                    const hours = String(moscowTime.getUTCHours()).padStart(2, '0');
-                                    const minutes = String(moscowTime.getUTCMinutes()).padStart(2, '0');
+                                    // order.date это ISO строка, конвертируем в московское время (UTC+3)
+                                    const moscowTime = new Date(orderDate.toLocaleString('en-US', { timeZone: 'Europe/Moscow' }));
+                                    const hours = String(moscowTime.getHours()).padStart(2, '0');
+                                    const minutes = String(moscowTime.getMinutes()).padStart(2, '0');
                                     const timeCreated = `${hours}:${minutes}`;
                                     return `<div style="font-size: 11px; opacity: 0.7; margin-top: 4px; margin-left: 18px;">Создан: ${timeCreated}</div>`;
                                 })()}
                             </div>
+                        </div>
+                        <div style="padding: 8px 14px; background: rgba(255,255,255,0.2); border-radius: 10px; font-size: 13px; font-weight: 600; 
+                            display: flex; align-items: center; gap: 6px;">
+                            <span style="width: 16px; height: 16px; display: flex; align-items: center; justify-content: center;">${statusIcon.replace('width="24" height="24"', 'width="16" height="16"')}</span>
+                            <span>${statusText}</span>
                         </div>
                     </div>
                 </div>
@@ -7767,9 +7754,21 @@ function clearFavorites() {
 
 // Очистить историю заказов (кроме заказов в обработке)
 function clearOrdersHistory() {
+    // Определяем заказы, которые нужно сохранить (в обработке, ожидании, подтвержденные, переданные)
+    const protectedOrders = orders.filter(order => 
+        order.status === 'processing' || 
+        order.status === 'pending' || 
+        order.status === 'confirmed' || 
+        order.status === 'transferred'
+    );
+    
     // Подсчитываем количество заказов, которые будут удалены
-    const ordersToDelete = orders.filter(order => order.status !== 'processing');
-    const processingOrders = orders.filter(order => order.status === 'processing');
+    const ordersToDelete = orders.filter(order => 
+        order.status !== 'processing' && 
+        order.status !== 'pending' && 
+        order.status !== 'confirmed' && 
+        order.status !== 'transferred'
+    );
     
     if (ordersToDelete.length === 0) {
         showToast('Нет заказов для удаления', 'info', 3000);
@@ -7778,7 +7777,7 @@ function clearOrdersHistory() {
     
     if (tg && tg.showPopup) {
         tg.showPopup({
-            title: '⚠️ Подтверждение',
+            title: 'Подтверждение',
             message: `Вы уверены, что хотите очистить историю заказов?\n\nБудет удалено: ${ordersToDelete.length} заказ(ов)\nСохранено (в обработке/ожидании/подтвержденных): ${protectedOrders.length} заказ(ов)\n\nЭто действие нельзя отменить.`,
             buttons: [
                 {id: 'confirm', type: 'destructive', text: 'Очистить'},
@@ -8705,15 +8704,16 @@ function showVapeCoinsOrderDetails(orderIdOrTransactionId) {
             </div>
             
             <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 12px;">
-                <span style="font-size: 20px;">${order.deliveryType === 'delivery' ? '🚚' : '📍'}</span>
+                <span style="width: 24px; height: 24px; display: flex; align-items: center; justify-content: center;">${order.deliveryType === 'delivery' ? getPackageIcon('#007AFF') : getLocationIcon('#007AFF')}</span>
                 <div style="flex: 1;">
                     <div style="font-size: 12px; color: #666; margin-bottom: 4px;">
                         ${order.deliveryType === 'delivery' ? 'Доставка' : 'Точка самовывоза'}
                     </div>
-                    <div style="font-weight: 600; color: #000;">${order.location || 'Не указано'}</div>
+                    <div style="font-weight: 600; color: #000;">${order.deliveryType === 'selfPickup' ? (order.pickupLocation || 'Не указано') : (order.deliveryAddress || 'Не указано')}</div>
                     ${order.deliveryTime ? `
-                        <div style="font-size: 12px; color: #666; margin-top: 4px;">
-                            ⏰ ${typeof order.deliveryTime === 'string' && order.deliveryTime.includes('|') ? order.deliveryTime.split('|')[1] : order.deliveryTime}${order.deliveryExactTime ? ` (${order.deliveryExactTime})` : ''}
+                        <div style="font-size: 12px; color: #666; margin-top: 4px; display: flex; align-items: center; gap: 4px;">
+                            <span style="width: 14px; height: 14px; display: flex; align-items: center; justify-content: center;">${getClockIcon('#666')}</span>
+                            <span>${typeof order.deliveryTime === 'string' && order.deliveryTime.includes('|') ? order.deliveryTime.split('|')[1] : order.deliveryTime}${order.deliveryExactTime ? ` (${order.deliveryExactTime})` : ''}</span>
                         </div>
                     ` : ''}
                 </div>
