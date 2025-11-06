@@ -319,9 +319,6 @@ app.post('/api/orders', (req, res) => {
                             [
                                 { text: '✅ Подтвердить', callback_data: `confirm_${order.id}` },
                                 { text: '❌ Отклонить', callback_data: `reject_${order.id}` }
-                            ],
-                            [
-                                { text: '📋 Детали', callback_data: `details_${order.id}` }
                             ]
                         ]
                     }
