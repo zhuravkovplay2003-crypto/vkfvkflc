@@ -1,0 +1,74 @@
+[
+  {
+    "id": 1,
+    "name": "Злая монашка",
+    "category": "liquids",
+    "price": 18.00,
+    "emoji": "💚",
+    "image": "💚",
+    "imageUrl": "images/ex2.jpg",
+    "description": "Жидкость для вейпа",
+    "strengths": ["50 мг", "70 мг"],
+    "flavors": ["малиновое варенье", "апельсин с кислой малиной", "энергетик грейпфрут", "нектарин вишня", "ананас ежевика", "фруктовый мармелад лед"],
+    "inStock": true,
+    "quantity": 10
+  },
+  {
+    "id": 4,
+    "name": "Hotspot Don't Chew it",
+    "category": "liquids",
+    "price": 15.00,
+    "emoji": "💜",
+    "image": "💜",
+    "imageUrl": "images/ex3.jpg",
+    "description": "Жидкость с вкусом маракуйя жвачка",
+    "strengths": ["50 мг"],
+    "flavors": ["маракуйя жвачка"],
+    "inStock": true,
+    "quantity": 8
+  },
+  {
+    "id": 2,
+    "name": "Испаритель Aegis Series b",
+    "category": "accessories",
+    "price": 12.00,
+    "emoji": "⚡",
+    "image": "⚡",
+    "imageUrl": "images/ex1.jpg",
+    "description": "Сменный испаритель",
+    "strengths": null,
+    "flavors": null,
+    "inStock": true,
+    "quantity": 5
+  },
+  {
+    "id": 3,
+    "name": "VOOPOO VMATE Cartridge V2",
+    "category": "accessories",
+    "price": 15.00,
+    "emoji": "💨",
+    "image": "💨",
+    "imageUrl": "images/ex3.jpg",
+    "description": "Картриджи для pod-системы",
+    "strengths": null,
+    "flavors": null,
+    "inStock": false,
+    "quantity": 0
+  },
+
+  {
+    "id": 5,
+    "name": "ELF BAR 5000",
+    "category": "disposable",
+    "price": 25.00,
+    "emoji": "🍓",
+    "image": "🍓",
+    "imageUrl": null,
+    "description": "Одноразовая электронная сигарета",
+    "strengths": null,
+    "flavors": null,
+    "inStock": false,
+    "quantity": 0
+  }
+]
+

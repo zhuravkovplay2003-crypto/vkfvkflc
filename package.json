@@ -1,0 +1,22 @@
+{
+  "name": "vapeapp-backend",
+  "version": "1.0.0",
+  "description": "Backend server for VapeApp order management",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "nodemon server.js"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "express": "^4.18.2",
+    "telegraf": "^4.15.0",
+    "cors": "^2.8.5"
+  },
+  "devDependencies": {
+    "nodemon": "^3.0.2"
+  }
+}
+

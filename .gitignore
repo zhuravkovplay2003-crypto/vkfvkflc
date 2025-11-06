@@ -1,0 +1,6 @@
+node_modules/
+orders.json
+managers.json
+.env
+*.log
+
