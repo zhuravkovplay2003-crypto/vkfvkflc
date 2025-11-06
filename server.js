@@ -309,10 +309,10 @@ app.post('/api/orders', (req, res) => {
         if (allManagers.length > 0) {
             // Сохраняем message_id для каждого менеджера, чтобы потом обновлять сообщения
             const orderMessages = {};
-            let sentCount = 0;
+            const sendPromises = [];
             
             allManagers.forEach(managerId => {
-                bot.telegram.sendMessage(managerId, formatOrderForManager(order), {
+                const promise = bot.telegram.sendMessage(managerId, formatOrderForManager(order), {
                     parse_mode: 'HTML',
                     reply_markup: {
                         inline_keyboard: [
@@ -323,19 +323,23 @@ app.post('/api/orders', (req, res) => {
                         ]
                     }
                 }).then((msg) => {
-                    sentCount++;
                     orderMessages[managerId] = msg.message_id;
                     console.log(`Order sent to manager ${managerId} successfully, message_id: ${msg.message_id}`);
                 }).catch(err => {
                     console.error(`Error sending to manager ${managerId}:`, err.message);
                 });
+                sendPromises.push(promise);
             });
             
-            // Сохраняем message_id для каждого менеджера в заказе
-            order.orderMessages = orderMessages;
-            saveOrders(orders);
-            
-            console.log(`Order notification sent to ${sentCount} managers`);
+            // Ждем отправки всех сообщений, затем сохраняем message_id
+            Promise.all(sendPromises).then(() => {
+                // Сохраняем message_id для каждого менеджера в заказе
+                order.orderMessages = orderMessages;
+                saveOrders(orders);
+                console.log(`Order notification sent to ${Object.keys(orderMessages).length} managers. Order messages saved.`);
+            }).catch(err => {
+                console.error('Error saving order messages:', err);
+            });
         } else {
             console.warn(`No managers found for city: ${city}. Order saved but not sent.`);
             // Отправляем администраторам, если нет менеджеров
@@ -461,6 +465,9 @@ bot.on('callback_query', async (ctx) => {
         const data = ctx.callbackQuery.data;
         console.log('Callback data received:', data);
         
+        // Перезагружаем заказы из файла перед обработкой
+        const freshOrders = loadOrders();
+        
         // Используем более надежный способ разделения
         let action, orderId;
         if (data.startsWith('confirm_')) {
@@ -480,23 +487,26 @@ bot.on('callback_query', async (ctx) => {
         }
         
         console.log('Action:', action, 'OrderId:', orderId);
-        console.log('Total orders:', orders.length);
-        console.log('Order IDs:', orders.map(o => o.id));
+        console.log('Total orders:', freshOrders.length);
+        console.log('Order IDs:', freshOrders.map(o => o.id));
         
-        const order = orders.find(o => o.id === orderId);
+        const order = freshOrders.find(o => o.id === orderId);
         
         if (!order) {
             console.error('Order not found:', orderId);
-            return ctx.answerCbQuery('❌ Заказ не найден');
+            return ctx.answerCbQuery('Заказ не найден');
         }
+        
+        // Обновляем глобальный массив orders
+        orders = freshOrders;
         
         // Проверяем, не обработан ли уже заказ другим менеджером
         // Для confirm и reject проверяем, что заказ еще pending
         if ((action === 'confirm' || action === 'reject') && order.status !== 'pending') {
             if (order.status === 'confirmed' || order.status === 'transferred') {
-                return ctx.answerCbQuery('⚠️ Заказ уже подтвержден другим менеджером');
+                return ctx.answerCbQuery('Заказ уже подтвержден другим менеджером');
             } else if (order.status === 'rejected') {
-                return ctx.answerCbQuery('⚠️ Заказ уже отклонен другим менеджером');
+                return ctx.answerCbQuery('Заказ уже отклонен другим менеджером');
             }
         }
         
@@ -504,11 +514,11 @@ bot.on('callback_query', async (ctx) => {
         if (action === 'transfer') {
             if (order.status !== 'confirmed') {
                 if (order.status === 'transferred') {
-                    return ctx.answerCbQuery('⚠️ Заказ уже передан клиенту');
+                    return ctx.answerCbQuery('Заказ уже передан клиенту');
                 } else if (order.status === 'pending') {
-                    return ctx.answerCbQuery('⚠️ Сначала нужно подтвердить заказ');
+                    return ctx.answerCbQuery('Сначала нужно подтвердить заказ');
                 } else if (order.status === 'rejected') {
-                    return ctx.answerCbQuery('⚠️ Заказ был отклонен');
+                    return ctx.answerCbQuery('Заказ был отклонен');
                 }
             }
         }
