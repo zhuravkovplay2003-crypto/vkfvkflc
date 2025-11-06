@@ -8,6 +8,50 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
+// Функции для работы с московским временем (UTC+3)
+function getMoscowTime() {
+    const now = new Date();
+    // Получаем UTC время и добавляем 3 часа для Москвы
+    const moscowTime = new Date(now.getTime() + (3 * 60 * 60 * 1000));
+    return moscowTime;
+}
+
+function getMoscowDateString() {
+    const moscowTime = getMoscowTime();
+    const year = moscowTime.getUTCFullYear();
+    const month = String(moscowTime.getUTCMonth() + 1).padStart(2, '0');
+    const day = String(moscowTime.getUTCDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+}
+
+function parseMoscowDate(dateString) {
+    // Парсим дату в формате YYYY-MM-DD и создаем Date в московском времени
+    const [year, month, day] = dateString.split('-').map(Number);
+    // Создаем дату в UTC, но интерпретируем как московское время
+    // Для этого вычитаем 3 часа из UTC
+    const date = new Date(Date.UTC(year, month - 1, day, 12, 0, 0));
+    // Возвращаем ISO строку, которая будет правильно интерпретирована
+    return date.toISOString();
+}
+
+function formatMoscowDate(dateString) {
+    const date = new Date(dateString);
+    // Добавляем 3 часа для московского времени
+    const moscowDate = new Date(date.getTime() + (3 * 60 * 60 * 1000));
+    const year = moscowDate.getUTCFullYear();
+    const month = String(moscowDate.getUTCMonth() + 1).padStart(2, '0');
+    const day = String(moscowDate.getUTCDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+}
+
+function isTomorrow(dateString) {
+    const today = getMoscowDateString();
+    const tomorrow = new Date(today + 'T12:00:00');
+    tomorrow.setUTCDate(tomorrow.getUTCDate() + 1);
+    const tomorrowStr = tomorrow.toISOString().split('T')[0];
+    return dateString === tomorrowStr;
+}
+
 // Токен вашего бота (из переменной окружения или напрямую)
 const BOT_TOKEN = process.env.BOT_TOKEN || '8411665754:AAEhjD46OhbFRXb_PrcZoCcmfYK8EO5sSWM';
 
@@ -94,6 +138,56 @@ function getCityFromLocation(location) {
 }
 
 // Форматируем заказ для менеджера
+// Функция для обновления всех сообщений о заказе для всех менеджеров
+async function updateOrderMessagesForAllManagers(order, messageText, replyMarkup = null) {
+    if (!order.orderMessages) {
+        console.log('No orderMessages found for order', order.id);
+        return;
+    }
+    
+    const allManagers = Object.keys(order.orderMessages);
+    console.log(`Updating messages for ${allManagers.length} managers for order ${order.id}`);
+    
+    for (const managerId of allManagers) {
+        const messageId = order.orderMessages[managerId];
+        if (messageId) {
+            try {
+                await bot.telegram.editMessageText(
+                    managerId,
+                    messageId,
+                    null,
+                    messageText,
+                    {
+                        parse_mode: 'HTML',
+                        reply_markup: replyMarkup
+                    }
+                );
+                console.log(`Updated message for manager ${managerId}, message_id: ${messageId}`);
+            } catch (error) {
+                console.error(`Error updating message for manager ${managerId}:`, error.message);
+            }
+        }
+    }
+}
+
+// Функция для отправки уведомления клиенту
+async function notifyClient(order, status, message) {
+    if (!order.userId || order.userId === 'unknown') {
+        console.log('Cannot notify client: userId is unknown');
+        return;
+    }
+    
+    try {
+        await bot.telegram.sendMessage(order.userId, message, {
+            parse_mode: 'HTML'
+        });
+        console.log(`Notification sent to client ${order.userId} for order ${order.id}, status: ${status}`);
+    } catch (error) {
+        console.error(`Error sending notification to client ${order.userId}:`, error.message);
+        // Если клиент не начал диалог с ботом, это нормально
+    }
+}
+
 function formatOrderForManager(order) {
     const itemsText = order.items.map(item => {
         let text = `  • ${item.name}`;
@@ -151,7 +245,7 @@ app.post('/api/orders', (req, res) => {
         const orderData = req.body;
         const orderId = `order_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
         
-        // Определяем дату заказа
+        // Определяем дату заказа (используем московское время)
         let orderDate;
         console.log('Order data received:', {
             deliveryTime: orderData.deliveryTime,
@@ -160,18 +254,19 @@ app.post('/api/orders', (req, res) => {
         });
         
         if (orderData.selectedDeliveryDay) {
-            // Приоритет: selectedDeliveryDay
-            orderDate = new Date(orderData.selectedDeliveryDay + 'T12:00:00').toISOString();
-            console.log('Using selectedDeliveryDay:', orderDate);
+            // Приоритет: selectedDeliveryDay (уже в формате YYYY-MM-DD)
+            orderDate = parseMoscowDate(orderData.selectedDeliveryDay);
+            console.log('Using selectedDeliveryDay:', orderDate, 'Moscow date:', orderData.selectedDeliveryDay);
         } else if (orderData.deliveryTime && orderData.deliveryTime.includes('|')) {
             // Если deliveryTime содержит дату (формат 'YYYY-MM-DD|HH:MM-HH:MM')
             const [dateStr] = orderData.deliveryTime.split('|');
-            orderDate = new Date(dateStr + 'T12:00:00').toISOString();
-            console.log('Using deliveryTime date:', orderDate);
+            orderDate = parseMoscowDate(dateStr);
+            console.log('Using deliveryTime date:', orderDate, 'Moscow date:', dateStr);
         } else {
-            // Иначе используем текущую дату
-            orderDate = new Date().toISOString();
-            console.log('Using current date:', orderDate);
+            // Иначе используем текущую дату в московском времени
+            const moscowDate = getMoscowDateString();
+            orderDate = parseMoscowDate(moscowDate);
+            console.log('Using current Moscow date:', orderDate, 'Moscow date string:', moscowDate);
         }
         
         const order = {
@@ -197,13 +292,21 @@ app.post('/api/orders', (req, res) => {
         
         // Определяем город и отправляем заказ менеджерам
         const city = getCityFromLocation(order.location);
-        const managerIds = managers[city] || managers['default'] || [];
+        // Получаем менеджеров для города и всех администраторов
+        const cityManagers = managers[city] || [];
+        const defaultManagers = managers['default'] || [];
+        const allManagers = [...new Set([...cityManagers, ...defaultManagers, ...ADMIN_IDS])]; // Убираем дубликаты
         
-        console.log(`Sending order to managers. City: ${city}, Managers: ${managerIds.length}`);
+        console.log(`Sending order to managers. City: ${city}, City managers: ${cityManagers.length}, Default managers: ${defaultManagers.length}, All managers: ${allManagers.length}`);
+        console.log(`Managers object:`, JSON.stringify(managers, null, 2));
+        console.log(`All manager IDs:`, allManagers);
         
-        if (managerIds.length > 0) {
+        if (allManagers.length > 0) {
+            // Сохраняем message_id для каждого менеджера, чтобы потом обновлять сообщения
+            const orderMessages = {};
             let sentCount = 0;
-            managerIds.forEach(managerId => {
+            
+            allManagers.forEach(managerId => {
                 bot.telegram.sendMessage(managerId, formatOrderForManager(order), {
                     parse_mode: 'HTML',
                     reply_markup: {
@@ -217,13 +320,19 @@ app.post('/api/orders', (req, res) => {
                             ]
                         ]
                     }
-                }).then(() => {
+                }).then((msg) => {
                     sentCount++;
-                    console.log(`Order sent to manager ${managerId} successfully`);
+                    orderMessages[managerId] = msg.message_id;
+                    console.log(`Order sent to manager ${managerId} successfully, message_id: ${msg.message_id}`);
                 }).catch(err => {
                     console.error(`Error sending to manager ${managerId}:`, err.message);
                 });
             });
+            
+            // Сохраняем message_id для каждого менеджера в заказе
+            order.orderMessages = orderMessages;
+            saveOrders(orders);
+            
             console.log(`Order notification sent to ${sentCount} managers`);
         } else {
             console.warn(`No managers found for city: ${city}. Order saved but not sent.`);
@@ -261,7 +370,13 @@ app.get('/api/orders/:orderId/status', (req, res) => {
         res.json({ 
             success: true,
             status: order.status,
-            order: order
+            order: {
+                id: order.id,
+                status: order.status,
+                vapeCoinsEarned: order.vapeCoinsEarned || null,
+                confirmedBy: order.confirmedBy || null,
+                transferredBy: order.transferredBy || null
+            }
         });
     } else {
         res.status(404).json({ success: false, error: 'Order not found' });
@@ -365,45 +480,43 @@ bot.on('callback_query', async (ctx) => {
             
             ctx.answerCbQuery('✅ Заказ подтвержден');
             
-            // Обновляем сообщение с кнопкой "Заказ передан"
-            try {
-                await ctx.editMessageText(
-                    `<b>✅ Заказ #${order.id.slice(-6)} подтвержден</b>\n\n` +
-                    `Подтвердил: ${ctx.from.first_name}${ctx.from.username ? ` (@${ctx.from.username})` : ''}\n` +
-                    `Время: ${new Date().toLocaleString('ru-RU')}\n\n` +
-                    `Нажмите кнопку ниже, когда заказ будет передан клиенту:`,
-                    {
-                        parse_mode: 'HTML',
-                        reply_markup: {
-                            inline_keyboard: [
-                                [
-                                    { text: '📦 Заказ передан', callback_data: `transfer_${order.id}` }
-                                ]
-                            ]
-                        }
-                    }
-                );
-                console.log(`Message updated with transfer button for order ${order.id}`);
-            } catch (error) {
-                console.error('Error editing message after confirm:', error);
-                // Если не удалось обновить сообщение, отправляем новое
-                ctx.reply(
-                    `<b>✅ Заказ #${order.id.slice(-6)} подтвержден</b>\n\n` +
-                    `Подтвердил: ${ctx.from.first_name}${ctx.from.username ? ` (@${ctx.from.username})` : ''}\n` +
-                    `Время: ${new Date().toLocaleString('ru-RU')}\n\n` +
-                    `Нажмите кнопку ниже, когда заказ будет передан клиенту:`,
-                    {
-                        parse_mode: 'HTML',
-                        reply_markup: {
-                            inline_keyboard: [
-                                [
-                                    { text: '📦 Заказ передан', callback_data: `transfer_${order.id}` }
-                                ]
-                            ]
-                        }
-                    }
-                );
-            }
+            // Формируем текст для обновления всех сообщений
+            const moscowTime = getMoscowTime();
+            const confirmMessage = `<b>✅ Заказ #${order.id.slice(-6)} подтвержден</b>\n\n` +
+                `Подтвердил: ${ctx.from.first_name}${ctx.from.username ? ` (@${ctx.from.username})` : ''}\n` +
+                `Время: ${moscowTime.toLocaleString('ru-RU', { timeZone: 'Europe/Moscow' })}\n\n` +
+                `Нажмите кнопку ниже, когда заказ будет передан клиенту:`;
+            
+            const confirmReplyMarkup = {
+                inline_keyboard: [
+                    [
+                        { text: '📦 Заказ передан', callback_data: `transfer_${order.id}` }
+                    ]
+                ]
+            };
+            
+            // Обновляем все сообщения для всех менеджеров
+            await updateOrderMessagesForAllManagers(order, confirmMessage, confirmReplyMarkup);
+            
+            // Отправляем уведомление клиенту
+            const deliveryDateText = order.selectedDeliveryDay 
+                ? (isTomorrow(order.selectedDeliveryDay) ? 'завтра' : formatMoscowDate(order.date))
+                : 'сегодня';
+            const deliveryTimeText = order.deliveryTime 
+                ? (order.deliveryTime.includes('|') ? order.deliveryTime.split('|')[1] : order.deliveryTime)
+                : '';
+            const exactTimeText = order.deliveryExactTime ? ` (${order.deliveryExactTime})` : '';
+            const locationText = order.deliveryType === 'selfPickup' 
+                ? `Точка самовывоза: ${order.pickupLocation || order.location}`
+                : `Адрес доставки: ${order.deliveryAddress || order.location}`;
+            
+            const clientNotification = `✅ <b>Ваш заказ #${order.id.slice(-6)} подтвержден!</b>\n\n` +
+                `📅 Дата доставки: ${deliveryDateText}\n` +
+                `⏰ Время: ${deliveryTimeText}${exactTimeText}\n` +
+                `📍 ${locationText}\n\n` +
+                `Заказ будет передан вам в указанное время.`;
+            
+            await notifyClient(order, 'confirmed', clientNotification);
         } else if (action === 'reject') {
             order.status = 'rejected';
             order.rejectedBy = ctx.from.id;
@@ -413,12 +526,21 @@ bot.on('callback_query', async (ctx) => {
             saveOrders(orders);
             
             ctx.answerCbQuery('Заказ отклонен');
-            ctx.editMessageText(
-                `<b>Заказ #${order.id.slice(-6)} отклонен</b>\n\n` +
+            
+            // Формируем текст для обновления всех сообщений
+            const moscowTime = getMoscowTime();
+            const rejectMessage = `<b>❌ Заказ #${order.id.slice(-6)} отклонен</b>\n\n` +
                 `Отклонил: ${ctx.from.first_name}${ctx.from.username ? ` (@${ctx.from.username})` : ''}\n` +
-                `Время: ${new Date().toLocaleString('ru-RU')}`,
-                { parse_mode: 'HTML' }
-            );
+                `Время: ${moscowTime.toLocaleString('ru-RU', { timeZone: 'Europe/Moscow' })}`;
+            
+            // Обновляем все сообщения для всех менеджеров
+            await updateOrderMessagesForAllManagers(order, rejectMessage);
+            
+            // Отправляем уведомление клиенту
+            const clientNotification = `❌ <b>Ваш заказ #${order.id.slice(-6)} отклонен</b>\n\n` +
+                `К сожалению, заказ не может быть выполнен. Обратитесь в поддержку для уточнения деталей.`;
+            
+            await notifyClient(order, 'rejected', clientNotification);
         } else if (action === 'transfer') {
             // Заказ передан клиенту
             if (order.status !== 'confirmed') {
@@ -430,22 +552,44 @@ bot.on('callback_query', async (ctx) => {
             order.transferredByUsername = ctx.from.username || ctx.from.first_name;
             order.transferredAt = new Date().toISOString();
             
+            // Вычисляем начисление Vape Coins (5% от суммы в BYN, минимум 1 коин)
+            const coinsToAdd = Math.max(1, Math.floor(order.total * 0.05));
+            order.vapeCoinsEarned = coinsToAdd;
+            
             saveOrders(orders);
             
             ctx.answerCbQuery('✅ Заказ передан клиенту');
             
-            // Обновляем сообщение
-            try {
-                await ctx.editMessageText(
-                    `<b>Заказ #${order.id.slice(-6)} передан клиенту</b>\n\n` +
-                    `Передал: ${ctx.from.first_name}${ctx.from.username ? ` (@${ctx.from.username})` : ''}\n` +
-                    `Время: ${new Date().toLocaleString('ru-RU')}`,
-                    { parse_mode: 'HTML' }
-                );
-            } catch (error) {
-                console.error('Error editing message for transfer:', error);
-                // Если не удалось обновить сообщение, просто отвечаем на callback
-            }
+            // Формируем текст для обновления всех сообщений
+            const moscowTime = getMoscowTime();
+            const transferMessage = `<b>📦 Заказ #${order.id.slice(-6)} передан клиенту</b>\n\n` +
+                `Передал: ${ctx.from.first_name}${ctx.from.username ? ` (@${ctx.from.username})` : ''}\n` +
+                `Время: ${moscowTime.toLocaleString('ru-RU', { timeZone: 'Europe/Moscow' })}\n\n` +
+                `💰 Начислено Vape Coins: ${coinsToAdd} 🪙`;
+            
+            // Обновляем все сообщения для всех менеджеров
+            await updateOrderMessagesForAllManagers(order, transferMessage);
+            
+            // Отправляем уведомление клиенту
+            const deliveryDateText = order.selectedDeliveryDay 
+                ? (isTomorrow(order.selectedDeliveryDay) ? 'завтра' : formatMoscowDate(order.date))
+                : 'сегодня';
+            const deliveryTimeText = order.deliveryTime 
+                ? (order.deliveryTime.includes('|') ? order.deliveryTime.split('|')[1] : order.deliveryTime)
+                : '';
+            const exactTimeText = order.deliveryExactTime ? ` (${order.deliveryExactTime})` : '';
+            const locationText = order.deliveryType === 'selfPickup' 
+                ? `Точка самовывоза: ${order.pickupLocation || order.location}`
+                : `Адрес доставки: ${order.deliveryAddress || order.location}`;
+            
+            const clientNotification = `📦 <b>Ваш заказ #${order.id.slice(-6)} передан!</b>\n\n` +
+                `📅 Дата: ${deliveryDateText}\n` +
+                `⏰ Время: ${deliveryTimeText}${exactTimeText}\n` +
+                `📍 ${locationText}\n\n` +
+                `💰 Вам начислено ${coinsToAdd} Vape Coins за заказ!\n\n` +
+                `Спасибо за покупку! 🎉`;
+            
+            await notifyClient(order, 'transferred', clientNotification);
         } else if (action === 'details') {
             const details = formatOrderForManager(order);
             ctx.answerCbQuery();
@@ -725,3 +869,4 @@ process.once('SIGTERM', () => {
         bot.stop('SIGTERM');
     }
 });
+
