@@ -3414,16 +3414,20 @@ function showExactTimeSelectionModal(timeSlot) {
             '23:00', '23:10', '23:20', '23:30', '23:40', '23:50', '00:00'
         ];
         
+        // Получаем занятые времена для этой даты
+        const bookedTimes = getBookedTimesForDate(dateKey);
+        
         timeSlots.forEach(timeStr => {
             const isSelected = deliveryExactTime === timeStr;
+            const isBooked = bookedTimes.includes(timeStr);
+            const buttonStyle = isBooked 
+                ? `padding: 10px 16px; border: 2px solid #999; border-radius: 10px; background: #e0e0e0; cursor: not-allowed; font-size: 14px; font-weight: 600; color: #999; transition: all 0.3s; white-space: nowrap; margin-right: 8px; margin-bottom: 8px; opacity: 0.5;`
+                : `padding: 10px 16px; border: 2px solid ${isSelected ? '#007AFF' : '#e5e5e5'}; border-radius: 10px; background: ${isSelected ? '#e3f2fd' : '#ffffff'}; cursor: pointer; font-size: 14px; font-weight: 600; color: ${isSelected ? '#007AFF' : '#666'}; transition: all 0.3s; white-space: nowrap; margin-right: 8px; margin-bottom: 8px;`;
+            
             exactTimes.push(`
-                <button onclick="setDeliveryExactTime('${timeStr}')" 
-                    style="padding: 10px 16px; border: 2px solid ${isSelected ? '#007AFF' : '#e5e5e5'}; 
-                    border-radius: 10px; background: ${isSelected ? '#e3f2fd' : '#ffffff'}; 
-                    cursor: pointer; font-size: 14px; font-weight: 600; 
-                    color: ${isSelected ? '#007AFF' : '#666'}; transition: all 0.3s;
-                    white-space: nowrap; margin-right: 8px; margin-bottom: 8px;">
-                    ${timeStr}
+                <button ${isBooked ? 'disabled' : `onclick="setDeliveryExactTime('${timeStr}')"`}
+                    style="${buttonStyle}">
+                    ${timeStr}${isBooked ? ' (занято)' : ''}
                 </button>
             `);
         });
@@ -3434,19 +3438,23 @@ function showExactTimeSelectionModal(timeSlot) {
         const endTimeObj = new Date();
         endTimeObj.setHours(parseInt(endHour), parseInt(endMin || 0), 0, 0);
         
+        // Получаем занятые времена для этой даты
+        const bookedTimes = getBookedTimesForDate(dateKey);
+        
         while (currentTime <= endTimeObj) {
             const hours = currentTime.getHours();
             const minutes = currentTime.getMinutes();
             const timeStr = `${hours < 10 ? '0' : ''}${hours}:${minutes < 10 ? '0' : ''}${minutes}`;
             const isSelected = deliveryExactTime === timeStr;
+            const isBooked = bookedTimes.includes(timeStr);
+            const buttonStyle = isBooked 
+                ? `padding: 10px 16px; border: 2px solid #999; border-radius: 10px; background: #e0e0e0; cursor: not-allowed; font-size: 14px; font-weight: 600; color: #999; transition: all 0.3s; white-space: nowrap; margin-right: 8px; margin-bottom: 8px; opacity: 0.5;`
+                : `padding: 10px 16px; border: 2px solid ${isSelected ? '#007AFF' : '#e5e5e5'}; border-radius: 10px; background: ${isSelected ? '#e3f2fd' : '#ffffff'}; cursor: pointer; font-size: 14px; font-weight: 600; color: ${isSelected ? '#007AFF' : '#666'}; transition: all 0.3s; white-space: nowrap; margin-right: 8px; margin-bottom: 8px;`;
+            
             exactTimes.push(`
-                <button onclick="setDeliveryExactTime('${timeStr}')" 
-                    style="padding: 10px 16px; border: 2px solid ${isSelected ? '#007AFF' : '#e5e5e5'}; 
-                    border-radius: 10px; background: ${isSelected ? '#e3f2fd' : '#ffffff'}; 
-                    cursor: pointer; font-size: 14px; font-weight: 600; 
-                    color: ${isSelected ? '#007AFF' : '#666'}; transition: all 0.3s;
-                    white-space: nowrap; margin-right: 8px; margin-bottom: 8px;">
-                    ${timeStr}
+                <button ${isBooked ? 'disabled' : `onclick="setDeliveryExactTime('${timeStr}')"`}
+                    style="${buttonStyle}">
+                    ${timeStr}${isBooked ? ' (занято)' : ''}
                 </button>
             `);
             currentTime.setMinutes(currentTime.getMinutes() + 10);
@@ -4814,27 +4822,37 @@ function checkOrderStatus(orderId) {
                         } else if (data.status === 'rejected') {
                             showToast('Заказ отклонен менеджером', 'error', 4000);
                         } else if (data.status === 'transferred') {
-                            // Начисляем Vape Coins за заказ
-                            if (data.order && data.order.vapeCoinsEarned) {
+                            // Начисляем Vape Coins за заказ (только если еще не начислены)
+                            if (data.order && data.order.vapeCoinsEarned !== undefined && data.order.vapeCoinsEarned !== null) {
                                 const coinsEarned = data.order.vapeCoinsEarned;
-                                vapeCoins += coinsEarned;
-                                localStorage.setItem('vapeCoins', vapeCoins.toString());
                                 
-                                // Добавляем транзакцию в историю
-                                vapeCoinsHistory.unshift({
-                                    id: `vc_${Date.now()}`,
-                                    date: new Date().toISOString(),
-                                    type: 'earned',
-                                    amount: coinsEarned,
-                                    description: `Начислено за заказ: #${orderId.slice(-6)}`,
-                                    orderId: orderId
-                                });
-                                localStorage.setItem('vapeCoinsHistory', JSON.stringify(vapeCoinsHistory));
+                                // Проверяем, не начислены ли уже коины за этот заказ
+                                const existingTransaction = vapeCoinsHistory.find(t => t.orderId === orderId && t.type === 'earned');
+                                
+                                if (!existingTransaction && coinsEarned > 0) {
+                                    vapeCoins += coinsEarned;
+                                    localStorage.setItem('vapeCoins', vapeCoins.toString());
+                                    
+                                    // Добавляем транзакцию в историю
+                                    vapeCoinsHistory.unshift({
+                                        id: `vc_${Date.now()}`,
+                                        date: new Date().toISOString(),
+                                        type: 'earned',
+                                        amount: coinsEarned,
+                                        description: `Начислено за заказ: #${orderId.slice(-6)}`,
+                                        orderId: orderId
+                                    });
+                                    localStorage.setItem('vapeCoinsHistory', JSON.stringify(vapeCoinsHistory));
+                                    
+                                    showToast(`Заказ передан! Начислено ${coinsEarned.toFixed(1)} Vape Coins`, 'success', 5000);
+                                } else if (coinsEarned > 0) {
+                                    showToast(`Заказ передан! Начислено ${coinsEarned.toFixed(1)} Vape Coins`, 'success', 5000);
+                                } else {
+                                    showToast('Заказ передан клиенту', 'success', 4000);
+                                }
                                 
                                 // Обновляем баланс в заказе
                                 order.vapeCoinsEarned = coinsEarned;
-                                
-                                showToast(`Заказ передан! Начислено ${coinsEarned} Vape Coins`, 'success', 5000);
                             } else {
                                 showToast('Заказ передан клиенту', 'success', 4000);
                             }
