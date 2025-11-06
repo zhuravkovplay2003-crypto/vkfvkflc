@@ -393,6 +393,48 @@ app.get('/api/orders', (req, res) => {
     res.json({ success: true, orders: orders });
 });
 
+// API для отмены заказа клиентом
+app.post('/api/orders/:orderId/cancel', (req, res) => {
+    try {
+        const orderId = req.params.orderId;
+        const order = orders.find(o => o.id === orderId);
+        
+        if (!order) {
+            return res.status(404).json({ success: false, error: 'Order not found' });
+        }
+        
+        // Можно отменить только заказы в ожидании или обработке
+        if (order.status !== 'pending' && order.status !== 'processing') {
+            return res.status(400).json({ success: false, error: 'Order cannot be cancelled' });
+        }
+        
+        // Меняем статус заказа на "отменен"
+        order.status = 'cancelled';
+        order.cancelledBy = 'client';
+        order.cancelledAt = new Date().toISOString();
+        
+        saveOrders(orders);
+        
+        // Формируем текст для обновления всех сообщений менеджерам
+        const moscowTime = getMoscowTime();
+        const cancelMessage = `<b>❌ Заказ #${order.id.slice(-6)} отменен клиентом</b>\n\n` +
+            `Клиент отменил заказ самостоятельно\n` +
+            `Время: ${moscowTime.toLocaleString('ru-RU', { timeZone: 'Europe/Moscow' })}`;
+        
+        // Обновляем все сообщения для всех менеджеров
+        updateOrderMessagesForAllManagers(order, cancelMessage).then(() => {
+            console.log(`Order ${orderId} cancelled by client. Managers notified.`);
+        }).catch(err => {
+            console.error('Error notifying managers about cancellation:', err);
+        });
+        
+        res.json({ success: true, message: 'Order cancelled' });
+    } catch (error) {
+        console.error('Error cancelling order:', error);
+        res.status(500).json({ success: false, error: error.message });
+    }
+});
+
 // API для добавления менеджера
 app.post('/api/managers', (req, res) => {
     try {
@@ -542,7 +584,21 @@ bot.on('callback_query', async (ctx) => {
             await updateOrderMessagesForAllManagers(order, rejectMessage);
             
             // Отправляем уведомление клиенту
+            const deliveryDateText = order.selectedDeliveryDay 
+                ? (isTomorrow(order.selectedDeliveryDay) ? 'завтра' : formatMoscowDate(order.date))
+                : 'сегодня';
+            const deliveryTimeText = order.deliveryTime 
+                ? (order.deliveryTime.includes('|') ? order.deliveryTime.split('|')[1] : order.deliveryTime)
+                : '';
+            const exactTimeText = order.deliveryExactTime ? ` (${order.deliveryExactTime})` : '';
+            const locationText = order.deliveryType === 'selfPickup' 
+                ? `Точка самовывоза: ${order.pickupLocation || order.location}`
+                : `Адрес доставки: ${order.deliveryAddress || order.location}`;
+            
             const clientNotification = `❌ <b>Ваш заказ #${order.id.slice(-6)} отклонен</b>\n\n` +
+                `📅 Дата: ${deliveryDateText}\n` +
+                `⏰ Время: ${deliveryTimeText}${exactTimeText}\n` +
+                `📍 ${locationText}\n\n` +
                 `К сожалению, заказ не может быть выполнен. Обратитесь в поддержку для уточнения деталей.`;
             
             await notifyClient(order, 'rejected', clientNotification);
