@@ -4952,16 +4952,12 @@ function checkOrderStatus(orderId) {
                         
                         if (data.status === 'confirmed') {
                             showToast('Заказ подтвержден менеджером!', 'success', 4000);
-                            // Обновляем отображение заказов только если пользователь уже на странице заказов
-                            if (currentPage === 'orders') {
-                                showOrders();
-                            }
+                            // Обновляем отображение заказов ВСЕГДА при изменении статуса
+                            showOrders();
                         } else if (data.status === 'rejected') {
-                            showToast('Заказ отклонен менеджером', 'error', 4000);
-                            // Обновляем отображение заказов только если пользователь уже на странице заказов
-                            if (currentPage === 'orders') {
-                                showOrders();
-                            }
+                            showToast('Заказ отменен менеджером', 'error', 4000);
+                            // Обновляем отображение заказов ВСЕГДА при изменении статуса
+                            showOrders();
                         } else if (data.status === 'transferred') {
                             // Начисляем Vape Coins за заказ (только если еще не начислены)
                             if (data.order && data.order.vapeCoinsEarned !== undefined && data.order.vapeCoinsEarned !== null) {
@@ -5062,10 +5058,8 @@ function checkOrderStatus(orderId) {
                             }
                         }
                         
-                        // Обновляем отображение заказов только если пользователь уже на странице заказов
-                        if (currentPage === 'orders') {
-                            showOrders();
-                        }
+                        // Обновляем отображение заказов ВСЕГДА при изменении статуса
+                        showOrders();
                         
                         // Обновляем баланс Vape Coins, если пользователь на странице Vape Coins
                         if (currentPage === 'vapeCoins') {
@@ -6492,15 +6486,18 @@ function showOrders() {
                                         // getMoscowTime() делает: new Date(now.getTime() + 3 часа)
                                         // Это создает Date объект, который в UTC показывает время на 3 часа больше текущего UTC
                                         // Например: если сейчас UTC 12:00 (15:00 по Москве), getMoscowTime() вернет Date с UTC 15:00
+                                        // createdAt.toISOString() вернет строку с UTC 15:00
+                                        // Когда мы делаем new Date(order.createdAt), получаем Date с UTC 15:00
                                         // Но это неправильно! Нужно использовать локальное время браузера
-                                        // createdAt.toISOString() возвращает UTC время, которое на 3 часа больше реального UTC
-                                        // Поэтому нужно вычесть 3 часа из UTC времени, чтобы получить правильное московское время
+                                        // Правильный способ: использовать локальное время браузера напрямую
                                         const createdDate = new Date(order.createdAt);
-                                        // Вычитаем 3 часа, чтобы получить правильное московское время
+                                        // createdAt содержит UTC время, которое на 3 часа больше реального UTC
+                                        // Чтобы получить правильное московское время, нужно вычесть 3 часа
                                         const moscowOffset = 3 * 60 * 60 * 1000;
-                                        const correctMoscowTime = new Date(createdDate.getTime() - moscowOffset);
-                                        const hours = String(correctMoscowTime.getUTCHours()).padStart(2, '0');
-                                        const minutes = String(correctMoscowTime.getUTCMinutes()).padStart(2, '0');
+                                        const correctTime = new Date(createdDate.getTime() - moscowOffset);
+                                        // Используем локальное время браузера
+                                        const hours = String(correctTime.getHours()).padStart(2, '0');
+                                        const minutes = String(correctTime.getMinutes()).padStart(2, '0');
                                         timeCreated = `${hours}:${minutes}`;
                                     } else {
                                         // Fallback: используем текущее московское время
