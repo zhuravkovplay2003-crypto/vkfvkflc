@@ -437,13 +437,13 @@ bot.command('help', (ctx) => {
     const isAdminUser = isAdmin(ctx.from.id);
     
     let helpText = '📋 <b>Команды бота:</b>\n\n';
-    helpText += '/register <город> - Зарегистрироваться как менеджер\n';
+    helpText += '/register &lt;город&gt; - Зарегистрироваться как менеджер\n';
     helpText += '/orders - Показать заказы в ожидании\n';
     
     if (isAdminUser) {
         helpText += '\n<b>Команды администратора:</b>\n';
-        helpText += '/addmanager <id> <город> - Добавить менеджера\n';
-        helpText += '/removemanager <id> <город> - Удалить менеджера\n';
+        helpText += '/addmanager &lt;id&gt; &lt;город&gt; - Добавить менеджера\n';
+        helpText += '/removemanager &lt;id&gt; &lt;город&gt; - Удалить менеджера\n';
         helpText += '/managers - Список всех менеджеров\n';
     }
     
@@ -451,6 +451,11 @@ bot.command('help', (ctx) => {
     helpText += 'Доступные города: mogilev, minsk';
     
     ctx.reply(helpText, { parse_mode: 'HTML' });
+});
+
+// Keep-alive endpoint для предотвращения засыпания на бесплатном плане
+app.get('/keep-alive', (req, res) => {
+    res.json({ status: 'ok', timestamp: new Date().toISOString() });
 });
 
 // Запуск сервера
@@ -463,11 +468,43 @@ app.listen(PORT, () => {
 // Запуск бота
 bot.launch().then(() => {
     console.log('🤖 Telegram bot started');
+    
+    // Запускаем автоматический ping каждые 10 минут (после запуска сервера)
+    const http = require('http');
+    setInterval(() => {
+        try {
+            const baseUrl = process.env.RENDER_EXTERNAL_URL || `http://localhost:${PORT}`;
+            const url = new URL(`${baseUrl}/keep-alive`);
+            const options = {
+                hostname: url.hostname,
+                port: url.port || (url.protocol === 'https:' ? 443 : 80),
+                path: url.pathname,
+                method: 'GET',
+                timeout: 5000
+            };
+            
+            const req = http.request(options, (res) => {
+                console.log('Keep-alive ping sent');
+            });
+            
+            req.on('error', (err) => {
+                console.log('Keep-alive ping failed (this is ok)');
+            });
+            
+            req.on('timeout', () => {
+                req.destroy();
+            });
+            
+            req.end();
+        } catch (error) {
+            console.log('Keep-alive ping failed (this is ok)');
+        }
+    }, 10 * 60 * 1000); // Каждые 10 минут
 }).catch(err => {
     console.error('❌ Error starting bot:', err);
+    process.exit(1);
 });
 
 // Graceful shutdown
 process.once('SIGINT', () => bot.stop('SIGINT'));
 process.once('SIGTERM', () => bot.stop('SIGTERM'));
-
