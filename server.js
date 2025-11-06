@@ -36,14 +36,17 @@ function parseMoscowDate(dateString) {
 }
 
 function formatMoscowDate(dateString) {
+    // Если dateString уже в формате YYYY-MM-DD, просто форматируем его
+    if (dateString && dateString.match(/^\d{4}-\d{2}-\d{2}$/)) {
+        const [year, month, day] = dateString.split('-');
+        return `${day}.${month}.${year}`;
+    }
+    // Иначе парсим как ISO строку
     const date = new Date(dateString);
-    // Добавляем 3 часа для московского времени
-    const moscowOffset = 3 * 60 * 60 * 1000;
-    const moscowDate = new Date(date.getTime() + moscowOffset);
-    const year = moscowDate.getUTCFullYear();
-    const month = String(moscowDate.getUTCMonth() + 1).padStart(2, '0');
-    const day = String(moscowDate.getUTCDate()).padStart(2, '0');
-    return `${year}-${month}-${day}`;
+    const year = date.getUTCFullYear();
+    const month = String(date.getUTCMonth() + 1).padStart(2, '0');
+    const day = String(date.getUTCDate()).padStart(2, '0');
+    return `${day}.${month}.${year}`;
 }
 
 function isTomorrow(dateString) {
@@ -404,8 +407,15 @@ app.post('/api/orders/:orderId/cancel', (req, res) => {
             return res.status(404).json({ success: false, error: 'Order not found' });
         }
         
-        // Можно отменить только заказы в ожидании или обработке
-        if (order.status !== 'pending' && order.status !== 'processing') {
+        // Можно отменить только заказы в ожидании, обработке или подтвержденные (но не переданные)
+        if (order.status !== 'pending' && order.status !== 'processing' && order.status !== 'confirmed') {
+            if (order.status === 'transferred') {
+                return res.status(400).json({ success: false, error: 'Order already transferred' });
+            } else if (order.status === 'rejected') {
+                return res.status(400).json({ success: false, error: 'Order already rejected' });
+            } else if (order.status === 'cancelled') {
+                return res.status(400).json({ success: false, error: 'Order already cancelled' });
+            }
             return res.status(400).json({ success: false, error: 'Order cannot be cancelled' });
         }
         
@@ -422,8 +432,8 @@ app.post('/api/orders/:orderId/cancel', (req, res) => {
             `Клиент отменил заказ самостоятельно\n` +
             `Время: ${moscowTime.toLocaleString('ru-RU', { timeZone: 'Europe/Moscow' })}`;
         
-        // Обновляем все сообщения для всех менеджеров
-        updateOrderMessagesForAllManagers(order, cancelMessage).then(() => {
+        // Обновляем все сообщения для всех менеджеров (убираем кнопки)
+        updateOrderMessagesForAllManagers(order, cancelMessage, null).then(() => {
             console.log(`Order ${orderId} cancelled by client. Managers notified.`);
         }).catch(err => {
             console.error('Error notifying managers about cancellation:', err);
@@ -501,12 +511,23 @@ bot.on('callback_query', async (ctx) => {
         orders = freshOrders;
         
         // Проверяем, не обработан ли уже заказ другим менеджером
-        // Для confirm и reject проверяем, что заказ еще pending
-        if ((action === 'confirm' || action === 'reject') && order.status !== 'pending') {
+        // Для confirm проверяем, что заказ еще pending
+        if (action === 'confirm' && order.status !== 'pending') {
             if (order.status === 'confirmed' || order.status === 'transferred') {
                 return ctx.answerCbQuery('Заказ уже подтвержден другим менеджером');
             } else if (order.status === 'rejected') {
                 return ctx.answerCbQuery('Заказ уже отклонен другим менеджером');
+            }
+        }
+        
+        // Для reject можно отменять pending и confirmed заказы
+        if (action === 'reject') {
+            if (order.status === 'transferred') {
+                return ctx.answerCbQuery('Заказ уже передан клиенту, его нельзя отменить');
+            } else if (order.status === 'rejected') {
+                return ctx.answerCbQuery('Заказ уже отклонен');
+            } else if (order.status === 'cancelled') {
+                return ctx.answerCbQuery('Заказ уже отменен');
             }
         }
         
@@ -557,8 +578,8 @@ bot.on('callback_query', async (ctx) => {
             
             // Отправляем уведомление клиенту
             const deliveryDateText = order.selectedDeliveryDay 
-                ? (isTomorrow(order.selectedDeliveryDay) ? 'завтра' : formatMoscowDate(order.date))
-                : 'сегодня';
+                ? formatMoscowDate(order.selectedDeliveryDay)
+                : (order.date ? formatMoscowDate(order.date) : 'сегодня');
             const deliveryTimeText = order.deliveryTime 
                 ? (order.deliveryTime.includes('|') ? order.deliveryTime.split('|')[1] : order.deliveryTime)
                 : '';
@@ -575,6 +596,15 @@ bot.on('callback_query', async (ctx) => {
             
             await notifyClient(order, 'confirmed', clientNotification);
         } else if (action === 'reject') {
+            // Можно отменять pending и confirmed заказы
+            if (order.status === 'transferred') {
+                return ctx.answerCbQuery('Заказ уже передан клиенту, его нельзя отменить');
+            } else if (order.status === 'rejected') {
+                return ctx.answerCbQuery('Заказ уже отклонен');
+            } else if (order.status === 'cancelled') {
+                return ctx.answerCbQuery('Заказ уже отменен');
+            }
+            
             order.status = 'rejected';
             order.rejectedBy = ctx.from.id;
             order.rejectedByUsername = ctx.from.username || ctx.from.first_name;
@@ -582,21 +612,21 @@ bot.on('callback_query', async (ctx) => {
             
             saveOrders(orders);
             
-            ctx.answerCbQuery('Заказ отклонен');
+            ctx.answerCbQuery('Заказ отменен');
             
             // Формируем текст для обновления всех сообщений
             const moscowTime = getMoscowTime();
-            const rejectMessage = `<b>❌ Заказ #${order.id.slice(-6)} отклонен</b>\n\n` +
-                `Отклонил: ${ctx.from.first_name}${ctx.from.username ? ` (@${ctx.from.username})` : ''}\n` +
+            const rejectMessage = `<b>❌ Заказ #${order.id.slice(-6)} отменен</b>\n\n` +
+                `Отменил: ${ctx.from.first_name}${ctx.from.username ? ` (@${ctx.from.username})` : ''}\n` +
                 `Время: ${moscowTime.toLocaleString('ru-RU', { timeZone: 'Europe/Moscow' })}`;
             
-            // Обновляем все сообщения для всех менеджеров
-            await updateOrderMessagesForAllManagers(order, rejectMessage);
+            // Обновляем все сообщения для всех менеджеров (убираем кнопки)
+            await updateOrderMessagesForAllManagers(order, rejectMessage, null);
             
-            // Отправляем уведомление клиенту
+            // Отправляем уведомление клиенту (всегда, даже если заказ был confirmed)
             const deliveryDateText = order.selectedDeliveryDay 
-                ? (isTomorrow(order.selectedDeliveryDay) ? 'завтра' : formatMoscowDate(order.date))
-                : 'сегодня';
+                ? formatMoscowDate(order.selectedDeliveryDay)
+                : (order.date ? formatMoscowDate(order.date) : 'сегодня');
             const deliveryTimeText = order.deliveryTime 
                 ? (order.deliveryTime.includes('|') ? order.deliveryTime.split('|')[1] : order.deliveryTime)
                 : '';
@@ -605,7 +635,7 @@ bot.on('callback_query', async (ctx) => {
                 ? `Точка самовывоза: ${order.pickupLocation || order.location}`
                 : `Адрес доставки: ${order.deliveryAddress || order.location}`;
             
-            const clientNotification = `❌ <b>Ваш заказ #${order.id.slice(-6)} отклонен</b>\n\n` +
+            const clientNotification = `❌ <b>Ваш заказ #${order.id.slice(-6)} отменен</b>\n\n` +
                 `📅 Дата: ${deliveryDateText}\n` +
                 `⏰ Время: ${deliveryTimeText}${exactTimeText}\n` +
                 `📍 ${locationText}\n\n` +
@@ -655,8 +685,8 @@ bot.on('callback_query', async (ctx) => {
             
             // Отправляем уведомление клиенту
             const deliveryDateText = order.selectedDeliveryDay 
-                ? (isTomorrow(order.selectedDeliveryDay) ? 'завтра' : formatMoscowDate(order.date))
-                : 'сегодня';
+                ? formatMoscowDate(order.selectedDeliveryDay)
+                : (order.date ? formatMoscowDate(order.date) : 'сегодня');
             const deliveryTimeText = order.deliveryTime 
                 ? (order.deliveryTime.includes('|') ? order.deliveryTime.split('|')[1] : order.deliveryTime)
                 : '';
