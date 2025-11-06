@@ -545,6 +545,9 @@ bot.on('callback_query', async (ctx) => {
                 inline_keyboard: [
                     [
                         { text: '📦 Заказ передан', callback_data: `transfer_${order.id}` }
+                    ],
+                    [
+                        { text: '❌ Отменить заказ', callback_data: `reject_${order.id}` }
                     ]
                 ]
             };
