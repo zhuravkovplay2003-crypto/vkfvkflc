@@ -43,7 +43,7 @@ let orderStatusCheckIntervals = {}; // Интервалы для проверк�
 
 // URL сервера (измените на ваш адрес сервера)
 // const SERVER_URL = 'http://localhost:3000'; // Для разработки
-const SERVER_URL = 'https://your-railway-app.railway.app'; // Для продакшена - замените на ваш Railway URL
+const SERVER_URL = 'https://vkfvkflc.onrender.com'; // Render.com сервер
 
 // Получить цвета в зависимости от темы
 function getThemeColors() {
@@ -3117,15 +3117,34 @@ function setDeliveryExactTime(time) {
         }
         
         // Обновляем отображение времени в корзине
-        const displayTime = deliveryTime && deliveryTime.includes('|') ? deliveryTime.split('|')[1] : deliveryTime;
-        const exactDisplay = deliveryExactTime ? ` (${deliveryExactTime})` : '';
+        let timeText = '';
+        if (selectedDeliveryDay) {
+            const deliveryDate = new Date(selectedDeliveryDay + 'T12:00:00');
+            const today = new Date();
+            today.setHours(0, 0, 0, 0);
+            const tomorrow = new Date(today);
+            tomorrow.setDate(tomorrow.getDate() + 1);
+            const deliveryDateOnly = new Date(deliveryDate);
+            deliveryDateOnly.setHours(0, 0, 0, 0);
+            const dateText = deliveryDateOnly.getTime() === tomorrow.getTime() 
+                ? 'Завтра' 
+                : deliveryDate.toLocaleDateString('ru-RU', { day: '2-digit', month: '2-digit', year: 'numeric' });
+            timeText = dateText;
+        }
+        if (deliveryTime) {
+            const timePart = deliveryTime.includes('|') ? deliveryTime.split('|')[1] : deliveryTime;
+            timeText += timeText ? `, ${timePart}` : timePart;
+        }
+        if (deliveryExactTime) {
+            timeText += ` (${deliveryExactTime})`;
+        }
         const timeDisplay = document.getElementById('selected-delivery-time-display');
         if (timeDisplay) {
-            timeDisplay.textContent = (displayTime || 'Выбрать время') + exactDisplay;
+            timeDisplay.textContent = timeText || 'Выбрать время';
         }
         const timeDisplayDelivery = document.getElementById('selected-delivery-time-display-delivery');
         if (timeDisplayDelivery) {
-            timeDisplayDelivery.textContent = (displayTime || 'Выбрать время') + exactDisplay;
+            timeDisplayDelivery.textContent = timeText || 'Выбрать время';
         }
     }, 300);
     
@@ -3776,7 +3795,31 @@ function showCart() {
                                 <span style="font-size: 18px;">⏰</span>
                                 <div>
                                     <div style="font-size: 12px; opacity: 0.9; margin-bottom: 2px;">Время самовывоза</div>
-                                    <div style="font-size: 16px; font-weight: 700;" id="selected-delivery-time-display">${deliveryTime ? (deliveryTime.includes('|') ? deliveryTime.split('|')[1] : deliveryTime) : 'Выбрать время'}</div>
+                                    <div style="font-size: 16px; font-weight: 700;" id="selected-delivery-time-display">${(() => {
+                                        if (!deliveryTime && !selectedDeliveryDay) return 'Выбрать время';
+                                        let timeText = '';
+                                        if (selectedDeliveryDay) {
+                                            const deliveryDate = new Date(selectedDeliveryDay + 'T12:00:00');
+                                            const today = new Date();
+                                            today.setHours(0, 0, 0, 0);
+                                            const tomorrow = new Date(today);
+                                            tomorrow.setDate(tomorrow.getDate() + 1);
+                                            const deliveryDateOnly = new Date(deliveryDate);
+                                            deliveryDateOnly.setHours(0, 0, 0, 0);
+                                            const dateText = deliveryDateOnly.getTime() === tomorrow.getTime() 
+                                                ? 'Завтра' 
+                                                : deliveryDate.toLocaleDateString('ru-RU', { day: '2-digit', month: '2-digit', year: 'numeric' });
+                                            timeText = dateText;
+                                        }
+                                        if (deliveryTime) {
+                                            const timePart = deliveryTime.includes('|') ? deliveryTime.split('|')[1] : deliveryTime;
+                                            timeText += timeText ? `, ${timePart}` : timePart;
+                                        }
+                                        if (deliveryExactTime) {
+                                            timeText += ` (${deliveryExactTime})`;
+                                        }
+                                        return timeText || 'Выбрать время';
+                                    })()}</div>
                                 </div>
                             </div>
                             <span style="font-size: 18px;">›</span>
@@ -3881,7 +3924,31 @@ function showCart() {
                                 <span style="font-size: 18px;">⏰</span>
                                 <div>
                                     <div style="font-size: 12px; color: #666; margin-bottom: 2px;">Время доставки</div>
-                                    <div style="font-size: 16px; font-weight: 700; color: #000;" id="selected-delivery-time-display-delivery">${deliveryTime ? (deliveryTime.includes('|') ? deliveryTime.split('|')[1] : deliveryTime) : 'Выбрать время'}</div>
+                                    <div style="font-size: 16px; font-weight: 700; color: #000;" id="selected-delivery-time-display-delivery">${(() => {
+                                        if (!deliveryTime && !selectedDeliveryDay) return 'Выбрать время';
+                                        let timeText = '';
+                                        if (selectedDeliveryDay) {
+                                            const deliveryDate = new Date(selectedDeliveryDay + 'T12:00:00');
+                                            const today = new Date();
+                                            today.setHours(0, 0, 0, 0);
+                                            const tomorrow = new Date(today);
+                                            tomorrow.setDate(tomorrow.getDate() + 1);
+                                            const deliveryDateOnly = new Date(deliveryDate);
+                                            deliveryDateOnly.setHours(0, 0, 0, 0);
+                                            const dateText = deliveryDateOnly.getTime() === tomorrow.getTime() 
+                                                ? 'Завтра' 
+                                                : deliveryDate.toLocaleDateString('ru-RU', { day: '2-digit', month: '2-digit', year: 'numeric' });
+                                            timeText = dateText;
+                                        }
+                                        if (deliveryTime) {
+                                            const timePart = deliveryTime.includes('|') ? deliveryTime.split('|')[1] : deliveryTime;
+                                            timeText += timeText ? `, ${timePart}` : timePart;
+                                        }
+                                        if (deliveryExactTime) {
+                                            timeText += ` (${deliveryExactTime})`;
+                                        }
+                                        return timeText || 'Выбрать время';
+                                    })()}</div>
                                 </div>
                             </div>
                             <span style="font-size: 18px; color: #666;">›</span>
@@ -4702,9 +4769,11 @@ function checkOrderStatus(orderId) {
                         localStorage.setItem('orders', JSON.stringify(orders));
                         
                         if (data.status === 'confirmed') {
-                            showToast('✅ Заказ подтвержден менеджером!', 'success', 4000);
+                            showToast('Заказ подтвержден менеджером!', 'success', 4000);
                         } else if (data.status === 'rejected') {
-                            showToast('❌ Заказ отклонен менеджером', 'error', 4000);
+                            showToast('Заказ отклонен менеджером', 'error', 4000);
+                        } else if (data.status === 'transferred') {
+                            showToast('Заказ передан клиенту', 'success', 4000);
                         }
                         
                         // Обновляем отображение, если пользователь на странице заказов
@@ -4713,8 +4782,8 @@ function checkOrderStatus(orderId) {
                         }
                     }
                     
-                    // Если заказ подтвержден или отклонен, останавливаем проверку
-                    if (data.status === 'confirmed' || data.status === 'rejected') {
+                    // Если заказ подтвержден, отклонен или передан, останавливаем проверку
+                    if (data.status === 'confirmed' || data.status === 'rejected' || data.status === 'transferred') {
                         clearInterval(orderStatusCheckIntervals[orderId]);
                         delete orderStatusCheckIntervals[orderId];
                     }
@@ -6051,26 +6120,30 @@ function showOrders() {
             minute: '2-digit'
         });
         
-        const statusText = order.status === 'pending' ? 'Ожидает подтверждения' :
+        const statusText = order.status === 'pending' ? 'В обработке' :
                           order.status === 'processing' ? 'В обработке' : 
-                          order.status === 'confirmed' ? 'Заказ подтвержден' :
+                          order.status === 'confirmed' ? 'Заказ принят' :
+                          order.status === 'transferred' ? 'Заказ передан' :
                           order.status === 'rejected' ? 'Заказ отклонен' :
                           order.status === 'cancelled' ? 'Заказ отменен' : 
                           order.status === 'received' ? 'Заказ получен' : 'Неизвестно';
-        const statusColor = order.status === 'pending' ? '#2196F3' :
+        const statusColor = order.status === 'pending' ? '#FF9800' :
                           order.status === 'processing' ? '#FF9800' : 
                           order.status === 'confirmed' ? '#4CAF50' :
+                          order.status === 'transferred' ? '#2196F3' :
                           order.status === 'rejected' ? '#f44336' :
                           order.status === 'cancelled' ? '#999' : '#4CAF50';
-        const statusBg = order.status === 'pending' ? 'linear-gradient(135deg, #E3F2FD 0%, #BBDEFB 100%)' :
+        const statusBg = order.status === 'pending' ? 'linear-gradient(135deg, #FFF3E0 0%, #FFE0B2 100%)' :
                         order.status === 'processing' ? 'linear-gradient(135deg, #FFF3E0 0%, #FFE0B2 100%)' : 
                         order.status === 'confirmed' ? 'linear-gradient(135deg, #E8F5E9 0%, #C8E6C9 100%)' :
+                        order.status === 'transferred' ? 'linear-gradient(135deg, #E3F2FD 0%, #BBDEFB 100%)' :
                         order.status === 'rejected' ? 'linear-gradient(135deg, #FFEBEE 0%, #FFCDD2 100%)' :
                         order.status === 'cancelled' ? 'linear-gradient(135deg, #f5f5f5 0%, #e0e0e0 100%)' : 
                         'linear-gradient(135deg, #E8F5E9 0%, #C8E6C9 100%)';
         const statusIcon = order.status === 'pending' ? getClockIcon('#ffffff') :
                           order.status === 'processing' ? getClockIcon('#ffffff') : 
                           order.status === 'confirmed' ? getSuccessIcon('#ffffff') :
+                          order.status === 'transferred' ? getPackageIcon('#ffffff') :
                           order.status === 'rejected' ? getCrossIcon('#ffffff') :
                           order.status === 'cancelled' ? getCrossIcon('#ffffff') : getSuccessIcon('#ffffff');
         const totalAmount = order.vapeCoinsSpent && order.vapeCoinsSpent > 0 
@@ -6173,7 +6246,24 @@ function showOrders() {
                                 <div style="font-size: 13px; font-weight: 600; opacity: 0.95; word-wrap: break-word; overflow-wrap: break-word;">
                                     ${order.location || order.deliveryAddress || 'Не указано'}
                             </div>
-                            ${order.deliveryTime ? `
+                            ${order.selectedDeliveryDay ? (() => {
+                                const deliveryDate = new Date(order.selectedDeliveryDay + 'T12:00:00');
+                                const today = new Date();
+                                today.setHours(0, 0, 0, 0);
+                                const tomorrow = new Date(today);
+                                tomorrow.setDate(tomorrow.getDate() + 1);
+                                const deliveryDateOnly = new Date(deliveryDate);
+                                deliveryDateOnly.setHours(0, 0, 0, 0);
+                                const dateText = deliveryDateOnly.getTime() === tomorrow.getTime() 
+                                    ? 'Завтра' 
+                                    : deliveryDate.toLocaleDateString('ru-RU', { day: '2-digit', month: '2-digit', year: 'numeric' });
+                                return `
+                                    <div style="font-size: 11px; opacity: 0.8; margin-top: 6px; display: flex; align-items: center; gap: 4px;">
+                                        <span style="width: 12px; height: 12px; display: flex; align-items: center; justify-content: center;">${getClockIcon('#ffffff').replace('width="24" height="24"', 'width="12" height="12"')}</span>
+                                        <span>📅 ${dateText}${order.deliveryTime ? `, ${typeof order.deliveryTime === 'string' && order.deliveryTime.includes('|') ? order.deliveryTime.split('|')[1] : order.deliveryTime}${order.deliveryExactTime ? ` (${order.deliveryExactTime})` : ''}` : ''}</span>
+                                    </div>
+                                `;
+                            })() : order.deliveryTime ? `
                                 <div style="font-size: 11px; opacity: 0.8; margin-top: 6px; display: flex; align-items: center; gap: 4px;">
                                     <span style="width: 12px; height: 12px; display: flex; align-items: center; justify-content: center;">${getClockIcon('#ffffff').replace('width="24" height="24"', 'width="12" height="12"')}</span>
                                     <span>${typeof order.deliveryTime === 'string' && order.deliveryTime.includes('|') ? order.deliveryTime.split('|')[1] : order.deliveryTime}${order.deliveryExactTime ? ` (${order.deliveryExactTime})` : ''}</span>
@@ -6189,11 +6279,11 @@ function showOrders() {
                 </div>
                 
                 ${order.status === 'pending' ? `
-                    <div style="padding: 16px; background: linear-gradient(135deg, #E3F2FD 0%, #BBDEFB 100%); 
-                        border-radius: 12px; text-align: center; border: 2px solid #2196F3;">
-                        <div style="width: 32px; height: 32px; margin: 0 auto 8px; display: flex; align-items: center; justify-content: center;">${getClockIcon('#2196F3')}</div>
-                        <div style="font-weight: 600; color: #1976d2; font-size: 14px; margin-bottom: 4px;">Ожидает подтверждения менеджером</div>
-                        <div style="font-size: 12px; color: #666;">Заказ отправлен и будет обработан в ближайшее время</div>
+                    <div style="padding: 16px; background: linear-gradient(135deg, #FFF3E0 0%, #FFE0B2 100%); 
+                        border-radius: 12px; text-align: center; border: 2px solid #FF9800;">
+                        <div style="width: 32px; height: 32px; margin: 0 auto 8px; display: flex; align-items: center; justify-content: center;">${getClockIcon('#FF9800')}</div>
+                        <div style="font-weight: 600; color: #F57C00; font-size: 14px; margin-bottom: 4px;">В обработке</div>
+                        <div style="font-size: 12px; color: #666;">Заказ отправлен менеджеру и будет обработан в ближайшее время</div>
                         <button onclick="cancelOrder('${order.id}')" style="margin-top: 12px; padding: 10px 20px; 
                             background: linear-gradient(135deg, #f44336 0%, #d32f2f 100%); color: white; border: none; border-radius: 8px; 
                             font-size: 14px; font-weight: 600; cursor: pointer;">
@@ -6201,6 +6291,12 @@ function showOrders() {
                         </button>
                     </div>
                 ` : order.status === 'confirmed' ? `
+                    <div style="padding: 16px; background: linear-gradient(135deg, #E8F5E9 0%, #C8E6C9 100%); 
+                        border-radius: 12px; text-align: center; border: 2px solid #4CAF50; margin-bottom: 12px;">
+                        <div style="width: 32px; height: 32px; margin: 0 auto 8px; display: flex; align-items: center; justify-content: center;">${getSuccessIcon('#4CAF50')}</div>
+                        <div style="font-weight: 600; color: #2E7D32; font-size: 14px; margin-bottom: 4px;">Заказ принят</div>
+                        <div style="font-size: 12px; color: #666;">Ожидание подтверждения передачи товара</div>
+                    </div>
                     <div style="display: flex; gap: 12px;">
                         <button onclick="cancelOrder('${order.id}')" style="flex: 1; padding: 16px; 
                             background: linear-gradient(135deg, #f44336 0%, #d32f2f 100%); color: white; border: none; border-radius: 12px; 
@@ -6218,6 +6314,13 @@ function showOrders() {
                             onmouseout="this.style.transform='scale(1)'; this.style.boxShadow='0 4px 12px rgba(76,175,80,0.3)'">
                             <span>Получен</span>
                         </button>
+                    </div>
+                ` : order.status === 'transferred' ? `
+                    <div style="padding: 16px; background: linear-gradient(135deg, #E3F2FD 0%, #BBDEFB 100%); 
+                        border-radius: 12px; text-align: center; border: 2px solid #2196F3;">
+                        <div style="width: 32px; height: 32px; margin: 0 auto 8px; display: flex; align-items: center; justify-content: center;">${getPackageIcon('#2196F3')}</div>
+                        <div style="font-weight: 600; color: #1976d2; font-size: 14px; margin-bottom: 4px;">Заказ передан</div>
+                        <div style="font-size: 12px; color: #666;">Товар передан клиенту</div>
                     </div>
                 ` : order.status === 'rejected' ? `
                     <div style="padding: 16px; background: linear-gradient(135deg, #FFEBEE 0%, #FFCDD2 100%); 
