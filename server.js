@@ -116,12 +116,30 @@ function formatOrderForManager(order) {
         ? `📍 Самовывоз: ${order.location}`
         : `🚚 Доставка: ${order.location}`;
     
+    // Форматируем дату доставки
+    let dateInfo = '';
+    if (order.selectedDeliveryDay) {
+        const deliveryDate = new Date(order.selectedDeliveryDay + 'T12:00:00');
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        const tomorrow = new Date(today);
+        tomorrow.setDate(tomorrow.getDate() + 1);
+        const deliveryDateOnly = new Date(deliveryDate);
+        deliveryDateOnly.setHours(0, 0, 0, 0);
+        
+        if (deliveryDateOnly.getTime() === tomorrow.getTime()) {
+            dateInfo = '\n📅 <b>Дата доставки: Завтра</b>';
+        } else {
+            dateInfo = `\n📅 <b>Дата доставки: ${deliveryDate.toLocaleDateString('ru-RU', { day: '2-digit', month: '2-digit', year: 'numeric' })}</b>`;
+        }
+    }
+    
     const timeInfo = order.deliveryTime 
         ? `\n⏰ Время: ${order.deliveryTime.includes('|') ? order.deliveryTime.split('|')[1] : order.deliveryTime}${order.deliveryExactTime ? ` (${order.deliveryExactTime})` : ''}`
         : '';
     
     return `📦 <b>Новый заказ #${order.id.slice(-6)}</b>\n\n` +
-           `${deliveryInfo}${timeInfo}\n\n` +
+           `${deliveryInfo}${dateInfo}${timeInfo}\n\n` +
            `<b>Товары:</b>\n${itemsText}\n\n` +
            `<b>Итого:</b> ${totalText}\n\n` +
            `👤 Клиент ID: ${order.userId || 'не указан'}`;
@@ -295,8 +313,11 @@ bot.on('callback_query', async (ctx) => {
         } else if (data.startsWith('details_')) {
             action = 'details';
             orderId = data.substring(8); // Убираем "details_"
+        } else if (data.startsWith('transfer_')) {
+            action = 'transfer';
+            orderId = data.substring(9); // Убираем "transfer_"
         } else {
-            return ctx.answerCbQuery('❌ Неизвестное действие');
+            return ctx.answerCbQuery('Неизвестное действие');
         }
         
         console.log('Action:', action, 'OrderId:', orderId);
@@ -310,6 +331,15 @@ bot.on('callback_query', async (ctx) => {
             return ctx.answerCbQuery('❌ Заказ не найден');
         }
         
+        // Проверяем, не обработан ли уже заказ другим менеджером
+        if (order.status !== 'pending') {
+            if (order.status === 'confirmed' || order.status === 'transferred') {
+                return ctx.answerCbQuery('⚠️ Заказ уже подтвержден другим менеджером');
+            } else if (order.status === 'rejected') {
+                return ctx.answerCbQuery('⚠️ Заказ уже отклонен другим менеджером');
+            }
+        }
+        
         if (action === 'confirm') {
             order.status = 'confirmed';
             order.confirmedBy = ctx.from.id;
@@ -318,12 +348,21 @@ bot.on('callback_query', async (ctx) => {
             
             saveOrders(orders);
             
-            ctx.answerCbQuery('✅ Заказ подтвержден');
+            ctx.answerCbQuery('Заказ подтвержден');
             ctx.editMessageText(
-                `✅ <b>Заказ #${order.id.slice(-6)} подтвержден</b>\n\n` +
+                `<b>Заказ #${order.id.slice(-6)} подтвержден</b>\n\n` +
                 `Подтвердил: ${ctx.from.first_name}${ctx.from.username ? ` (@${ctx.from.username})` : ''}\n` +
                 `Время: ${new Date().toLocaleString('ru-RU')}`,
-                { parse_mode: 'HTML' }
+                {
+                    parse_mode: 'HTML',
+                    reply_markup: {
+                        inline_keyboard: [
+                            [
+                                { text: '📦 Заказ передан', callback_data: `transfer_${order.id}` }
+                            ]
+                        ]
+                    }
+                }
             );
         } else if (action === 'reject') {
             order.status = 'rejected';
@@ -333,10 +372,26 @@ bot.on('callback_query', async (ctx) => {
             
             saveOrders(orders);
             
-            ctx.answerCbQuery('❌ Заказ отклонен');
+            ctx.answerCbQuery('Заказ отклонен');
             ctx.editMessageText(
-                `❌ <b>Заказ #${order.id.slice(-6)} отклонен</b>\n\n` +
+                `<b>Заказ #${order.id.slice(-6)} отклонен</b>\n\n` +
                 `Отклонил: ${ctx.from.first_name}${ctx.from.username ? ` (@${ctx.from.username})` : ''}\n` +
+                `Время: ${new Date().toLocaleString('ru-RU')}`,
+                { parse_mode: 'HTML' }
+            );
+        } else if (action === 'transfer') {
+            // Заказ передан клиенту
+            order.status = 'transferred';
+            order.transferredBy = ctx.from.id;
+            order.transferredByUsername = ctx.from.username || ctx.from.first_name;
+            order.transferredAt = new Date().toISOString();
+            
+            saveOrders(orders);
+            
+            ctx.answerCbQuery('Заказ передан клиенту');
+            ctx.editMessageText(
+                `<b>Заказ #${order.id.slice(-6)} передан клиенту</b>\n\n` +
+                `Передал: ${ctx.from.first_name}${ctx.from.username ? ` (@${ctx.from.username})` : ''}\n` +
                 `Время: ${new Date().toLocaleString('ru-RU')}`,
                 { parse_mode: 'HTML' }
             );
@@ -567,5 +622,8 @@ bot.launch().then(() => {
 // Graceful shutdown
 process.once('SIGINT', () => bot.stop('SIGINT'));
 process.once('SIGTERM', () => bot.stop('SIGTERM'));
+
+
+
 
 
