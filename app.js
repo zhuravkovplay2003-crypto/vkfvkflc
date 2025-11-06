@@ -4563,15 +4563,53 @@ function checkout() {
     // Добавляем информацию о типе доставки и времени
     if (deliveryType === 'selfPickup') {
         orderText += `\nLOCATION Точка самовывоза: ${selectedPickupLocation}`;
+        
+        // Определяем дату доставки
+        let dateText = '';
+        if (selectedDeliveryDay) {
+            const deliveryDate = new Date(selectedDeliveryDay + 'T12:00:00');
+            const today = new Date();
+            today.setHours(0, 0, 0, 0);
+            const tomorrow = new Date(today);
+            tomorrow.setDate(tomorrow.getDate() + 1);
+            const deliveryDateOnly = new Date(deliveryDate);
+            deliveryDateOnly.setHours(0, 0, 0, 0);
+            
+            if (deliveryDateOnly.getTime() === tomorrow.getTime()) {
+                dateText = 'Завтра';
+            } else {
+                dateText = deliveryDate.toLocaleDateString('ru-RU', { day: '2-digit', month: '2-digit', year: 'numeric' });
+            }
+        }
+        
         const timeDisplay = deliveryTime ? (deliveryTime.includes('|') ? deliveryTime.split('|')[1] : deliveryTime) : 'Не выбрано';
         const exactDisplay = deliveryExactTime ? ` (точное время: ${deliveryExactTime})` : '';
-        orderText += `\nCLOCK Время самовывоза: ${timeDisplay}${exactDisplay}`;
+        orderText += `\nCLOCK ${dateText ? `Дата: ${dateText}, ` : ''}Время самовывоза: ${timeDisplay}${exactDisplay}`;
     } else {
         orderText += `\nPACKAGE Доставка курьером`;
         orderText += `\nLOCATION Адрес доставки: ${deliveryAddress}`;
+        
+        // Определяем дату доставки
+        let dateText = '';
+        if (selectedDeliveryDay) {
+            const deliveryDate = new Date(selectedDeliveryDay + 'T12:00:00');
+            const today = new Date();
+            today.setHours(0, 0, 0, 0);
+            const tomorrow = new Date(today);
+            tomorrow.setDate(tomorrow.getDate() + 1);
+            const deliveryDateOnly = new Date(deliveryDate);
+            deliveryDateOnly.setHours(0, 0, 0, 0);
+            
+            if (deliveryDateOnly.getTime() === tomorrow.getTime()) {
+                dateText = 'Завтра';
+            } else {
+                dateText = deliveryDate.toLocaleDateString('ru-RU', { day: '2-digit', month: '2-digit', year: 'numeric' });
+            }
+        }
+        
         const timeDisplay = deliveryTime ? (deliveryTime.includes('|') ? deliveryTime.split('|')[1] : deliveryTime) : 'Не выбрано';
         const exactDisplay = deliveryExactTime ? ` (точное время: ${deliveryExactTime})` : '';
-        orderText += `\nCLOCK Время доставки: ${timeDisplay}${exactDisplay}`;
+        orderText += `\nCLOCK ${dateText ? `Дата: ${dateText}, ` : ''}Время доставки: ${timeDisplay}${exactDisplay}`;
     }
     
     if (totalMoney > 0 && totalCoinsNeeded > 0) {
@@ -4776,12 +4814,40 @@ function checkOrderStatus(orderId) {
                         } else if (data.status === 'rejected') {
                             showToast('Заказ отклонен менеджером', 'error', 4000);
                         } else if (data.status === 'transferred') {
-                            showToast('Заказ передан клиенту', 'success', 4000);
+                            // Начисляем Vape Coins за заказ
+                            if (data.order && data.order.vapeCoinsEarned) {
+                                const coinsEarned = data.order.vapeCoinsEarned;
+                                vapeCoins += coinsEarned;
+                                localStorage.setItem('vapeCoins', vapeCoins.toString());
+                                
+                                // Добавляем транзакцию в историю
+                                vapeCoinsHistory.unshift({
+                                    id: `vc_${Date.now()}`,
+                                    date: new Date().toISOString(),
+                                    type: 'earned',
+                                    amount: coinsEarned,
+                                    description: `Начислено за заказ: #${orderId.slice(-6)}`,
+                                    orderId: orderId
+                                });
+                                localStorage.setItem('vapeCoinsHistory', JSON.stringify(vapeCoinsHistory));
+                                
+                                // Обновляем баланс в заказе
+                                order.vapeCoinsEarned = coinsEarned;
+                                
+                                showToast(`Заказ передан! Начислено ${coinsEarned} Vape Coins`, 'success', 5000);
+                            } else {
+                                showToast('Заказ передан клиенту', 'success', 4000);
+                            }
                         }
                         
                         // Обновляем отображение, если пользователь на странице заказов
                         if (currentPage === 'orders') {
                             showOrders();
+                        }
+                        
+                        // Обновляем баланс Vape Coins, если пользователь на странице Vape Coins
+                        if (currentPage === 'vapeCoins') {
+                            showVapeCoins();
                         }
                     }
                     
@@ -6323,7 +6389,16 @@ function showOrders() {
                         border-radius: 12px; text-align: center; border: 2px solid #2196F3;">
                         <div style="width: 32px; height: 32px; margin: 0 auto 8px; display: flex; align-items: center; justify-content: center;">${getPackageIcon('#2196F3')}</div>
                         <div style="font-weight: 600; color: #1976d2; font-size: 14px; margin-bottom: 4px;">Заказ передан</div>
-                        <div style="font-size: 12px; color: #666;">Товар передан клиенту</div>
+                        <div style="font-size: 12px; color: #666; margin-bottom: 8px;">Товар передан клиенту</div>
+                        ${order.vapeCoinsEarned ? `
+                            <div style="padding: 8px; background: rgba(255, 152, 0, 0.1); border-radius: 8px; margin-top: 8px;">
+                                <div style="font-size: 11px; color: #666; margin-bottom: 4px;">Начислено Vape Coins:</div>
+                                <div style="font-weight: 600; color: #FF9800; font-size: 14px; display: flex; align-items: center; justify-content: center; gap: 4px;">
+                                    <span style="width: 16px; height: 16px; display: flex; align-items: center; justify-content: center;">${getCoinIcon('#FF9800', 16)}</span>
+                                    ${order.vapeCoinsEarned}
+                                </div>
+                            </div>
+                        ` : ''}
                     </div>
                 ` : order.status === 'rejected' ? `
                     <div style="padding: 16px; background: linear-gradient(135deg, #FFEBEE 0%, #FFCDD2 100%); 
