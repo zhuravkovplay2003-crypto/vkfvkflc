@@ -3198,9 +3198,8 @@ function setDeliveryExactTime(time) {
             tomorrow.setDate(tomorrow.getDate() + 1);
             const deliveryDateOnly = new Date(deliveryDate);
             deliveryDateOnly.setHours(0, 0, 0, 0);
-            const dateText = deliveryDateOnly.getTime() === tomorrow.getTime() 
-                ? 'Завтра' 
-                : deliveryDate.toLocaleDateString('ru-RU', { day: '2-digit', month: '2-digit', year: 'numeric' });
+            // Всегда показываем дату, а не слово "завтра"
+            const dateText = deliveryDate.toLocaleDateString('ru-RU', { day: '2-digit', month: '2-digit', year: 'numeric' });
             timeText = dateText;
         }
         if (deliveryTime) {
@@ -3786,15 +3785,22 @@ function setDeliveryTime(time) {
             currentModal.remove();
             document.body.style.overflow = '';
             // Открываем новое модальное окно для выбора точного времени
+            // Используем двойной setTimeout для надежности
             setTimeout(() => {
-                showExactTimeSelectionModal(timeToStore);
-            }, 50);
-        }, 200);
+                setTimeout(() => {
+                    console.log('Opening exact time modal with:', timeToStore);
+                    showExactTimeSelectionModal(timeToStore);
+                }, 100);
+            }, 100);
+        }, 250);
     } else {
         // Если нет текущего модального окна, открываем сразу
         setTimeout(() => {
-            showExactTimeSelectionModal(timeToStore);
-        }, 50);
+            setTimeout(() => {
+                console.log('Opening exact time modal with (no current modal):', timeToStore);
+                showExactTimeSelectionModal(timeToStore);
+            }, 100);
+        }, 100);
     }
     
     if (tg && tg.HapticFeedback) {
@@ -3949,9 +3955,8 @@ function showCart() {
                                             tomorrowDate.setUTCDate(tomorrowDate.getUTCDate() + 1);
                                             const tomorrowStr = `${tomorrowDate.getUTCFullYear()}-${String(tomorrowDate.getUTCMonth() + 1).padStart(2, '0')}-${String(tomorrowDate.getUTCDate()).padStart(2, '0')}`;
                                             
-                                            const dateText = selectedDeliveryDay === tomorrowStr 
-                                                ? 'Завтра' 
-                                                : new Date(selectedDeliveryDay + 'T12:00:00').toLocaleDateString('ru-RU', { day: '2-digit', month: '2-digit', year: 'numeric' });
+                                            // Всегда показываем дату, а не слово "завтра"
+                                            const dateText = new Date(selectedDeliveryDay + 'T12:00:00').toLocaleDateString('ru-RU', { day: '2-digit', month: '2-digit', year: 'numeric' });
                                             timeText = dateText;
                                         }
                                         if (deliveryTime) {
@@ -4079,9 +4084,8 @@ function showCart() {
                                             tomorrowDate.setUTCDate(tomorrowDate.getUTCDate() + 1);
                                             const tomorrowStr = `${tomorrowDate.getUTCFullYear()}-${String(tomorrowDate.getUTCMonth() + 1).padStart(2, '0')}-${String(tomorrowDate.getUTCDate()).padStart(2, '0')}`;
                                             
-                                            const dateText = selectedDeliveryDay === tomorrowStr 
-                                                ? 'Завтра' 
-                                                : new Date(selectedDeliveryDay + 'T12:00:00').toLocaleDateString('ru-RU', { day: '2-digit', month: '2-digit', year: 'numeric' });
+                                            // Всегда показываем дату, а не слово "завтра"
+                                            const dateText = new Date(selectedDeliveryDay + 'T12:00:00').toLocaleDateString('ru-RU', { day: '2-digit', month: '2-digit', year: 'numeric' });
                                             timeText = dateText;
                                         }
                                         if (deliveryTime) {
@@ -4708,15 +4712,11 @@ function checkout() {
     if (deliveryType === 'selfPickup') {
         orderText += `\nLOCATION Точка самовывоза: ${selectedPickupLocation}`;
         
-        // Определяем дату доставки с учетом московского времени
+        // Определяем дату доставки с учетом московского времени - всегда показываем дату, а не слово "завтра"
         let dateText = '';
         if (selectedDeliveryDay) {
-            if (isTomorrow(selectedDeliveryDay)) {
-                dateText = 'Завтра';
-            } else {
-                const deliveryDate = new Date(selectedDeliveryDay + 'T12:00:00');
-                dateText = deliveryDate.toLocaleDateString('ru-RU', { day: '2-digit', month: '2-digit', year: 'numeric' });
-            }
+            const deliveryDate = new Date(selectedDeliveryDay + 'T12:00:00');
+            dateText = deliveryDate.toLocaleDateString('ru-RU', { day: '2-digit', month: '2-digit', year: 'numeric' });
         }
         
         const timeDisplay = deliveryTime ? (deliveryTime.includes('|') ? deliveryTime.split('|')[1] : deliveryTime) : 'Не выбрано';
@@ -4726,15 +4726,11 @@ function checkout() {
         orderText += `\nPACKAGE Доставка курьером`;
         orderText += `\nLOCATION Адрес доставки: ${deliveryAddress}`;
         
-        // Определяем дату доставки с учетом московского времени
+        // Определяем дату доставки с учетом московского времени - всегда показываем дату, а не слово "завтра"
         let dateText = '';
         if (selectedDeliveryDay) {
-            if (isTomorrow(selectedDeliveryDay)) {
-                dateText = 'Завтра';
-            } else {
-                const deliveryDate = new Date(selectedDeliveryDay + 'T12:00:00');
-                dateText = deliveryDate.toLocaleDateString('ru-RU', { day: '2-digit', month: '2-digit', year: 'numeric' });
-            }
+            const deliveryDate = new Date(selectedDeliveryDay + 'T12:00:00');
+            dateText = deliveryDate.toLocaleDateString('ru-RU', { day: '2-digit', month: '2-digit', year: 'numeric' });
         }
         
         const timeDisplay = deliveryTime ? (deliveryTime.includes('|') ? deliveryTime.split('|')[1] : deliveryTime) : 'Не выбрано';
@@ -4968,6 +4964,10 @@ function checkOrderStatus(orderId) {
                             // Обновляем отображение заказов ВСЕГДА при изменении статуса
                             showOrders();
                         } else if (data.status === 'transferred') {
+                            // Обновляем статус заказа
+                            order.status = 'transferred';
+                            localStorage.setItem('orders', JSON.stringify(orders));
+                            
                             // Начисляем Vape Coins за заказ (только если еще не начислены)
                             if (data.order && data.order.vapeCoinsEarned !== undefined && data.order.vapeCoinsEarned !== null) {
                                 const coinsEarned = data.order.vapeCoinsEarned;
@@ -6594,14 +6594,9 @@ function showOrders() {
                                     ${order.deliveryType === 'selfPickup' ? (order.pickupLocation || 'Не указано') : (order.deliveryAddress || 'Не указано')}
                             </div>
                             ${order.selectedDeliveryDay ? (() => {
-                                // Используем функцию isTomorrow для правильного определения "Завтра" в московском времени
-                                let dateText = '';
-                                if (isTomorrow(order.selectedDeliveryDay)) {
-                                    dateText = 'Завтра';
-                                } else {
-                                    const deliveryDate = new Date(order.selectedDeliveryDay + 'T12:00:00');
-                                    dateText = deliveryDate.toLocaleDateString('ru-RU', { day: '2-digit', month: '2-digit', year: 'numeric' });
-                                }
+                                // Всегда показываем дату, а не слово "завтра"
+                                const deliveryDate = new Date(order.selectedDeliveryDay + 'T12:00:00');
+                                const dateText = deliveryDate.toLocaleDateString('ru-RU', { day: '2-digit', month: '2-digit', year: 'numeric' });
                                 return `
                                     <div style="font-size: 11px; opacity: 0.8; margin-top: 6px; display: flex; align-items: center; gap: 4px;">
                                         <span style="width: 12px; height: 12px; display: flex; align-items: center; justify-content: center;">${getClockIcon('#ffffff').replace('width="24" height="24"', 'width="12" height="12"')}</span>
