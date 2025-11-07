@@ -3454,11 +3454,13 @@ function showExactTimeSelectionModal(timeSlot) {
     
     const modal = document.createElement('div');
     modal.className = 'exact-time-modal-overlay';
-    modal.style.cssText = 'position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.5); z-index: 10001; display: flex; align-items: center; justify-content: center; opacity: 0; transition: opacity 0.3s ease;';
+    // ПРИНУДИТЕЛЬНО устанавливаем стили для немедленного отображения
+    modal.style.cssText = 'position: fixed !important; top: 0 !important; left: 0 !important; right: 0 !important; bottom: 0 !important; background: rgba(0,0,0,0.5) !important; z-index: 99999 !important; display: flex !important; align-items: center !important; justify-content: center !important; opacity: 1 !important; visibility: visible !important;';
     
     const modalContent = document.createElement('div');
     modalContent.className = 'exact-time-modal-content';
-    modalContent.style.cssText = 'background: white; padding: 24px; border-radius: 16px; max-width: 90%; width: 100%; max-width: 400px; max-height: 80vh; overflow-y: auto; position: relative; transform: scale(0.9); opacity: 0; transition: transform 0.3s ease, opacity 0.3s ease;';
+    // ПРИНУДИТЕЛЬНО устанавливаем стили для немедленного отображения
+    modalContent.style.cssText = 'background: white !important; padding: 24px !important; border-radius: 16px !important; max-width: 90% !important; width: 100% !important; max-width: 400px !important; max-height: 80vh !important; overflow-y: auto !important; position: relative !important; transform: scale(1) !important; opacity: 1 !important; visibility: visible !important;';
     
     const closeModal = function() {
         // Восстанавливаем кнопку "Назад"
@@ -3611,26 +3613,31 @@ function showExactTimeSelectionModal(timeSlot) {
     // УБЕЖДАЕМСЯ что предыдущие модальные окна удалены
     document.querySelectorAll('.exact-time-modal-overlay, .time-selection-modal-overlay').forEach(m => m.remove());
     
+    // Добавляем в DOM
     document.body.appendChild(modal);
     document.body.style.overflow = 'hidden';
     
     // ПРИНУДИТЕЛЬНО показываем модальное окно сразу - БЕЗ анимации
-    modal.style.display = 'flex';
-    modal.style.opacity = '1';
-    modal.style.visibility = 'visible';
-    modalContent.style.transform = 'scale(1)';
-    modalContent.style.opacity = '1';
-    modalContent.style.visibility = 'visible';
+    // Используем !important для гарантии
+    modal.style.setProperty('display', 'flex', 'important');
+    modal.style.setProperty('opacity', '1', 'important');
+    modal.style.setProperty('visibility', 'visible', 'important');
+    modal.style.setProperty('z-index', '99999', 'important');
+    modalContent.style.setProperty('transform', 'scale(1)', 'important');
+    modalContent.style.setProperty('opacity', '1', 'important');
+    modalContent.style.setProperty('visibility', 'visible', 'important');
+    
+    console.log('Exact time modal created and should be visible');
     
     // Дополнительно используем requestAnimationFrame для плавности
     requestAnimationFrame(() => {
         requestAnimationFrame(() => {
-            modal.style.opacity = '1';
-            modal.style.visibility = 'visible';
-            modalContent.style.transform = 'scale(1)';
-            modalContent.style.opacity = '1';
-            modalContent.style.visibility = 'visible';
-            console.log('Exact time modal should be visible now');
+            modal.style.setProperty('opacity', '1', 'important');
+            modal.style.setProperty('visibility', 'visible', 'important');
+            modalContent.style.setProperty('transform', 'scale(1)', 'important');
+            modalContent.style.setProperty('opacity', '1', 'important');
+            modalContent.style.setProperty('visibility', 'visible', 'important');
+            console.log('Exact time modal should be visible now (after RAF)');
         });
     });
     
