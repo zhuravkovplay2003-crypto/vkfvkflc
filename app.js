@@ -1460,7 +1460,8 @@ function showProduct(productId, favoriteFlavor = null, favoriteStrength = null) 
     }
     
     let flavorOptions = '';
-    if (product.flavors && product.flavors.length > 0) {
+    // Не показываем выбор вкусов для устройств (devices, accessories) - только для жидкостей
+    if (product.flavors && product.flavors.length > 0 && product.category !== 'devices' && product.category !== 'accessories') {
         // Определяем выбранный вкус
         const selectedFlavorIndex = viewingProduct.selectedFlavorIndex !== undefined ? viewingProduct.selectedFlavorIndex : 0;
         const selectedFlavor = viewingProduct.selectedFlavor || product.flavors[selectedFlavorIndex];
@@ -1608,23 +1609,6 @@ function showProduct(productId, favoriteFlavor = null, favoriteStrength = null) 
                         </button>
                     `;
                 }
-            })()}
-            ${(() => {
-                const isInStock = product.inStock !== false && (product.quantity === undefined || product.quantity > 0);
-                // Показываем блок "Наличие" только если товар НЕ в наличии
-                if (!isInStock) {
-                    return `
-                        <div style="margin-top: 20px;">
-                            <div style="font-weight: 600; margin-bottom: 8px;">Наличие:</div>
-                            <div style="padding: 12px; background: #ffebee; border-radius: 12px; 
-                                display: flex; justify-content: space-between; align-items: center;">
-                                <span>${currentLocation}</span>
-                                <span style="color: #f44336;">X</span>
-                            </div>
-                        </div>
-                    `;
-                }
-                return '';
             })()}
         </div>
     `;
@@ -3066,6 +3050,91 @@ function generateTimeSlots() {
     const isToday = targetDay === todayKey;
     const timeSlots = [];
     
+    // Функция для проверки, все ли времена в промежутке заняты (только для самовывоза)
+    // Используем синхронную проверку локальных заказов, серверные заказы проверяются асинхронно
+    const isTimeSlotFullyBooked = (startHour, endHour) => {
+        if (deliveryType !== 'selfPickup') return false; // Для доставки не проверяем
+        
+        const bookedTimes = getBookedTimesForDate(targetDay);
+        if (bookedTimes.length === 0) return false;
+        
+        // Генерируем все возможные времена в промежутке (каждые 10 минут)
+        const allTimesInSlot = [];
+        let currentHour = parseInt(startHour);
+        let currentMin = 0;
+        const endHourInt = parseInt(endHour);
+        
+        while (currentHour < endHourInt || (currentHour === endHourInt && currentMin === 0)) {
+            const timeStr = `${currentHour < 10 ? '0' : ''}${currentHour}:${currentMin < 10 ? '0' : ''}${currentMin}`;
+            allTimesInSlot.push(timeStr);
+            
+            currentMin += 10;
+            if (currentMin >= 60) {
+                currentMin = 0;
+                currentHour++;
+            }
+            
+            if (currentHour >= endHourInt) break;
+        }
+        
+        // Проверяем, все ли времена заняты
+        return allTimesInSlot.length > 0 && allTimesInSlot.every(time => bookedTimes.includes(time));
+    };
+    
+    // Асинхронно проверяем заказы с сервера и обновляем UI
+    fetch(`${SERVER_URL}/api/orders/booked-times?date=${targetDay}`)
+        .then(response => response.json())
+        .then(data => {
+            if (data.success && Array.isArray(data.bookedTimes)) {
+                const serverBookedTimes = data.bookedTimes;
+                const localBookedTimes = getBookedTimesForDate(targetDay);
+                const allBookedTimes = [...new Set([...localBookedTimes, ...serverBookedTimes])];
+                
+                // Обновляем кнопки временных промежутков
+                const timeSlotButtons = document.querySelectorAll('#time-slots-modal-container button');
+                timeSlotButtons.forEach(btn => {
+                    const timeText = btn.textContent.trim();
+                    if (timeText.includes('-')) {
+                        const [startTime, endTime] = timeText.split('-');
+                        const [startHour, startMin] = startTime.split(':');
+                        const [endHour, endMin] = endTime.split(':');
+                        
+                        // Генерируем все времена в промежутке
+                        const allTimesInSlot = [];
+                        let currentHour = parseInt(startHour);
+                        let currentMin = parseInt(startMin || 0);
+                        const endHourInt = parseInt(endHour);
+                        const endMinInt = parseInt(endMin || 0);
+                        
+                        while (currentHour < endHourInt || (currentHour === endHourInt && currentMin < endMinInt)) {
+                            const timeStr = `${currentHour < 10 ? '0' : ''}${currentHour}:${currentMin < 10 ? '0' : ''}${currentMin}`;
+                            allTimesInSlot.push(timeStr);
+                            
+                            currentMin += 10;
+                            if (currentMin >= 60) {
+                                currentMin = 0;
+                                currentHour++;
+                            }
+                            
+                            if (currentHour > endHourInt || (currentHour === endHourInt && currentMin >= endMinInt)) break;
+                        }
+                        
+                        // Проверяем, все ли времена заняты
+                        const isFullyBooked = allTimesInSlot.length > 0 && allTimesInSlot.every(time => allBookedTimes.includes(time));
+                        
+                        if (isFullyBooked && !btn.disabled) {
+                            btn.disabled = true;
+                            btn.style.cssText = 'padding: 10px 16px; border: 2px solid #999; border-radius: 10px; background: #e0e0e0; cursor: not-allowed; font-size: 14px; font-weight: 600; color: #999; transition: all 0.3s; white-space: nowrap; margin-right: 8px; margin-bottom: 8px; opacity: 0.5;';
+                            btn.removeAttribute('onclick');
+                        }
+                    }
+                });
+            }
+        })
+        .catch(error => {
+            console.error('Error fetching booked times:', error);
+        });
+    
     // Генерируем слоты с 9:00 до 23:00-00:00 (каждый час)
     for (let hour = 9; hour < 23; hour++) {
         const startHour = hour < 10 ? `0${hour}` : `${hour}`;
@@ -3079,14 +3148,17 @@ function generateTimeSlots() {
             }
         }
         
+        // Проверяем, все ли времена в промежутке заняты (только для самовывоза)
+        const isFullyBooked = isTimeSlotFullyBooked(startHour, endHour);
+        
         const isSelected = deliveryTime === timeSlot || deliveryTime === `${startHour}:00-${endHour}:00`;
+        const buttonStyle = isFullyBooked
+            ? `padding: 10px 16px; border: 2px solid #999; border-radius: 10px; background: #e0e0e0; cursor: not-allowed; font-size: 14px; font-weight: 600; color: #999; transition: all 0.3s; white-space: nowrap; margin-right: 8px; margin-bottom: 8px; opacity: 0.5;`
+            : `padding: 10px 16px; border: 2px solid ${isSelected ? '#007AFF' : '#e5e5e5'}; border-radius: 10px; background: ${isSelected ? '#e3f2fd' : '#ffffff'}; cursor: pointer; font-size: 14px; font-weight: 600; color: ${isSelected ? '#007AFF' : '#666'}; transition: all 0.3s; white-space: nowrap; margin-right: 8px; margin-bottom: 8px;`;
+        
         timeSlots.push(`
-            <button onclick="setDeliveryTime('${timeSlot}')" 
-                style="padding: 10px 16px; border: 2px solid ${isSelected ? '#007AFF' : '#e5e5e5'}; 
-                border-radius: 10px; background: ${isSelected ? '#e3f2fd' : '#ffffff'}; 
-                cursor: pointer; font-size: 14px; font-weight: 600; 
-                color: ${isSelected ? '#007AFF' : '#666'}; transition: all 0.3s;
-                white-space: nowrap; margin-right: 8px; margin-bottom: 8px;">
+            <button ${isFullyBooked ? 'disabled' : `onclick="setDeliveryTime('${timeSlot}')"`}
+                style="${buttonStyle}">
                 ${startHour}:00-${endHour}:00
             </button>
         `);
@@ -3096,13 +3168,23 @@ function generateTimeSlots() {
     if (!isToday || (currentHour < 23 || currentMinute < 59)) {
         const lastSlot = `${targetDay}|23:00-00:00`;
         const isSelected = deliveryTime === lastSlot || deliveryTime === '23:00-00:00';
+        
+        // Проверяем, все ли времена в промежутке 23:00-00:00 заняты (только для самовывоза)
+        const isFullyBooked = (() => {
+            if (deliveryType !== 'selfPickup') return false;
+            const bookedTimes = getBookedTimesForDate(targetDay);
+            if (bookedTimes.length === 0) return false;
+            const allTimesInSlot = ['23:00', '23:10', '23:20', '23:30', '23:40', '23:50'];
+            return allTimesInSlot.length > 0 && allTimesInSlot.every(time => bookedTimes.includes(time));
+        })();
+        
+        const buttonStyle = isFullyBooked
+            ? `padding: 10px 16px; border: 2px solid #999; border-radius: 10px; background: #e0e0e0; cursor: not-allowed; font-size: 14px; font-weight: 600; color: #999; transition: all 0.3s; white-space: nowrap; margin-right: 8px; margin-bottom: 8px; opacity: 0.5;`
+            : `padding: 10px 16px; border: 2px solid ${isSelected ? '#007AFF' : '#e5e5e5'}; border-radius: 10px; background: ${isSelected ? '#e3f2fd' : '#ffffff'}; cursor: pointer; font-size: 14px; font-weight: 600; color: ${isSelected ? '#007AFF' : '#666'}; transition: all 0.3s; white-space: nowrap; margin-right: 8px; margin-bottom: 8px;`;
+        
         timeSlots.push(`
-            <button onclick="setDeliveryTime('${lastSlot}')" 
-                style="padding: 10px 16px; border: 2px solid ${isSelected ? '#007AFF' : '#e5e5e5'}; 
-                border-radius: 10px; background: ${isSelected ? '#e3f2fd' : '#ffffff'}; 
-                cursor: pointer; font-size: 14px; font-weight: 600; 
-                color: ${isSelected ? '#007AFF' : '#666'}; transition: all 0.3s;
-                white-space: nowrap; margin-right: 8px; margin-bottom: 8px;">
+            <button ${isFullyBooked ? 'disabled' : `onclick="setDeliveryTime('${lastSlot}')"`}
+                style="${buttonStyle}">
                 23:00-00:00
             </button>
         `);
@@ -5145,16 +5227,26 @@ function checkOrderStatus(orderId) {
                             }, 0);
                             
                             if (totalItems > 0) {
-                                const stampsToAdd = Math.floor(totalItems / 2);
-                                if (stampsToAdd > 0) {
+                                // Загружаем частичный прогресс
+                                const savedPartialProgress = localStorage.getItem('partialItemsProgress');
+                                let currentPartialProgress = savedPartialProgress ? parseFloat(savedPartialProgress) : 0;
+                                
+                                // Добавляем прогресс от текущего заказа (1 товар = 0.5 штампа)
+                                const totalProgress = currentPartialProgress + (totalItems / 2);
+                                const stampsToAdd = Math.floor(totalProgress);
+                                const newPartialProgress = totalProgress - stampsToAdd; // Остаток (0-0.99)
+                                
+                                if (stampsToAdd > 0 || totalItems > 0) {
                                     const oldTotalStamps = totalStampsValue;
                                     totalStampsValue += stampsToAdd;
                                     localStorage.setItem('stamps', totalStampsValue.toString());
+                                    localStorage.setItem('partialItemsProgress', newPartialProgress.toString());
                                     localStorage.setItem(`stamps_added_${orderId}`, 'true');
                                     
                                     // Обновляем глобальные переменные
                                     completedStampSets = Math.floor(totalStampsValue / 10);
                                     stamps = totalStampsValue % 10;
+                                    partialItemsProgress = newPartialProgress;
                                     
                                     // Проверяем бонус за 10 штампов
                                     const oldSets = Math.floor(oldTotalStamps / 10);
@@ -5327,16 +5419,26 @@ function checkOrderStatus(orderId) {
                                 }, 0);
                                 
                                 if (totalItems > 0) {
-                                    stampsToAdd = Math.floor(totalItems / 2);
-                                    if (stampsToAdd > 0) {
+                                    // Загружаем частичный прогресс
+                                    const savedPartialProgress = localStorage.getItem('partialItemsProgress');
+                                    let currentPartialProgress = savedPartialProgress ? parseFloat(savedPartialProgress) : 0;
+                                    
+                                    // Добавляем прогресс от текущего заказа (1 товар = 0.5 штампа)
+                                    const totalProgress = currentPartialProgress + (totalItems / 2);
+                                    stampsToAdd = Math.floor(totalProgress);
+                                    const newPartialProgress = totalProgress - stampsToAdd; // Остаток (0-0.99)
+                                    
+                                    if (stampsToAdd > 0 || totalItems > 0) {
                                         const oldTotalStamps = totalStampsValue;
                                         totalStampsValue += stampsToAdd;
                                         localStorage.setItem('stamps', totalStampsValue.toString());
+                                        localStorage.setItem('partialItemsProgress', newPartialProgress.toString());
                                         localStorage.setItem(`stamps_added_${orderId}`, 'true'); // Помечаем что штампы начислены
                                         
                                         // Обновляем глобальные переменные
                                         completedStampSets = Math.floor(totalStampsValue / 10);
                                         stamps = totalStampsValue % 10;
+                                        partialItemsProgress = newPartialProgress;
                                         
                                         // Проверяем бонус за 10 штампов
                                         const oldSets = Math.floor(oldTotalStamps / 10);
@@ -6407,12 +6509,20 @@ function showFavorites() {
             imageUrl = product.flavorImages[flavor];
         }
         
+        // Проверяем наличие товара
+        const isInStock = product.inStock !== false && (product.quantity === undefined || product.quantity > 0);
+        
         // Правильно экранируем кавычки в URL для изображения
         const safeImageUrl = imageUrl ? imageUrl.replace(/'/g, "&#39;").replace(/"/g, "&quot;") : '';
         
-        const imageContent = imageUrl
-            ? `<img src="${safeImageUrl}" alt="${product.name.replace(/'/g, "&#39;")}" style="width: 100%; height: 100%; object-fit: cover; border-radius: 12px; display: block;" onerror="this.parentElement.innerHTML='${getPackageIcon('#999999')}'">`
-            : getPackageIcon('#999999');
+        // Для товаров без наличия используем серое изображение
+        const imageContent = isInStock 
+            ? (imageUrl
+                ? `<img src="${safeImageUrl}" alt="${product.name.replace(/'/g, "&#39;")}" style="width: 100%; height: 100%; object-fit: cover; border-radius: 12px; display: block;" onerror="this.parentElement.innerHTML='${getPackageIcon('#999999')}'">`
+                : getPackageIcon('#999999'))
+            : `<div style="width: 100%; height: 100%; background: #e0e0e0; border-radius: 12px; display: flex; align-items: center; justify-content: center; opacity: 0.5;">
+                ${getPackageIcon('#999999')}
+            </div>`;
         
         // Формируем параметры для передачи в showProduct - правильно экранируем
         const flavorParam = flavor ? `'${String(flavor).replace(/'/g, "\\'").replace(/\\/g, "\\\\")}'` : 'null';
@@ -6423,11 +6533,11 @@ function showFavorites() {
                 border: 2px solid ${colors.border}; box-shadow: 0 4px 12px rgba(0,0,0,${darkMode ? '0.3' : '0.08'}); 
                 position: relative; transform: translateY(20px); opacity: 0; cursor: pointer;
                 transition: transform 0.4s ease ${index * 0.05}s, opacity 0.4s ease ${index * 0.05}s, box-shadow 0.2s ease, margin 0.35s cubic-bezier(0.4, 0, 0.2, 1), padding 0.35s cubic-bezier(0.4, 0, 0.2, 1), height 0.35s cubic-bezier(0.4, 0, 0.2, 1);
-                display: flex; flex-direction: column; height: 100%;"
+                display: flex; flex-direction: column; height: 100%; ${!isInStock ? 'opacity: 0.5; filter: grayscale(100%);' : ''}"
                 onmouseover="this.style.boxShadow='0 6px 16px rgba(0,0,0,${darkMode ? '0.4' : '0.12'})'"
                 onmouseout="this.style.boxShadow='0 4px 12px rgba(0,0,0,${darkMode ? '0.3' : '0.08'})'">
                 <div style="position: relative; width: 100%; aspect-ratio: 1; background: ${colors.bgSecondary}; border-radius: 12px; 
-                    overflow: hidden; margin-bottom: 12px; flex-shrink: 0;">
+                    overflow: hidden; margin-bottom: 12px; flex-shrink: 0; ${!isInStock ? 'opacity: 0.5; filter: grayscale(100%);' : ''}">
                         ${imageContent}
                     <button id="favorite-heart-btn-${productId}-${flavor || ''}-${strength || ''}" onclick="event.stopPropagation(); animateHeartRemoval(${productId}, '${flavor || ''}', '${strength || ''}')" 
                         style="position: absolute; top: 8px; right: 8px; width: 36px; height: 36px; 
@@ -6440,6 +6550,7 @@ function showFavorites() {
                             ${getHeartFilledIcon('#ff4444')}
                         </span>
                     </button>
+                    ${isInStock ? `
                     <button onclick="event.stopPropagation(); addToCartFromFavorites(${productId}, '${flavor || ''}', '${strength || ''}')" 
                         style="position: absolute; bottom: 8px; right: 8px; width: 36px; height: 36px; 
                         border: none; background: rgba(0, 122, 255, 0.95); cursor: pointer; 
@@ -6451,14 +6562,20 @@ function showFavorites() {
                             ${getCartIcon('#ffffff')}
                         </span>
                     </button>
+                    ` : ''}
                     </div>
                 <div style="flex: 1; display: flex; flex-direction: column; min-height: 0;">
-                    <div style="font-weight: 700; font-size: 15px; margin-bottom: 8px; color: ${colors.text}; 
+                    <div style="font-weight: 700; font-size: 15px; margin-bottom: 8px; color: ${isInStock ? colors.text : '#999'}; 
                         word-wrap: break-word; overflow-wrap: break-word; 
                         display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; 
                         overflow: hidden; text-overflow: ellipsis; line-height: 1.3; min-height: 2.6em;">
                         ${product.name}
                     </div>
+                    ${!isInStock ? `
+                        <div style="color: #f44336; font-size: 12px; margin-bottom: 8px; font-weight: 600;">
+                            Товара нет в наличии
+                        </div>
+                    ` : ''}
                     <div style="margin-top: auto; display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 8px;">
                         ${flavor ? `
                             <div style="background: linear-gradient(135deg, #fff5f5 0%, #ffe5e5 100%); padding: 3px 6px; border-radius: 6px; 
@@ -6477,7 +6594,7 @@ function showFavorites() {
                             </div>
                         ` : ''}
                     </div>
-                    <div style="font-size: 18px; font-weight: 700; color: #007AFF; margin-top: auto;">
+                    <div style="font-size: 18px; font-weight: 700; color: ${isInStock ? '#007AFF' : '#999'}; margin-top: auto;">
                             ${product.price.toFixed(2)} BYN
                         </div>
                     </div>
@@ -9740,6 +9857,19 @@ window.addToCartFromFavorites = addToCartFromFavorites;
 
 // Добавить в корзину из избранного
 function addToCartFromFavorites(productId, flavor = null, strength = null) {
+    // Проверяем наличие товара
+    const product = products.find(p => p.id == productId);
+    if (!product) {
+        showToast('Товар не найден', 'error', 2000);
+        return;
+    }
+    
+    const isInStock = product.inStock !== false && (product.quantity === undefined || product.quantity > 0);
+    if (!isInStock) {
+        showToast('Товара нет в наличии', 'error', 2000);
+        return;
+    }
+    
     // Преобразуем строки в null если они пустые
     const flavorValue = (flavor && flavor !== '' && flavor !== 'null') ? flavor : null;
     const strengthValue = (strength && strength !== '' && strength !== 'null') ? strength : null;
