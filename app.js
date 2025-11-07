@@ -157,7 +157,9 @@ function processImageUrl(url) {
     const cleanNumber = urlStr.replace(/\s/g, '');
     if (/^\d+$/.test(cleanNumber)) {
         const imageNumber = parseInt(cleanNumber, 10);
-        return `/images/${imageNumber}.jpg`;
+        // Пробуем разные варианты расширений (.jpg, .JPG)
+        // Сначала пробуем .JPG (большими буквами), так как большинство файлов имеют такое расширение
+        return `/images/${imageNumber}.JPG`;
     }
     
     // Если это относительный путь, возвращаем как есть
@@ -1278,16 +1280,16 @@ function showPage(page, skipHistory = false, resetCatalog = false) {
     const navRightContent = document.getElementById('nav-right-content');
     if (navRightContent) {
         if (page === 'catalog') {
-            // Для каталога показываем адрес
+            // Для каталога показываем адрес с SVG иконкой
             if (selectedPickupLocation) {
                 const shortLocation = selectedPickupLocation.length > 18 
                     ? selectedPickupLocation.substring(0, 15) + '...' 
                     : selectedPickupLocation;
-                navRightContent.textContent = shortLocation;
+                navRightContent.innerHTML = `<span style="display: inline-flex; align-items: center; gap: 6px;"><span style="width: 16px; height: 16px; display: flex; align-items: center; justify-content: center; flex-shrink: 0;">${getLocationIcon('#ffffff').replace('width="24" height="24"', 'width="16" height="16"')}</span><span style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${shortLocation}</span></span>`;
                 navRightContent.style.cursor = 'pointer';
                 navRightContent.onclick = () => selectPickupLocation();
             } else {
-                navRightContent.textContent = 'Выберите точку';
+                navRightContent.innerHTML = `<span style="display: inline-flex; align-items: center; gap: 6px;"><span style="width: 16px; height: 16px; display: flex; align-items: center; justify-content: center; flex-shrink: 0;">${getLocationIcon('#ffffff').replace('width="24" height="24"', 'width="16" height="16"')}</span><span>Выберите точку</span></span>`;
                 navRightContent.style.cursor = 'pointer';
                 navRightContent.onclick = () => selectPickupLocation();
             }
@@ -1655,9 +1657,10 @@ function displayProducts(productsToShow = null) {
         let imageContent;
         if (product.imageUrl && product.imageUrl.trim() !== '') {
             const imgId = `product-img-${product.id}`;
-            // Используем полный URL если он относительный
-            const imageUrl = product.imageUrl.startsWith('http') ? product.imageUrl : product.imageUrl;
-            imageContent = `<img id="${imgId}" src="${imageUrl}" alt="${product.name}" style="width: 100%; height: 100%; object-fit: cover; border-radius: 12px; display: block;" onerror="handleImageError('${imgId}')" loading="lazy">`;
+            // Обрабатываем URL через processImageUrl для правильной загрузки
+            const processedUrl = processImageUrl(product.imageUrl);
+            const imageUrl = processedUrl || product.imageUrl;
+            imageContent = `<img id="${imgId}" src="${imageUrl}" alt="${product.name}" style="width: 100%; height: 100%; object-fit: cover; border-radius: 12px; display: block;" onerror="handleImageError('${imgId}')" loading="lazy" crossorigin="anonymous">`;
         } else {
             imageContent = getPackageIcon('#999999');
         }
@@ -1841,8 +1844,10 @@ function showProduct(productId, favoriteFlavor = null, favoriteStrength = null) 
             const flavorImage = (product.flavorImages && product.flavorImages[favoriteFlavor]) 
                 ? product.flavorImages[favoriteFlavor] 
                 : (product.imageUrl || null);
-                            const flavorImageContent = flavorImage
-                                ? `<img src="${flavorImage}" alt="${favoriteFlavor}" style="width: 60px; height: 60px; object-fit: cover; border-radius: 50%;">`
+                            // Обрабатываем URL через processImageUrl для правильной загрузки
+                            const processedFlavorUrl = flavorImage ? processImageUrl(flavorImage) : null;
+                            const flavorImageContent = processedFlavorUrl
+                                ? `<img src="${processedFlavorUrl}" alt="${favoriteFlavor}" style="width: 60px; height: 60px; object-fit: cover; border-radius: 50%; display: block; margin: 0 auto;" loading="lazy" crossorigin="anonymous">`
                                 : getPackageIcon('#999999');
             
             flavorOptions = `
@@ -1882,20 +1887,22 @@ function showProduct(productId, favoriteFlavor = null, favoriteStrength = null) 
                                 ? product.flavorImages[flavor] 
                                 : (product.imageUrl || null);
                             const flavorImgId = `flavor-img-${originalIndex}-${Date.now()}`;
-                            const flavorImageContent = flavorImage
-                                ? `<img id="${flavorImgId}" src="${flavorImage}" alt="${flavor}" style="width: 100%; height: 100%; object-fit: cover; border-radius: 50%; display: block;" onerror="handleImageError('${flavorImgId}')">`
+                            // Обрабатываем URL через processImageUrl для правильной загрузки
+                            const processedFlavorUrl = flavorImage ? processImageUrl(flavorImage) : null;
+                            const flavorImageContent = processedFlavorUrl
+                                ? `<img id="${flavorImgId}" src="${processedFlavorUrl}" alt="${flavor}" style="width: 100%; height: 100%; object-fit: cover; border-radius: 50%; display: block; margin: 0 auto;" onerror="handleImageError('${flavorImgId}')" loading="lazy" crossorigin="anonymous">`
                                 : getPackageIcon('#999999');
                             return `
                             <div onclick="selectFlavor('${flavor}', ${originalIndex})" id="flavor-${originalIndex}" 
-                                style="min-width: 80px; text-align: center; cursor: pointer; flex-shrink: 0;">
+                                style="min-width: 80px; text-align: center; cursor: pointer; flex-shrink: 0; display: flex; flex-direction: column; align-items: center;">
                                 <div style="width: 80px; height: 80px; border-radius: 50%; background: #f0f0f0; 
                                     display: flex; align-items: center; justify-content: center; 
                                     border: ${isSelected ? '2px solid #007AFF' : '2px solid #e5e5e5'}; 
-                                    margin-bottom: 8px; overflow: hidden; position: relative;">
+                                    margin-bottom: 8px; overflow: hidden; position: relative; flex-shrink: 0;">
                                     ${flavorImageContent}
                                     ${isSelected ? '<span style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); color: white; font-size: 20px; text-shadow: 0 0 4px rgba(0,0,0,0.5); z-index: 10;">✓</span>' : ''}
                                 </div>
-                                <div style="font-size: 12px; color: ${isSelected ? '#007AFF' : '#000'}; font-weight: ${isSelected ? '600' : '400'};">
+                                <div style="font-size: 12px; color: ${isSelected ? '#007AFF' : '#000'}; font-weight: ${isSelected ? '600' : '400'}; text-align: center; width: 100%;">
                                     ${flavor.length > 15 ? flavor.substring(0, 15) + '...' : flavor}
                                 </div>
                             </div>
@@ -2651,13 +2658,47 @@ function handleImageError(imgId) {
     if (img && img.parentElement) {
         // Убираем обработчик ошибки чтобы избежать бесконечного цикла
         img.onerror = null;
-        img.style.display = 'none';
         
+        // Пробуем загрузить с другим расширением (.jpg -> .JPG или наоборот)
+        const currentSrc = img.src;
+        if (currentSrc.includes('/images/')) {
+            const imageNumber = currentSrc.match(/\/images\/(\d+)\.(jpg|JPG)/i);
+            if (imageNumber) {
+                const num = imageNumber[1];
+                const currentExt = imageNumber[2];
+                // Пробуем противоположное расширение
+                const newExt = currentExt.toLowerCase() === 'jpg' ? 'JPG' : 'jpg';
+                const newSrc = `/images/${num}.${newExt}`;
+                
+                // Пробуем загрузить с новым расширением
+                const newImg = new Image();
+                newImg.onload = function() {
+                    img.src = newSrc;
+                    img.style.display = 'block';
+                };
+                newImg.onerror = function() {
+                    // Если и это не сработало, показываем иконку
+                    img.style.display = 'none';
+                    const parent = img.parentElement;
+                    if (!parent.querySelector('svg')) {
+                        parent.innerHTML = getPackageIcon('#999999');
+                        parent.style.display = 'flex';
+                        parent.style.alignItems = 'center';
+                        parent.style.justifyContent = 'center';
+                    }
+                };
+                newImg.src = newSrc;
+                return;
+            }
+        }
+        
+        // Если не удалось определить номер изображения, показываем иконку
+        img.style.display = 'none';
         const parent = img.parentElement;
         // Проверяем что это не уже иконка
         if (!parent.querySelector('svg')) {
-        parent.innerHTML = getPackageIcon('#999999');
-        parent.style.display = 'flex';
+            parent.innerHTML = getPackageIcon('#999999');
+            parent.style.display = 'flex';
             parent.style.alignItems = 'center';
             parent.style.justifyContent = 'center';
         }
@@ -4486,6 +4527,9 @@ function showCart() {
     const container = document.getElementById('page-content');
     if (!container) return;
     
+    // Сохраняем позицию скролла перед обновлением
+    const scrollPosition = container.scrollTop || 0;
+    
     // Всегда загружаем актуальные данные корзины из localStorage перед отображением
     const savedCart = localStorage.getItem('cart');
     if (savedCart) {
@@ -4984,7 +5028,20 @@ function changeQuantity(index, change) {
     
     localStorage.setItem('cart', JSON.stringify(cart));
     updateCartBadge();
+    
+    // Сохраняем позицию скролла перед обновлением корзины
+    const container = document.getElementById('page-content');
+    const scrollPosition = container ? container.scrollTop : 0;
+    
     showCart();
+    
+    // Восстанавливаем позицию скролла после обновления
+    if (container && scrollPosition > 0) {
+        setTimeout(() => {
+            container.scrollTop = scrollPosition;
+        }, 50);
+    }
+    
     if (tg && tg.HapticFeedback) {
         tg.HapticFeedback.impactOccurred('light');
     }
@@ -5684,7 +5741,9 @@ function checkOrderStatus(orderId) {
                         
                         const coinsAlreadyAdded = localStorage.getItem(`coins_added_${orderId}`);
                         // ВСЕГДА начисляем коины если они есть и еще не начислены
+                        // Важно: проверяем даже если статус уже был transferred (для первого заказа)
                         if (!coinsAlreadyAdded && coinsEarned > 0) {
+                            console.log('Начисляем коины за заказ:', orderId, 'Сумма:', coinsEarned);
                             const savedCoins = localStorage.getItem('vapeCoins');
                             let currentCoins = savedCoins ? parseFloat(savedCoins) : 0;
                             currentCoins += coinsEarned;
@@ -5903,7 +5962,9 @@ function checkOrderStatus(orderId) {
                             // Проверяем, не начислены ли уже коины за этот заказ
                             const coinsAlreadyAdded = localStorage.getItem(`coins_added_${orderId}`);
                             
+                            // ВСЕГДА начисляем коины если они есть и еще не начислены
                             if (!coinsAlreadyAdded && coinsEarned > 0) {
+                                console.log('Начисляем коины за заказ (setInterval):', orderId, 'Сумма:', coinsEarned);
                                 // Загружаем актуальный баланс коинов
                                 const savedCoins = localStorage.getItem('vapeCoins');
                                 if (savedCoins) {
@@ -7595,16 +7656,16 @@ function showOrders() {
     // Сортируем заказы: активные выше, отклоненные/отмененные ниже
     const filteredOrders = [...orders].sort((a, b) => {
         // Определяем приоритет статуса (меньше = выше в списке)
-        // Порядок: активные (0) -> отмененные (1) -> переданные (2)
+        // Порядок: активные (0) -> переданные (1) -> отмененные (2)
         const getStatusPriority = (status) => {
             if (status === 'pending' || status === 'processing' || status === 'confirmed') {
                 return 0; // Активные заказы - приоритет 0 (самые верхние)
             }
-            if (status === 'rejected' || status === 'cancelled') {
-                return 1; // Отмененные - приоритет 1 (посередине)
-            }
             if (status === 'transferred') {
-                return 2; // Переданные - приоритет 2 (внизу)
+                return 1; // Переданные - приоритет 1 (посередине)
+            }
+            if (status === 'rejected' || status === 'cancelled') {
+                return 2; // Отмененные - приоритет 2 (внизу)
             }
             return 3; // Неизвестные статусы - в самом низу
         };
