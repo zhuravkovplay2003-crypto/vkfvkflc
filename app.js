@@ -3611,7 +3611,13 @@ function showExactTimeSelectionModal(timeSlot) {
     document.body.appendChild(modal);
     document.body.style.overflow = 'hidden';
     
-    // Плавное появление модального окна - используем двойной requestAnimationFrame для надежности
+    // ПРИНУДИТЕЛЬНО показываем модальное окно сразу
+    modal.style.display = 'flex';
+    modal.style.opacity = '1';
+    modalContent.style.transform = 'scale(1)';
+    modalContent.style.opacity = '1';
+    
+    // Дополнительно используем requestAnimationFrame для плавности
     requestAnimationFrame(() => {
         requestAnimationFrame(() => {
             modal.style.opacity = '1';
@@ -3848,6 +3854,10 @@ function showCart() {
     container.style.top = '';
     container.style.right = '';
     container.style.bottom = '';
+    
+    // СБРАСЫВАЕМ ПРОКРУТКУ - прокручиваем в начало
+    window.scrollTo(0, 0);
+    container.scrollTop = 0;
     
     // Начальное состояние для анимации
     container.style.opacity = '0';
@@ -4858,11 +4868,13 @@ function checkout() {
                 // Запускаем проверку статуса заказа
                 checkOrderStatus(result.orderId);
                 
-                // ВСЕГДА обновляем отображение заказов
-                // Используем setTimeout для гарантированного обновления
-                setTimeout(() => {
-                    showOrders();
-                }, 100);
+                // НЕ переключаем на вкладку заказов автоматически
+                // Обновляем отображение заказов только если пользователь уже на странице заказов
+                if (currentPage === 'orders') {
+                    setTimeout(() => {
+                        showOrders();
+                    }, 100);
+                }
             } else {
                 throw new Error(result.error || 'Ошибка при отправке заказа');
             }
@@ -4973,8 +4985,11 @@ function checkOrderStatus(orderId) {
                             // Обновляем отображение заказов ВСЕГДА при изменении статуса
                             showOrders();
                         } else if (data.status === 'transferred') {
-                            // Обновляем статус заказа
+                            // Обновляем статус заказа ПЕРЕД всеми операциями
+                            const oldStatus = order.status;
                             order.status = 'transferred';
+                            
+                            // Сохраняем изменения в localStorage СРАЗУ
                             localStorage.setItem('orders', JSON.stringify(orders));
                             
                             // Начисляем Vape Coins за заказ (только если еще не начислены)
@@ -5073,6 +5088,18 @@ function checkOrderStatus(orderId) {
                             // Обновляем отображение заказов ВСЕГДА при изменении статуса
                             // Используем setTimeout для гарантированного обновления
                             setTimeout(() => {
+                                // Перезагружаем заказы из localStorage перед обновлением
+                                const savedOrders = localStorage.getItem('orders');
+                                if (savedOrders) {
+                                    try {
+                                        const parsedOrders = JSON.parse(savedOrders);
+                                        if (Array.isArray(parsedOrders)) {
+                                            orders = parsedOrders;
+                                        }
+                                    } catch (e) {
+                                        console.error('Error loading orders:', e);
+                                    }
+                                }
                                 showOrders();
                             }, 100);
                         }
@@ -5080,6 +5107,18 @@ function checkOrderStatus(orderId) {
                         // Обновляем отображение заказов ВСЕГДА при изменении статуса
                         // Используем setTimeout для гарантированного обновления
                         setTimeout(() => {
+                            // Перезагружаем заказы из localStorage перед обновлением
+                            const savedOrders = localStorage.getItem('orders');
+                            if (savedOrders) {
+                                try {
+                                    const parsedOrders = JSON.parse(savedOrders);
+                                    if (Array.isArray(parsedOrders)) {
+                                        orders = parsedOrders;
+                                    }
+                                } catch (e) {
+                                    console.error('Error loading orders:', e);
+                                }
+                            }
                             showOrders();
                         }, 100);
                         
