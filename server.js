@@ -167,8 +167,15 @@ async function updateOrderMessagesForAllManagers(order, messageText, replyMarkup
                 if (confirmedBy && order.confirmedBy && order.confirmedBy.toString() !== managerId.toString()) {
                     // Это другой менеджер - показываем что заказ уже взят
                     const confirmedByUsername = order.confirmedByUsername || 'менеджер';
-                    finalMessageText = messageText + `\n\n⚠️ Заказ уже взят менеджером ${confirmedByUsername} (ID: ${order.confirmedBy})`;
+                    const userInfo = order.userId ? `👤 Клиент ID: ${order.userId}${order.userUsername ? ` (@${order.userUsername})` : ''}` : '👤 Клиент ID: не указан';
+                    finalMessageText = messageText + `\n\n${userInfo}\n\n⚠️ Заказ уже взят менеджером ${confirmedByUsername} (ID: ${order.confirmedBy})`;
                     finalReplyMarkup = null; // Убираем кнопки для других менеджеров
+                } else {
+                    // Добавляем информацию о клиенте если её нет в сообщении
+                    const userInfo = order.userId ? `👤 Клиент ID: ${order.userId}${order.userUsername ? ` (@${order.userUsername})` : ''}` : '👤 Клиент ID: не указан';
+                    if (!messageText.includes('👤 Клиент ID:')) {
+                        finalMessageText = messageText.replace(/\n\n/, `\n${userInfo}\n`);
+                    }
                 }
                 
                 await bot.telegram.editMessageText(
@@ -605,7 +612,9 @@ bot.on('callback_query', async (ctx) => {
             
             // Формируем текст для обновления всех сообщений
             const moscowTime = getMoscowTime();
+            const userInfo = order.userId ? `👤 Клиент ID: ${order.userId}${order.userUsername ? ` (@${order.userUsername})` : ''}` : '👤 Клиент ID: не указан';
             const confirmMessage = `<b>✅ Заказ #${order.id.slice(-6)} подтвержден</b>\n\n` +
+                `${userInfo}\n` +
                 `Подтвердил: ${ctx.from.first_name}${ctx.from.username ? ` (@${ctx.from.username})` : ''}\n` +
                 `Время: ${moscowTime.toLocaleString('ru-RU', { timeZone: 'Europe/Moscow' })}\n\n` +
                 `Нажмите кнопку ниже, когда заказ будет передан клиенту:`;
@@ -665,7 +674,9 @@ bot.on('callback_query', async (ctx) => {
             
             // Формируем текст для обновления всех сообщений
             const moscowTime = getMoscowTime();
+            const userInfo = order.userId ? `👤 Клиент ID: ${order.userId}${order.userUsername ? ` (@${order.userUsername})` : ''}` : '👤 Клиент ID: не указан';
             const rejectMessage = `<b>❌ Заказ #${order.id.slice(-6)} отменен</b>\n\n` +
+                `${userInfo}\n` +
                 `Отменил: ${ctx.from.first_name}${ctx.from.username ? ` (@${ctx.from.username})` : ''}\n` +
                 `Время: ${moscowTime.toLocaleString('ru-RU', { timeZone: 'Europe/Moscow' })}`;
             
@@ -730,7 +741,9 @@ bot.on('callback_query', async (ctx) => {
             
             // Формируем текст для обновления всех сообщений
             const moscowTime = getMoscowTime();
+            const userInfo = order.userId ? `👤 Клиент ID: ${order.userId}${order.userUsername ? ` (@${order.userUsername})` : ''}` : '👤 Клиент ID: не указан';
             const transferMessage = `<b>📦 Заказ #${order.id.slice(-6)} передан клиенту</b>\n\n` +
+                `${userInfo}\n` +
                 `Передал: ${ctx.from.first_name}${ctx.from.username ? ` (@${ctx.from.username})` : ''}\n` +
                 `Время: ${moscowTime.toLocaleString('ru-RU', { timeZone: 'Europe/Moscow' })}\n\n` +
                 `💰 Начислено Vape Coins: ${coinsToAdd} 🪙`;
