@@ -3425,6 +3425,33 @@ function selectLocationFromMap() {
     }
 }
 
+// Функция для получения занятых времен для даты
+function getBookedTimesForDate(dateKey) {
+    try {
+        // Загружаем все заказы из localStorage
+        const savedOrders = localStorage.getItem('orders');
+        if (!savedOrders) return [];
+        
+        const allOrders = JSON.parse(savedOrders);
+        if (!Array.isArray(allOrders)) return [];
+        
+        // Фильтруем заказы по дате и статусу (только confirmed и transferred)
+        const bookedTimes = [];
+        allOrders.forEach(order => {
+            if (order.selectedDeliveryDay === dateKey && 
+                order.deliveryExactTime && 
+                (order.status === 'confirmed' || order.status === 'transferred')) {
+                bookedTimes.push(order.deliveryExactTime);
+            }
+        });
+        
+        return bookedTimes;
+    } catch (e) {
+        console.error('Error in getBookedTimesForDate:', e);
+        return [];
+    }
+}
+
 // Показать модальное окно выбора точного времени
 function showExactTimeSelectionModal(timeSlot) {
     console.log('showExactTimeSelectionModal called with:', timeSlot);
@@ -6748,7 +6775,7 @@ function showOrders() {
                         border-radius: 12px; text-align: center; border: 2px solid #2196F3;">
                         <div style="width: 32px; height: 32px; margin: 0 auto 8px; display: flex; align-items: center; justify-content: center;">${getPackageIcon('#2196F3')}</div>
                         <div style="font-weight: 600; color: #1976d2; font-size: 14px; margin-bottom: 4px;">Заказ передан</div>
-                        <div style="font-size: 12px; color: #666; margin-bottom: 8px;">Товар передан клиенту</div>
+                        <div style="font-size: 12px; color: #666; margin-bottom: 8px;">Спасибо за покупку!</div>
                         ${order.vapeCoinsEarned ? `
                             <div style="padding: 8px; background: rgba(255, 152, 0, 0.1); border-radius: 8px; margin-top: 8px;">
                                 <div style="font-size: 11px; color: #666; margin-bottom: 4px;">Начислено Vape Coins:</div>
