@@ -3435,12 +3435,12 @@ function getBookedTimesForDate(dateKey) {
         const allOrders = JSON.parse(savedOrders);
         if (!Array.isArray(allOrders)) return [];
         
-        // Фильтруем заказы по дате и статусу (только confirmed и transferred)
+        // Фильтруем заказы по дате и статусу (pending, confirmed и transferred - все занимают время)
         const bookedTimes = [];
         allOrders.forEach(order => {
             if (order.selectedDeliveryDay === dateKey && 
                 order.deliveryExactTime && 
-                (order.status === 'confirmed' || order.status === 'transferred')) {
+                (order.status === 'pending' || order.status === 'confirmed' || order.status === 'transferred')) {
                 bookedTimes.push(order.deliveryExactTime);
             }
         });
@@ -3524,13 +3524,14 @@ function showExactTimeSelectionModal(timeSlot) {
     const isMidnightCross = parseInt(endHour) === 0 && parseInt(startHour) === 23;
     
     if (isMidnightCross) {
-        // Для 23:00-00:00 генерируем времена от 23:00 до 00:00
+        // Для 23:00-00:00 генерируем времена от 23:00 до 00:00, НЕ включая 00:00
+        // (последнее время промежутка не включается)
         const timeSlots = [
-            '23:00', '23:10', '23:20', '23:30', '23:40', '23:50', '00:00'
+            '23:00', '23:10', '23:20', '23:30', '23:40', '23:50'
         ];
         
-        // Получаем занятые времена для этой даты
-        const bookedTimes = getBookedTimesForDate(dateKey);
+        // Получаем занятые времена для этой даты (локально)
+        let bookedTimes = getBookedTimesForDate(dateKey);
         
         timeSlots.forEach(timeStr => {
             const isSelected = deliveryExactTime === timeStr;
@@ -3554,12 +3555,13 @@ function showExactTimeSelectionModal(timeSlot) {
         const endHourInt = parseInt(endHour);
         const endMinInt = parseInt(endMin || 0);
         
-        // Генерируем времена от начала до конца включительно
+        // Генерируем времена от начала до конца, НЕ включая конечное время
+        // Например, для 15-16 генерируем: 15:00, 15:10, ..., 15:50 (БЕЗ 16:00)
+        // Для 16-17 генерируем: 16:00, 16:10, ..., 16:50 (БЕЗ 17:00)
         while (true) {
             const timeStr = `${currentHour < 10 ? '0' : ''}${currentHour}:${currentMin < 10 ? '0' : ''}${currentMin}`;
-            timeSlots.push(timeStr);
             
-            // Проверяем, достигли ли мы конечного времени
+            // Проверяем, не достигли ли мы конечного времени (если да, не добавляем и выходим)
             if (currentHour === endHourInt && currentMin === endMinInt) {
                 break;
             }
@@ -3568,6 +3570,9 @@ function showExactTimeSelectionModal(timeSlot) {
             if (currentHour > endHourInt || (currentHour === endHourInt && currentMin > endMinInt)) {
                 break;
             }
+            
+            // Добавляем текущее время в список
+            timeSlots.push(timeStr);
             
             // Увеличиваем время на 10 минут
             currentMin += 10;
@@ -3579,14 +3584,19 @@ function showExactTimeSelectionModal(timeSlot) {
                 }
             }
             
+            // Проверяем, не достигли ли мы конечного времени после увеличения
+            if (currentHour === endHourInt && currentMin === endMinInt) {
+                break;
+            }
+            
             // Защита от бесконечного цикла
             if (timeSlots.length > 144) { // Максимум 24 часа * 6 слотов в час
                 break;
             }
         }
         
-        // Получаем занятые времена для этой даты
-        const bookedTimes = getBookedTimesForDate(dateKey);
+        // Получаем занятые времена для этой даты (локально)
+        let bookedTimes = getBookedTimesForDate(dateKey);
         
         timeSlots.forEach(timeStr => {
             const isSelected = deliveryExactTime === timeStr;
@@ -3612,6 +3622,40 @@ function showExactTimeSelectionModal(timeSlot) {
     modalContent.appendChild(slotsContainer);
     
     modal.appendChild(modalContent);
+    
+    // Также проверяем заказы на сервере через API (асинхронно)
+    // Это нужно для проверки заказов других пользователей
+    fetch(`${SERVER_URL}/api/orders/booked-times?date=${dateKey}`)
+        .then(response => response.json())
+        .then(data => {
+            if (data.success && Array.isArray(data.bookedTimes)) {
+                // Объединяем с локальными заказами
+                const serverBookedTimes = data.bookedTimes;
+                const localBookedTimes = getBookedTimesForDate(dateKey);
+                const allBookedTimes = [...new Set([...localBookedTimes, ...serverBookedTimes])];
+                
+                // Обновляем модальное окно если оно открыто
+                const modal = document.querySelector('.exact-time-modal-overlay');
+                if (modal) {
+                    const container = document.getElementById('exact-time-slots-container');
+                    if (container) {
+                        // Обновляем кнопки с обновленными данными
+                        const timeSlots = container.querySelectorAll('button');
+                        timeSlots.forEach(btn => {
+                            const timeStr = btn.textContent.split(' ')[0].trim(); // Берем только время без "(занято)"
+                            if (allBookedTimes.includes(timeStr) && !btn.disabled) {
+                                btn.disabled = true;
+                                btn.style.cssText = 'padding: 10px 16px; border: 2px solid #999; border-radius: 10px; background: #e0e0e0; cursor: not-allowed; font-size: 14px; font-weight: 600; color: #999; transition: all 0.3s; white-space: nowrap; margin-right: 8px; margin-bottom: 8px; opacity: 0.5;';
+                                btn.textContent = timeStr + ' (занято)';
+                            }
+                        });
+                    }
+                }
+            }
+        })
+        .catch(err => {
+            console.error('Error fetching booked times from server:', err);
+        });
     
     // Устанавливаем обработчик BackButton после создания closeModal
     if (tg && tg.BackButton) {
@@ -5036,7 +5080,9 @@ function checkOrderStatus(orderId) {
                                 showOrders();
                             }, 100);
                         } else if (data.status === 'transferred') {
-                            // Статус уже обновлен выше, продолжаем с начислением
+                            // ОБЯЗАТЕЛЬНО обновляем статус заказа еще раз для гарантии
+                            order.status = 'transferred';
+                            localStorage.setItem('orders', JSON.stringify(orders));
                             
                             // Начисляем Vape Coins за заказ (только если еще не начислены)
                             if (data.order && data.order.vapeCoinsEarned !== undefined && data.order.vapeCoinsEarned !== null) {
@@ -5168,6 +5214,22 @@ function checkOrderStatus(orderId) {
                                 }
                                 showOrders();
                             }, 500);
+                            
+                            // Третий вызов для гарантии
+                            setTimeout(() => {
+                                const savedOrders = localStorage.getItem('orders');
+                                if (savedOrders) {
+                                    try {
+                                        const parsedOrders = JSON.parse(savedOrders);
+                                        if (Array.isArray(parsedOrders)) {
+                                            orders = parsedOrders;
+                                        }
+                                    } catch (e) {
+                                        console.error('Error loading orders:', e);
+                                    }
+                                }
+                                showOrders();
+                            }, 1000);
                         }
                         
                         // Обновляем баланс Vape Coins, если пользователь на странице Vape Coins
@@ -5177,9 +5239,15 @@ function checkOrderStatus(orderId) {
                     }
                     
                     // Если заказ подтвержден, отклонен или передан, останавливаем проверку
+                    // НО только после того, как статус обновлен и сохранен
                     if (data.status === 'confirmed' || data.status === 'rejected' || data.status === 'transferred') {
-                        clearInterval(orderStatusCheckIntervals[orderId]);
-                        delete orderStatusCheckIntervals[orderId];
+                        // Даем время на обновление UI перед остановкой проверки
+                        setTimeout(() => {
+                            if (orderStatusCheckIntervals[orderId]) {
+                                clearInterval(orderStatusCheckIntervals[orderId]);
+                                delete orderStatusCheckIntervals[orderId];
+                            }
+                        }, 2000); // Останавливаем через 2 секунды после обновления
                     }
                 }
             }
