@@ -5179,11 +5179,28 @@ function checkOrderStatus(orderId) {
                             }
                             
                             // Проверяем, не начислены ли уже коины за этот заказ
-                            const existingTransaction = vapeCoinsHistory.find(t => t.orderId === orderId && t.type === 'earned');
+                            const coinsAlreadyAdded = localStorage.getItem(`coins_added_${orderId}`);
                             
-                            if (!existingTransaction && coinsEarned > 0) {
+                            if (!coinsAlreadyAdded && coinsEarned > 0) {
+                                // Загружаем актуальный баланс коинов
+                                const savedCoins = localStorage.getItem('vapeCoins');
+                                if (savedCoins) {
+                                    vapeCoins = parseFloat(savedCoins) || 0;
+                                }
+                                
                                 vapeCoins += coinsEarned;
                                 localStorage.setItem('vapeCoins', vapeCoins.toString());
+                                localStorage.setItem(`coins_added_${orderId}`, 'true'); // Помечаем что коины начислены
+                                
+                                // Загружаем актуальную историю
+                                const savedHistory = localStorage.getItem('vapeCoinsHistory');
+                                if (savedHistory) {
+                                    try {
+                                        vapeCoinsHistory = JSON.parse(savedHistory);
+                                    } catch (e) {
+                                        vapeCoinsHistory = [];
+                                    }
+                                }
                                 
                                 // Добавляем транзакцию в историю
                                 vapeCoinsHistory.unshift({
@@ -5207,6 +5224,14 @@ function checkOrderStatus(orderId) {
                             let bonusCoins = 0;
                             
                             if (!stampsAlreadyAdded) {
+                                // Загружаем актуальное количество штампов
+                                const savedStamps = localStorage.getItem('stamps');
+                                if (savedStamps) {
+                                    const totalStampsValue = parseInt(savedStamps) || 0;
+                                    completedStampSets = Math.floor(totalStampsValue / 10);
+                                    stamps = totalStampsValue % 10;
+                                }
+                                
                                 const totalItems = order.items.reduce((sum, item) => {
                                     const paymentMethod = item.paymentMethod || 'money';
                                     if (paymentMethod === 'money') {
@@ -5229,8 +5254,25 @@ function checkOrderStatus(orderId) {
                                         const newCompletedSets = Math.floor(newTotalStamps / 10) - Math.floor(totalStamps / 10);
                                         if (newCompletedSets > 0) {
                                             bonusCoins = newCompletedSets * 10;
+                                            
+                                            // Загружаем актуальный баланс коинов
+                                            const savedCoins = localStorage.getItem('vapeCoins');
+                                            if (savedCoins) {
+                                                vapeCoins = parseFloat(savedCoins) || 0;
+                                            }
+                                            
                                             vapeCoins += bonusCoins;
                                             localStorage.setItem('vapeCoins', vapeCoins.toString());
+                                            
+                                            // Загружаем актуальную историю
+                                            const savedHistory = localStorage.getItem('vapeCoinsHistory');
+                                            if (savedHistory) {
+                                                try {
+                                                    vapeCoinsHistory = JSON.parse(savedHistory);
+                                                } catch (e) {
+                                                    vapeCoinsHistory = [];
+                                                }
+                                            }
                                             
                                             vapeCoinsHistory.unshift({
                                                 id: `vc_${Date.now()}`,
@@ -7027,38 +7069,6 @@ function showOrders() {
                         <div style="font-weight: 600; color: #F57C00; font-size: 14px; margin-bottom: 4px;">${statusText}</div>
                         <div style="font-size: 12px; color: #666;">Заказ отправлен менеджеру и будет обработан в ближайшее время</div>
                     </div>
-                    ${(() => {
-                        // Проверяем, можно ли изменить заказ (если до времени забора больше 2 часов)
-                        if (order.selectedDeliveryDay && order.deliveryExactTime) {
-                            try {
-                                const now = getMoscowTime();
-                                const [deliveryHour, deliveryMin] = order.deliveryExactTime.split(':').map(Number);
-                                
-                                // Создаем дату доставки в московском времени
-                                const [year, month, day] = order.selectedDeliveryDay.split('-').map(Number);
-                                const deliveryDateTime = new Date(Date.UTC(year, month - 1, day, deliveryHour - 3, deliveryMin, 0, 0));
-                                
-                                const timeDiff = deliveryDateTime.getTime() - now.getTime();
-                                const hoursUntilDelivery = timeDiff / (1000 * 60 * 60);
-                                
-                                if (hoursUntilDelivery > 2) {
-                                    return `
-                                        <button onclick="editOrder('${order.id}')" style="width: 100%; padding: 16px; 
-                                            background: linear-gradient(135deg, #2196F3 0%, #1976D2 100%); color: white; border: none; border-radius: 12px; 
-                                            font-size: 16px; font-weight: 700; cursor: pointer; box-shadow: 0 4px 12px rgba(33,150,243,0.3);
-                                            transition: all 0.2s; margin-bottom: 12px;"
-                                            onmouseover="this.style.transform='scale(1.02)'; this.style.boxShadow='0 6px 16px rgba(33,150,243,0.4)'"
-                                            onmouseout="this.style.transform='scale(1)'; this.style.boxShadow='0 4px 12px rgba(33,150,243,0.3)'">
-                                            Изменить заказ
-                                        </button>
-                                    `;
-                                }
-                            } catch (e) {
-                                console.error('Error calculating time until delivery:', e);
-                            }
-                        }
-                        return '';
-                    })()}
                     <button onclick="cancelOrder('${order.id}')" style="width: 100%; padding: 16px; 
                         background: linear-gradient(135deg, #f44336 0%, #d32f2f 100%); color: white; border: none; border-radius: 12px; 
                         font-size: 16px; font-weight: 700; cursor: pointer; box-shadow: 0 4px 12px rgba(244,67,54,0.3);
@@ -7074,38 +7084,6 @@ function showOrders() {
                         <div style="font-weight: 600; color: #2E7D32; font-size: 14px; margin-bottom: 4px;">Заказ принят</div>
                         <div style="font-size: 12px; color: #666;">Ожидание подтверждения передачи товара</div>
                     </div>
-                    ${(() => {
-                        // Проверяем, можно ли изменить заказ (если до времени забора больше 2 часов)
-                        if (order.selectedDeliveryDay && order.deliveryExactTime) {
-                            try {
-                                const now = getMoscowTime();
-                                const [deliveryHour, deliveryMin] = order.deliveryExactTime.split(':').map(Number);
-                                
-                                // Создаем дату доставки в московском времени
-                                const [year, month, day] = order.selectedDeliveryDay.split('-').map(Number);
-                                const deliveryDateTime = new Date(Date.UTC(year, month - 1, day, deliveryHour - 3, deliveryMin, 0, 0));
-                                
-                                const timeDiff = deliveryDateTime.getTime() - now.getTime();
-                                const hoursUntilDelivery = timeDiff / (1000 * 60 * 60);
-                                
-                                if (hoursUntilDelivery > 2) {
-                                    return `
-                                        <button onclick="editOrder('${order.id}')" style="width: 100%; padding: 16px; 
-                                            background: linear-gradient(135deg, #2196F3 0%, #1976D2 100%); color: white; border: none; border-radius: 12px; 
-                                            font-size: 16px; font-weight: 700; cursor: pointer; box-shadow: 0 4px 12px rgba(33,150,243,0.3);
-                                            transition: all 0.2s; margin-bottom: 12px;"
-                                            onmouseover="this.style.transform='scale(1.02)'; this.style.boxShadow='0 6px 16px rgba(33,150,243,0.4)'"
-                                            onmouseout="this.style.transform='scale(1)'; this.style.boxShadow='0 4px 12px rgba(33,150,243,0.3)'">
-                                            Изменить заказ
-                                        </button>
-                                    `;
-                                }
-                            } catch (e) {
-                                console.error('Error calculating time until delivery:', e);
-                            }
-                        }
-                        return '';
-                    })()}
                     <div>
                         <button onclick="cancelOrder('${order.id}')" style="width: 100%; padding: 16px; 
                             background: linear-gradient(135deg, #f44336 0%, #d32f2f 100%); color: white; border: none; border-radius: 12px; 
@@ -7122,17 +7100,12 @@ function showOrders() {
                         <div style="width: 32px; height: 32px; margin: 0 auto 8px; display: flex; align-items: center; justify-content: center;">${getSuccessIcon('#2196F3')}</div>
                         <div style="font-weight: 600; color: #1976d2; font-size: 14px; margin-bottom: 4px;">Спасибо за покупку!</div>
                         <div style="font-size: 12px; color: #666; margin-bottom: 8px;">Заказ успешно передан</div>
-                        ${order.vapeCoinsEarned && order.vapeCoinsEarned > 0 ? `
-                            <div style="padding: 8px; background: rgba(255, 152, 0, 0.1); border-radius: 8px; margin-top: 8px;">
-                                <div style="font-size: 11px; color: #666; margin-bottom: 4px;">Начислено Vape Coins:</div>
-                                <div style="font-weight: 600; color: #FF9800; font-size: 14px; display: flex; align-items: center; justify-content: center; gap: 4px;">
-                                    <span style="width: 16px; height: 16px; display: flex; align-items: center; justify-content: center;">${getCoinIcon('#FF9800', 16)}</span>
-                                    ${order.vapeCoinsEarned.toFixed(1)}
-                                </div>
-                            </div>
-                        ` : ''}
                         ${(() => {
+                            let rewardsHtml = '';
+                            const coinsEarned = order.vapeCoinsEarned || 0;
                             const stampsAdded = localStorage.getItem(`stamps_added_${order.id}`);
+                            let stampsToAdd = 0;
+                            
                             if (stampsAdded) {
                                 const totalItems = order.items.reduce((sum, item) => {
                                     const paymentMethod = item.paymentMethod || 'money';
@@ -7141,19 +7114,34 @@ function showOrders() {
                                     }
                                     return sum;
                                 }, 0);
-                                const stampsToAdd = Math.floor(totalItems / 2);
-                                if (stampsToAdd > 0) {
-                                    return `
-                                        <div style="padding: 8px; background: rgba(255, 152, 0, 0.1); border-radius: 8px; margin-top: 8px;">
-                                            <div style="font-size: 11px; color: #666; margin-bottom: 4px;">Начислено штампов:</div>
-                                            <div style="font-weight: 600; color: #FF9800; font-size: 14px;">
-                                                + ${stampsToAdd} ${stampsToAdd === 1 ? 'штамп' : stampsToAdd < 5 ? 'штампа' : 'штампов'}
-                                            </div>
+                                stampsToAdd = Math.floor(totalItems / 2);
+                            }
+                            
+                            if (coinsEarned > 0 || stampsToAdd > 0) {
+                                rewardsHtml = '<div style="margin-top: 12px; display: flex; flex-direction: column; gap: 8px; align-items: center;">';
+                                
+                                if (coinsEarned > 0) {
+                                    rewardsHtml += `
+                                        <div style="display: flex; align-items: center; gap: 6px; color: #FF9800; font-weight: 600; font-size: 15px;">
+                                            <span style="width: 20px; height: 20px; display: flex; align-items: center; justify-content: center;">${getCoinIcon('#FF9800', 20)}</span>
+                                            <span>+ ${coinsEarned.toFixed(1)} коинов</span>
                                         </div>
                                     `;
                                 }
+                                
+                                if (stampsToAdd > 0) {
+                                    rewardsHtml += `
+                                        <div style="display: flex; align-items: center; gap: 6px; color: #FF9800; font-weight: 600; font-size: 15px;">
+                                            <span style="width: 20px; height: 20px; display: flex; align-items: center; justify-content: center;">${getTrophyIcon('#FF9800').replace('width="32" height="32"', 'width="20" height="20"')}</span>
+                                            <span>+ ${stampsToAdd} ${stampsToAdd === 1 ? 'штамп' : stampsToAdd < 5 ? 'штампа' : 'штампов'}</span>
+                                        </div>
+                                    `;
+                                }
+                                
+                                rewardsHtml += '</div>';
                             }
-                            return '';
+                            
+                            return rewardsHtml;
                         })()}
                     </div>
                 ` : order.status === 'rejected' ? `
@@ -9696,81 +9684,6 @@ window.showOrders = showOrders;
 window.clearOrdersByStatus = clearOrdersByStatus;
 window.markOrderAsReceived = markOrderAsReceived;
 window.cancelOrder = cancelOrder;
-window.editOrder = editOrder;
-
-// Изменить заказ
-function editOrder(orderId) {
-    const order = orders.find(o => o.id === orderId);
-    if (!order) {
-        showToast('Заказ не найден', 'error', 3000);
-        return;
-    }
-    
-    // Проверяем, можно ли изменить заказ (если до времени забора больше 2 часов)
-    if (order.selectedDeliveryDay && order.deliveryExactTime) {
-        try {
-            const now = getMoscowTime();
-            const [deliveryHour, deliveryMin] = order.deliveryExactTime.split(':').map(Number);
-            
-            // Создаем дату доставки в московском времени
-            const [year, month, day] = order.selectedDeliveryDay.split('-').map(Number);
-            const deliveryDateTime = new Date(Date.UTC(year, month - 1, day, deliveryHour - 3, deliveryMin, 0, 0));
-            
-            const timeDiff = deliveryDateTime.getTime() - now.getTime();
-            const hoursUntilDelivery = timeDiff / (1000 * 60 * 60);
-            
-            if (hoursUntilDelivery <= 2) {
-                showToast('Нельзя изменить заказ менее чем за 2 часа до времени забора', 'warning', 3000);
-                return;
-            }
-        } catch (e) {
-            console.error('Error calculating time until delivery:', e);
-            showToast('Ошибка при проверке времени заказа', 'error', 3000);
-            return;
-        }
-    }
-    
-    // Проверяем статус заказа
-    if (order.status !== 'pending' && order.status !== 'processing' && order.status !== 'confirmed') {
-        showToast('Этот заказ нельзя изменить', 'warning', 3000);
-        return;
-    }
-    
-    // Загружаем товары из заказа в корзину
-    cart = order.items.map(item => ({
-        ...item,
-        paymentMethod: item.paymentMethod || 'money'
-    }));
-    localStorage.setItem('cart', JSON.stringify(cart));
-    updateCartBadge();
-    
-    // Устанавливаем параметры доставки из заказа
-    deliveryType = order.deliveryType || 'selfPickup';
-    deliveryTime = order.deliveryTime || null;
-    deliveryExactTime = order.deliveryExactTime || null;
-    selectedDeliveryDay = order.selectedDeliveryDay || null;
-    selectedPickupLocation = order.pickupLocation || null;
-    deliveryAddress = order.deliveryAddress || null;
-    
-    localStorage.setItem('deliveryType', deliveryType);
-    if (deliveryTime) localStorage.setItem('deliveryTime', deliveryTime);
-    if (deliveryExactTime) localStorage.setItem('deliveryExactTime', deliveryExactTime);
-    if (selectedDeliveryDay) localStorage.setItem('selectedDeliveryDay', selectedDeliveryDay);
-    if (selectedPickupLocation) localStorage.setItem('selectedPickupLocation', selectedPickupLocation);
-    if (deliveryAddress) localStorage.setItem('deliveryAddress', deliveryAddress);
-    
-    // Удаляем старый заказ
-    orders = orders.filter(o => o.id !== orderId);
-    localStorage.setItem('orders', JSON.stringify(orders));
-    
-    // Переходим в корзину
-    showPage('cart');
-    showToast('Товары из заказа добавлены в корзину. Измените параметры и оформите заказ заново.', 'success', 4000);
-    
-    if (tg && tg.HapticFeedback) {
-        tg.HapticFeedback.impactOccurred('light');
-    }
-}
 window.showVapeCoins = showVapeCoins;
 window.buyWithVapeCoins = buyWithVapeCoins;
 window.showVapeCoinsOrderDetails = showVapeCoinsOrderDetails;
