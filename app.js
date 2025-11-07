@@ -1610,6 +1610,10 @@ function displayProducts(productsToShow = null) {
         // Добавляем стили для плавной анимации
         card.style.transition = 'transform 0.2s ease, box-shadow 0.2s ease';
         card.style.cursor = 'pointer';
+        card.style.outline = 'none';
+        card.style.userSelect = 'none';
+        card.style.webkitUserSelect = 'none';
+        card.style.webkitTapHighlightColor = 'transparent';
         
         // Эффект поднятия при нажатии
         const handlePress = function(e) {
@@ -1878,7 +1882,7 @@ function showProduct(productId, favoriteFlavor = null, favoriteStrength = null) 
                             Все
                         </button>
                     </div>
-                    <div style="display: flex; gap: 12px; overflow-x: auto; padding-bottom: 8px; -webkit-overflow-scrolling: touch;">
+                    <div style="display: flex; justify-content: flex-start; gap: 12px; overflow-x: auto; padding-bottom: 8px; -webkit-overflow-scrolling: touch;">
                         ${allFlavors.map((flavor, idx) => {
                             const originalIndex = product.flavors.indexOf(flavor);
                             const isSelected = flavor === selectedFlavor || originalIndex === selectedFlavorIndex;
@@ -1894,7 +1898,7 @@ function showProduct(productId, favoriteFlavor = null, favoriteStrength = null) 
                                 : getPackageIcon('#999999');
                             return `
                             <div onclick="selectFlavor('${flavor}', ${originalIndex})" id="flavor-${originalIndex}" 
-                                style="min-width: 80px; text-align: center; cursor: pointer; flex-shrink: 0; display: flex; flex-direction: column; align-items: center;">
+                                style="width: 80px; text-align: center; cursor: pointer; flex-shrink: 0; display: flex; flex-direction: column; align-items: center; outline: none; user-select: none; -webkit-user-select: none; -webkit-tap-highlight-color: transparent;">
                                 <div style="width: 80px; height: 80px; border-radius: 50%; background: #f0f0f0; 
                                     display: flex; align-items: center; justify-content: center; 
                                     border: ${isSelected ? '2px solid #007AFF' : '2px solid #e5e5e5'}; 
@@ -2678,11 +2682,11 @@ function handleImageError(imgId) {
                 };
                 newImg.onerror = function() {
                     // Если и это не сработало, показываем иконку
-                    img.style.display = 'none';
-                    const parent = img.parentElement;
+        img.style.display = 'none';
+        const parent = img.parentElement;
                     if (!parent.querySelector('svg')) {
-                        parent.innerHTML = getPackageIcon('#999999');
-                        parent.style.display = 'flex';
+        parent.innerHTML = getPackageIcon('#999999');
+        parent.style.display = 'flex';
                         parent.style.alignItems = 'center';
                         parent.style.justifyContent = 'center';
                     }
@@ -5722,7 +5726,8 @@ function checkOrderStatus(orderId) {
                     
                     // Если статус 'transferred', начисляем коины и штампы (даже если статус не изменился)
                     // Это важно для первого заказа, когда статус уже transferred при первой проверке
-                    if (data.status === 'transferred' || order.status === 'transferred') {
+                    const isTransferred = data.status === 'transferred' || order.status === 'transferred';
+                    if (isTransferred) {
                         // Начисляем коины
                         let coinsEarned = 0;
                         if (data.order && data.order.vapeCoinsEarned !== undefined && data.order.vapeCoinsEarned !== null) {
@@ -5738,12 +5743,13 @@ function checkOrderStatus(orderId) {
                         
                         // Сохраняем coinsEarned в заказе для отображения
                         order.vapeCoinsEarned = coinsEarned;
+                        localStorage.setItem('orders', JSON.stringify(orders));
                         
                         const coinsAlreadyAdded = localStorage.getItem(`coins_added_${orderId}`);
                         // ВСЕГДА начисляем коины если они есть и еще не начислены
                         // Важно: проверяем даже если статус уже был transferred (для первого заказа)
                         if (!coinsAlreadyAdded && coinsEarned > 0) {
-                            console.log('Начисляем коины за заказ:', orderId, 'Сумма:', coinsEarned);
+                            console.log('Начисляем коины за заказ (первая проверка):', orderId, 'Сумма:', coinsEarned, 'Статус:', data.status, 'Локальный статус:', order.status);
                             const savedCoins = localStorage.getItem('vapeCoins');
                             let currentCoins = savedCoins ? parseFloat(savedCoins) : 0;
                             currentCoins += coinsEarned;
@@ -7984,35 +7990,35 @@ function showOrders() {
                             let rewardsHtml = '';
                             const coinsEarned = order.vapeCoinsEarned || 0;
                             
-                            // Проверяем начислены ли штампы за этот заказ
-                            const stampsAdded = localStorage.getItem(`stamps_added_${order.id}`);
+                            // Всегда вычисляем штампы для отображения
                             let stampsToAdd = 0;
                             let showPartialStamp = false;
                             
-                            if (stampsAdded) {
-                                const totalItems = order.items.reduce((sum, item) => {
-                                    const paymentMethod = item.paymentMethod || 'money';
-                                    if (paymentMethod === 'money') {
-                                        return sum + item.quantity;
-                                    }
-                                    return sum;
-                                }, 0);
+                            const totalItems = order.items.reduce((sum, item) => {
+                                const paymentMethod = item.paymentMethod || 'money';
+                                if (paymentMethod === 'money') {
+                                    return sum + item.quantity;
+                                }
+                                return sum;
+                            }, 0);
+                            
+                            if (totalItems > 0) {
+                                // Используем правильную логику: 1 товар = 0.5 штампа
+                                // Вычисляем сколько целых штампов добавилось
+                                stampsToAdd = Math.floor(totalItems / 2);
                                 
-                                if (totalItems > 0) {
-                                    // Используем правильную логику: 1 товар = 0.5 штампа
-                                    // Проверяем сколько штампов было добавлено за этот заказ
-                                    const savedStamps = localStorage.getItem('stamps');
-                                    const currentTotalStamps = savedStamps ? parseInt(savedStamps) : 0;
-                                    
-                                    // Вычисляем сколько штампов добавилось (целые)
-                                    stampsToAdd = Math.floor(totalItems / 2);
-                                    
-                                    // Проверяем частичный прогресс (для 1 товара = 0.5)
-                                    const savedPartialProgress = localStorage.getItem('partialItemsProgress');
-                                    const currentPartialProgress = savedPartialProgress ? parseFloat(savedPartialProgress) : 0;
-                                    
-                                    // Если был 1 товар и нет целых штампов, показываем 0.5
-                                    if (totalItems === 1 && stampsToAdd === 0 && currentPartialProgress >= 0.5) {
+                                // Проверяем частичный прогресс (для 1 товара = 0.5)
+                                const savedPartialProgress = localStorage.getItem('partialItemsProgress');
+                                const currentPartialProgress = savedPartialProgress ? parseFloat(savedPartialProgress) : 0;
+                                
+                                // Если был 1 товар, всегда показываем 0.5 штампа
+                                if (totalItems === 1 && stampsToAdd === 0) {
+                                    showPartialStamp = true;
+                                } else if (totalItems > 1) {
+                                    // Для нескольких товаров проверяем остаток
+                                    const remainder = totalItems % 2;
+                                    if (remainder === 1) {
+                                        // Если остался 1 товар после целых штампов, показываем 0.5
                                         showPartialStamp = true;
                                     }
                                 }
