@@ -85,18 +85,32 @@ function verifyAge(isAdult) {
             
             // Показываем основной контент
             const mainContent = document.getElementById('main-content');
-        if (mainContent) {
-            mainContent.classList.remove('hidden');
-            showPage('catalog');
-            // Инициализируем SVG иконки после показа основного контента
-            setTimeout(() => {
-                initSVGIcons();
-            }, 150);
-        }
+            if (mainContent) {
+                mainContent.classList.remove('hidden');
+                showPage('catalog');
+                // Инициализируем SVG иконки после показа основного контента
+                setTimeout(() => {
+                    initSVGIcons();
+                }, 150);
+            }
             
             if (tg && tg.HapticFeedback) {
                 tg.HapticFeedback.notificationOccurred('success');
             }
+            
+            // После подтверждения возраста проверяем, выбрана ли точка самовывоза
+            // Если не выбрана - открываем выбор точки
+            setTimeout(() => {
+                if (!selectedPickupLocation) {
+                    console.log('Точка самовывоза не выбрана, открываем выбор...');
+                    selectPickupLocation();
+                } else {
+                    // Если точка уже выбрана, обновляем каталог
+                    console.log('Точка уже выбрана:', selectedPickupLocation);
+                    displayProducts();
+                }
+            }, 300); // Небольшая задержка для плавности
+            
         } else {
             if (tg && tg.showAlert) {
                 tg.showAlert('Доступ запрещен. Продажа никотинсодержащей продукции лицам младше 18 лет запрещена.');
@@ -545,7 +559,8 @@ function init() {
     loadProductsFromGoogleSheets().then((loadedProducts) => {
         console.log('✅ Товары загружены, инициализация завершена');
         console.log('   Загружено товаров:', loadedProducts ? loadedProducts.length : products.length);
-        // Отображаем товары только если точка выбрана
+        // Товары будут показаны после выбора точки самовывоза
+        // Если точка уже выбрана (из localStorage), показываем товары
         if (selectedPickupLocation) {
             if (typeof displayProducts === 'function') {
                 displayProducts();
@@ -554,6 +569,7 @@ function init() {
             }
         } else {
             // Показываем сообщение о необходимости выбора точки
+            // Но не открываем выбор автоматически - это будет после подтверждения возраста
             showLocationRequiredMessage();
         }
     }).catch(err => {
@@ -2955,8 +2971,9 @@ function selectPickupLocation() {
                 // Обновляем отображение точки в шапке
                 updatePickupLocationDisplay();
                 
-                // Обновляем отображение товаров, если мы на странице каталога
-                if (currentPage === 'catalog') {
+                // Всегда обновляем отображение товаров на странице каталога
+                // Это важно, особенно при первом выборе точки после подтверждения возраста
+                if (currentPage === 'catalog' || !currentPage) {
                     displayProducts();
                 }
                 
