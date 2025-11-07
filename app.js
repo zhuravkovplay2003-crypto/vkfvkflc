@@ -3436,11 +3436,13 @@ function getBookedTimesForDate(dateKey) {
         if (!Array.isArray(allOrders)) return [];
         
         // Фильтруем заказы по дате и статусу (pending, confirmed и transferred - все занимают время)
+        // Исключаем отмененные и отклоненные заказы - их время становится свободным
         const bookedTimes = [];
         allOrders.forEach(order => {
             if (order.selectedDeliveryDay === dateKey && 
                 order.deliveryExactTime && 
-                (order.status === 'pending' || order.status === 'confirmed' || order.status === 'transferred')) {
+                (order.status === 'pending' || order.status === 'confirmed' || order.status === 'transferred') &&
+                order.status !== 'cancelled' && order.status !== 'rejected') {
                 bookedTimes.push(order.deliveryExactTime);
             }
         });
@@ -3543,7 +3545,7 @@ function showExactTimeSelectionModal(timeSlot) {
             exactTimes.push(`
                 <button ${isBooked ? 'disabled' : `onclick="setDeliveryExactTime('${timeStr}')"`}
                     style="${buttonStyle}">
-                    ${timeStr}${isBooked ? ' (занято)' : ''}
+                    ${timeStr}
                 </button>
             `);
         });
@@ -3608,7 +3610,7 @@ function showExactTimeSelectionModal(timeSlot) {
             exactTimes.push(`
                 <button ${isBooked ? 'disabled' : `onclick="setDeliveryExactTime('${timeStr}')"`}
                     style="${buttonStyle}">
-                    ${timeStr}${isBooked ? ' (занято)' : ''}
+                    ${timeStr}
                 </button>
             `);
         });
@@ -4752,6 +4754,40 @@ function checkout() {
         showToast(`Пожалуйста, выберите ${deliveryType === 'selfPickup' ? 'время самовывоза' : 'время доставки'}`, 'error', 3000);
     }
     
+    // Проверяем точное время (обязательно)
+    if (!deliveryExactTime) {
+        hasErrors = true;
+        const timeDisplay = document.getElementById('selected-delivery-time-display');
+        const timeDisplayDelivery = document.getElementById('selected-delivery-time-display-delivery');
+        if (timeDisplay) {
+            const timeBlock = timeDisplay.closest('div[onclick="showTimeSelectionModal()"]');
+            if (timeBlock) {
+                timeBlock.style.transition = 'all 0.3s ease';
+                timeBlock.style.border = '2px solid #ff3b30';
+                timeBlock.style.borderRadius = '10px';
+                setTimeout(() => {
+                    if (timeBlock) {
+                        timeBlock.style.border = '1px solid rgba(255,255,255,0.2)';
+                    }
+                }, 3000);
+            }
+        }
+        if (timeDisplayDelivery) {
+            const timeBlockDelivery = timeDisplayDelivery.closest('div[onclick="showTimeSelectionModal()"]');
+            if (timeBlockDelivery) {
+                timeBlockDelivery.style.transition = 'all 0.3s ease';
+                timeBlockDelivery.style.border = '2px solid #ff3b30';
+                timeBlockDelivery.style.borderRadius = '10px';
+                setTimeout(() => {
+                    if (timeBlockDelivery) {
+                        timeBlockDelivery.style.border = '2px solid #e5e5e5';
+                    }
+                }, 3000);
+            }
+        }
+        showToast('Пожалуйста, выберите точное время', 'error', 3000);
+    }
+    
     // Проверяем адрес/точку самовывоза
     if (deliveryType === 'selfPickup') {
         if (!selectedPickupLocation) {
@@ -5049,6 +5085,41 @@ function checkOrderStatus(orderId) {
     let attempts = 0;
     const maxAttempts = 120; // Проверяем 10 минут (120 раз по 5 секунд)
     
+    // Сразу делаем первую проверку статуса
+    (async () => {
+        try {
+            const response = await fetch(`${SERVER_URL}/api/orders/${orderId}/status`);
+            const data = await response.json();
+            
+            if (data.success && data.status) {
+                const order = orders.find(o => o.id === orderId);
+                if (order && order.status !== data.status) {
+                    // Если статус изменился, обновляем сразу
+                    order.status = data.status;
+                    localStorage.setItem('orders', JSON.stringify(orders));
+                    
+                    if (data.status === 'transferred') {
+                        // Перезагружаем заказы и обновляем UI
+                        const savedOrders = localStorage.getItem('orders');
+                        if (savedOrders) {
+                            try {
+                                const parsedOrders = JSON.parse(savedOrders);
+                                if (Array.isArray(parsedOrders)) {
+                                    orders = parsedOrders;
+                                }
+                            } catch (e) {
+                                console.error('Error loading orders:', e);
+                            }
+                        }
+                        showOrders();
+                    }
+                }
+            }
+        } catch (error) {
+            console.error('Error checking order status (initial):', error);
+        }
+    })();
+    
     orderStatusCheckIntervals[orderId] = setInterval(async () => {
         attempts++;
         
@@ -5260,7 +5331,7 @@ function checkOrderStatus(orderId) {
             clearInterval(orderStatusCheckIntervals[orderId]);
             delete orderStatusCheckIntervals[orderId];
         }
-    }, 5000); // Проверяем каждые 5 секунд
+    }, 3000); // Проверяем каждые 3 секунды для более быстрого обновления
 }
 
 // Функция для создания SVG монеты
@@ -6165,6 +6236,17 @@ function showFavorites() {
                             ${getHeartFilledIcon('#ff4444')}
                         </span>
                     </button>
+                    <button onclick="event.stopPropagation(); addToCartFromFavorites(${productId}, '${flavor || ''}', '${strength || ''}')" 
+                        style="position: absolute; bottom: 8px; right: 8px; width: 36px; height: 36px; 
+                        border: none; background: rgba(0, 122, 255, 0.95); cursor: pointer; 
+                        border-radius: 50%; display: flex; align-items: center; justify-content: center;
+                        transition: all 0.2s; z-index: 10; padding: 0; box-shadow: 0 2px 8px rgba(0, 122, 255, 0.3);"
+                        onmouseover="this.style.transform='scale(1.1)'; this.style.background='rgba(0, 122, 255, 1)'; this.style.boxShadow='0 4px 12px rgba(0, 122, 255, 0.4)'"
+                        onmouseout="this.style.transform='scale(1)'; this.style.background='rgba(0, 122, 255, 0.95)'; this.style.boxShadow='0 2px 8px rgba(0, 122, 255, 0.3)'">
+                        <span style="display: flex; align-items: center; justify-content: center; width: 20px; height: 20px;">
+                            ${getCartIcon('#ffffff')}
+                        </span>
+                    </button>
                     </div>
                 <div style="flex: 1; display: flex; flex-direction: column; min-height: 0;">
                     <div style="font-weight: 700; font-size: 15px; margin-bottom: 8px; color: ${colors.text}; 
@@ -6541,9 +6623,25 @@ function showOrders() {
     container.style.background = colors.bg;
     container.style.color = colors.text;
     
-    // Показываем все заказы по порядку (новые сверху)
+    // Сортируем заказы: активные выше, отклоненные/отмененные ниже
     const filteredOrders = [...orders].sort((a, b) => {
-        // Сортируем по дате создания или дате заказа
+        // Определяем приоритет статуса (меньше = выше в списке)
+        const getStatusPriority = (status) => {
+            if (status === 'pending' || status === 'processing' || status === 'confirmed' || status === 'transferred') {
+                return 0; // Активные заказы - приоритет 0
+            }
+            return 1; // Отклоненные/отмененные - приоритет 1
+        };
+        
+        const priorityA = getStatusPriority(a.status);
+        const priorityB = getStatusPriority(b.status);
+        
+        // Сначала по приоритету статуса
+        if (priorityA !== priorityB) {
+            return priorityA - priorityB;
+        }
+        
+        // Если приоритет одинаковый, сортируем по дате создания (новые сверху)
         const dateA = a.createdAt ? new Date(a.createdAt) : new Date(a.date);
         const dateB = b.createdAt ? new Date(b.createdAt) : new Date(b.date);
         return dateB - dateA;
@@ -6839,20 +6937,55 @@ function showOrders() {
                         </button>
                     </div>
                 ` : order.status === 'transferred' ? `
-                    <div style="padding: 16px; background: linear-gradient(135deg, #E3F2FD 0%, #BBDEFB 100%); 
-                        border-radius: 12px; text-align: center; border: 2px solid #2196F3;">
-                        <div style="width: 32px; height: 32px; margin: 0 auto 8px; display: flex; align-items: center; justify-content: center;">${getPackageIcon('#2196F3')}</div>
-                        <div style="font-weight: 600; color: #1976d2; font-size: 14px; margin-bottom: 4px;">Заказ передан</div>
-                        <div style="font-size: 12px; color: #666; margin-bottom: 8px;">Спасибо за покупку!</div>
-                        ${order.vapeCoinsEarned ? `
-                            <div style="padding: 8px; background: rgba(255, 152, 0, 0.1); border-radius: 8px; margin-top: 8px;">
-                                <div style="font-size: 11px; color: #666; margin-bottom: 4px;">Начислено Vape Coins:</div>
-                                <div style="font-weight: 600; color: #FF9800; font-size: 14px; display: flex; align-items: center; justify-content: center; gap: 4px;">
-                                    <span style="width: 16px; height: 16px; display: flex; align-items: center; justify-content: center;">${getCoinIcon('#FF9800', 16)}</span>
-                                    ${order.vapeCoinsEarned}
-                                </div>
+                    <div style="padding: 24px; background: linear-gradient(135deg, #4CAF50 0%, #2E7D32 100%); 
+                        border-radius: 16px; text-align: center; border: 2px solid #4CAF50; box-shadow: 0 8px 24px rgba(76, 175, 80, 0.3); position: relative; overflow: hidden;">
+                        <!-- Декоративные элементы -->
+                        <div style="position: absolute; top: -20px; right: -20px; width: 100px; height: 100px; background: rgba(255, 255, 255, 0.1); border-radius: 50%;"></div>
+                        <div style="position: absolute; bottom: -30px; left: -30px; width: 120px; height: 120px; background: rgba(255, 255, 255, 0.08); border-radius: 50%;"></div>
+                        
+                        <div style="position: relative; z-index: 1;">
+                            <div style="width: 64px; height: 64px; margin: 0 auto 16px; display: flex; align-items: center; justify-content: center; 
+                                background: rgba(255, 255, 255, 0.2); border-radius: 50%; backdrop-filter: blur(10px);">
+                                ${getSuccessIcon('#ffffff').replace('width="24" height="24"', 'width="32" height="32"')}
                             </div>
-                        ` : ''}
+                            <div style="font-weight: 700; color: #ffffff; font-size: 20px; margin-bottom: 8px; text-shadow: 0 2px 4px rgba(0,0,0,0.2);">Спасибо за покупку!</div>
+                            <div style="font-size: 14px; color: rgba(255, 255, 255, 0.95); margin-bottom: 16px;">Заказ успешно передан</div>
+                            
+                            ${order.vapeCoinsEarned && order.vapeCoinsEarned > 0 ? `
+                                <div style="padding: 12px; background: rgba(255, 255, 255, 0.25); border-radius: 12px; margin-top: 12px; backdrop-filter: blur(10px); border: 1px solid rgba(255, 255, 255, 0.3);">
+                                    <div style="font-size: 12px; color: rgba(255, 255, 255, 0.9); margin-bottom: 6px; font-weight: 500;">Начислено Vape Coins</div>
+                                    <div style="font-weight: 700; color: #ffffff; font-size: 18px; display: flex; align-items: center; justify-content: center; gap: 6px;">
+                                        <span style="width: 20px; height: 20px; display: flex; align-items: center; justify-content: center;">${getCoinIcon('#ffffff', 20)}</span>
+                                        <span>${order.vapeCoinsEarned.toFixed(1)}</span>
+                                    </div>
+                                </div>
+                            ` : ''}
+                            
+                            ${(() => {
+                                const stampsAdded = localStorage.getItem(`stamps_added_${order.id}`);
+                                if (stampsAdded) {
+                                    const totalItems = order.items.reduce((sum, item) => {
+                                        const paymentMethod = item.paymentMethod || 'money';
+                                        if (paymentMethod === 'money') {
+                                            return sum + item.quantity;
+                                        }
+                                        return sum;
+                                    }, 0);
+                                    const stampsToAdd = Math.floor(totalItems / 2);
+                                    if (stampsToAdd > 0) {
+                                        return `
+                                            <div style="padding: 12px; background: rgba(255, 255, 255, 0.25); border-radius: 12px; margin-top: 12px; backdrop-filter: blur(10px); border: 1px solid rgba(255, 255, 255, 0.3);">
+                                                <div style="font-size: 12px; color: rgba(255, 255, 255, 0.9); margin-bottom: 6px; font-weight: 500;">Начислено штампов</div>
+                                                <div style="font-weight: 700; color: #ffffff; font-size: 18px;">
+                                                    + ${stampsToAdd} ${stampsToAdd === 1 ? 'штамп' : stampsToAdd < 5 ? 'штампа' : 'штампов'}
+                                                </div>
+                                            </div>
+                                        `;
+                                    }
+                                }
+                                return '';
+                            })()}
+                        </div>
                     </div>
                 ` : order.status === 'rejected' ? `
                     <div style="padding: 16px; background: linear-gradient(135deg, #FFEBEE 0%, #FFCDD2 100%); 
@@ -9354,6 +9487,25 @@ window.selectFlavor = selectFlavor;
 window.showFlavorModal = showFlavorModal;
 window.selectFlavorFromModal = selectFlavorFromModal;
 window.addToCart = addToCart;
+window.addToCartFromFavorites = addToCartFromFavorites;
+
+// Добавить в корзину из избранного
+function addToCartFromFavorites(productId, flavor = null, strength = null) {
+    // Преобразуем строки в null если они пустые
+    const flavorValue = (flavor && flavor !== '' && flavor !== 'null') ? flavor : null;
+    const strengthValue = (strength && strength !== '' && strength !== 'null') ? strength : null;
+    
+    // Вызываем обычную функцию addToCart
+    addToCart(productId, strengthValue, flavorValue);
+    
+    // Показываем уведомление
+    showToast('Товар добавлен в корзину', 'success', 2000);
+    
+    // Тактильная обратная связь
+    if (tg && tg.HapticFeedback) {
+        tg.HapticFeedback.impactOccurred('light');
+    }
+}
 window.changeQuantity = changeQuantity;
 window.removeFromCart = removeFromCart;
 window.removeFromFavorites = removeFromFavorites;
