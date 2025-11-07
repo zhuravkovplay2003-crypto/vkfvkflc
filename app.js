@@ -402,11 +402,15 @@ function updatePickupLocationDisplay() {
     const locationText = document.getElementById('pickup-location-text');
     if (locationText) {
         if (selectedPickupLocation) {
-            // Обрезаем текст если слишком длинный
+            // Обрезаем текст если слишком длинный, но добавляем отступ справа
             const shortLocation = selectedPickupLocation.length > 20 
                 ? selectedPickupLocation.substring(0, 17) + '...' 
                 : selectedPickupLocation;
+            // Убираем эмодзи и добавляем правильные отступы
             locationText.textContent = shortLocation;
+            locationText.style.paddingRight = '8px';
+            locationText.style.wordBreak = 'break-word';
+            locationText.style.overflowWrap = 'break-word';
         } else {
             locationText.textContent = 'Выберите точку';
         }
@@ -1938,7 +1942,7 @@ function showProduct(productId, favoriteFlavor = null, favoriteStrength = null) 
                         <button disabled style="width: 100%; padding: 16px; 
                             background: #cccccc; color: white; border: none; border-radius: 12px; 
                             font-size: 16px; font-weight: 600; cursor: not-allowed; margin-top: 20px; opacity: 0.6;">
-                            ❌ Нет в наличии
+                            Нет в наличии
                             </button>
                         `;
                 } else {
@@ -2282,11 +2286,45 @@ function showFlavorModal() {
             return false;
         };
         
-        flavorCard.addEventListener('click', handleSelect, {once: true});
+        // Отслеживаем начало касания для различения клика и скролла
+        let touchStartY = 0;
+        let touchStartTime = 0;
+        let isScrolling = false;
+        
+        flavorCard.addEventListener('touchstart', function(e) {
+            touchStartY = e.touches[0].clientY;
+            touchStartTime = Date.now();
+            isScrolling = false;
+        }, {passive: true});
+        
+        flavorCard.addEventListener('touchmove', function(e) {
+            const touchY = e.touches[0].clientY;
+            const deltaY = Math.abs(touchY - touchStartY);
+            if (deltaY > 10) {
+                isScrolling = true;
+            }
+        }, {passive: true});
+        
         flavorCard.addEventListener('touchend', function(e) {
+            const touchDuration = Date.now() - touchStartTime;
+            const touchY = e.changedTouches[0].clientY;
+            const deltaY = Math.abs(touchY - touchStartY);
+            
+            // Если это был скролл (большое перемещение или долгое касание), не выбираем вкус
+            if (isScrolling || deltaY > 10 || touchDuration > 300) {
+                return;
+            }
+            
             e.preventDefault();
             handleSelect(e);
         }, {passive: false, once: true});
+        
+        flavorCard.addEventListener('click', function(e) {
+            // Проверяем, не был ли это скролл
+            if (!isScrolling) {
+                handleSelect(e);
+            }
+        }, {once: true});
         
         grid.appendChild(flavorCard);
     });
@@ -3487,9 +3525,16 @@ function generateTimeSlots() {
         const timeSlot = `${targetDay}|${startHour}:00-${endHour}:00`;
         
         // Проверяем, не прошло ли время
+        // Если сейчас 19:41, то должны быть доступны 19:40, 19:50 и диапазон 19-20
         if (isToday) {
-            if (hour < currentHour || (hour === currentHour && 0 <= currentMinute)) {
-                continue; // Пропускаем прошедшее время
+            // Для текущего часа показываем диапазон, если еще не прошло 50 минут
+            if (hour === currentHour) {
+                if (currentMinute >= 50) {
+                    continue; // Если уже 50+ минут, пропускаем этот час
+                }
+                // Иначе показываем диапазон (19:00-20:00 если сейчас 19:41)
+            } else if (hour < currentHour) {
+                continue; // Пропускаем прошедшие часы
             }
         }
         
@@ -4004,8 +4049,42 @@ function showExactTimeSelectionModal(timeSlot) {
         // Генерируем времена от начала до конца, НЕ включая конечное время
         // Например, для 15-16 генерируем: 15:00, 15:10, ..., 15:50 (БЕЗ 16:00)
         // Для 16-17 генерируем: 16:00, 16:10, ..., 16:50 (БЕЗ 17:00)
+        // Если сейчас 19:41, то должны быть доступны 19:40, 19:50 и диапазон 19-20
+        const moscowTime = getMoscowTime();
+        const isTodayExact = dateKey === getMoscowDateString();
+        const currentHourExact = moscowTime.getUTCHours();
+        const currentMinuteExact = moscowTime.getUTCMinutes();
+        
         while (true) {
             const timeStr = `${currentHour < 10 ? '0' : ''}${currentHour}:${currentMin < 10 ? '0' : ''}${currentMin}`;
+            
+            // Проверяем, не прошло ли это время (только для сегодня)
+            if (isTodayExact && currentHour === currentHourExact) {
+                // Если это текущий час, показываем только будущие времена (19:40, 19:50 если сейчас 19:41)
+                if (currentMin <= currentMinuteExact) {
+                    // Пропускаем прошедшие времена, но продолжаем цикл
+                    currentMin += 10;
+                    if (currentMin >= 60) {
+                        currentMin = 0;
+                        currentHour++;
+                        if (currentHour >= 24) {
+                            currentHour = 0;
+                        }
+                    }
+                    continue;
+                }
+            } else if (isTodayExact && currentHour < currentHourExact) {
+                // Пропускаем прошедшие часы
+                currentMin += 10;
+                if (currentMin >= 60) {
+                    currentMin = 0;
+                    currentHour++;
+                    if (currentHour >= 24) {
+                        currentHour = 0;
+                    }
+                }
+                continue;
+            }
             
             // Проверяем, не достигли ли мы конечного времени (если да, не добавляем и выходим)
             if (currentHour === endHourInt && currentMin === endMinInt) {
@@ -5617,38 +5696,73 @@ function checkOrderStatus(orderId) {
                                     stamps = totalStampsValue % 10;
                                     partialItemsProgress = newPartialProgress;
                                     
-                                    // Проверяем бонус за 10 штампов только если добавились целые штампы
-                                    if (stampsToAdd > 0) {
-                                        // Проверяем бонус за 10 штампов
-                                        const oldSets = Math.floor(oldTotalStamps / 10);
-                                        const newSets = Math.floor(totalStampsValue / 10);
-                                        const newCompletedSets = newSets - oldSets;
+                                    // Проверяем бонусы за штампы (5 и 10)
+                                    // Проверяем бонус за 5 штампов (только если перешли порог 5)
+                                    const oldStampsMod10 = oldTotalStamps % 10;
+                                    const newStampsMod10 = totalStampsValue % 10;
+                                    let bonus5Coins = 0;
+                                    
+                                    // Если перешли порог 5 штампов (было меньше 5, стало 5 или больше)
+                                    if (oldStampsMod10 < 5 && newStampsMod10 >= 5) {
+                                        bonus5Coins = 5;
                                         
-                                        if (newCompletedSets > 0) {
-                                            const bonusCoins = newCompletedSets * 10;
-                                            const savedCoins = localStorage.getItem('vapeCoins');
-                                            let currentCoins = savedCoins ? parseFloat(savedCoins) : 0;
-                                            currentCoins += bonusCoins;
-                                            localStorage.setItem('vapeCoins', currentCoins.toString());
-                                            
-                                            // Обновляем глобальную переменную vapeCoins
-                                            vapeCoins = currentCoins;
-                                            
-                                            const savedHistory = localStorage.getItem('vapeCoinsHistory');
-                                            let history = savedHistory ? JSON.parse(savedHistory) : [];
-                                            history.unshift({
-                                                id: `vc_${Date.now()}`,
-                                                date: new Date().toISOString(),
-                                                type: 'earned',
-                                                amount: bonusCoins,
-                                                description: `Бонус за ${newCompletedSets} ${newCompletedSets === 1 ? 'набор из 10 штампов' : 'наборов из 10 штампов'}`,
-                                                orderId: orderId
-                                            });
-                                            localStorage.setItem('vapeCoinsHistory', JSON.stringify(history));
-                                            
-                                            // Обновляем глобальную переменную vapeCoinsHistory
-                                            vapeCoinsHistory = history;
-                                        }
+                                        // Загружаем актуальный баланс коинов
+                                        const savedCoins = localStorage.getItem('vapeCoins');
+                                        let currentCoins = savedCoins ? parseFloat(savedCoins) : 0;
+                                        currentCoins += bonus5Coins;
+                                        localStorage.setItem('vapeCoins', currentCoins.toString());
+                                        
+                                        // Обновляем глобальную переменную vapeCoins
+                                        vapeCoins = currentCoins;
+                                        
+                                        const savedHistory = localStorage.getItem('vapeCoinsHistory');
+                                        let history = savedHistory ? JSON.parse(savedHistory) : [];
+                                        history.unshift({
+                                            id: `vc_${Date.now()}`,
+                                            date: new Date().toISOString(),
+                                            type: 'earned',
+                                            amount: bonus5Coins,
+                                            description: 'Бонус за 5 штампов',
+                                            orderId: orderId
+                                        });
+                                        localStorage.setItem('vapeCoinsHistory', JSON.stringify(history));
+                                        
+                                        // Обновляем глобальную переменную vapeCoinsHistory
+                                        vapeCoinsHistory = history;
+                                    }
+                                    
+                                    // Проверяем бонус за 10 штампов
+                                    const oldSets = Math.floor(oldTotalStamps / 10);
+                                    const newSets = Math.floor(totalStampsValue / 10);
+                                    const newCompletedSets = newSets - oldSets;
+                                    let bonus10Coins = 0;
+                                    
+                                    if (newCompletedSets > 0) {
+                                        bonus10Coins = newCompletedSets * 10;
+                                        
+                                        // Загружаем актуальный баланс коинов
+                                        const savedCoins = localStorage.getItem('vapeCoins');
+                                        let currentCoins = savedCoins ? parseFloat(savedCoins) : 0;
+                                        currentCoins += bonus10Coins;
+                                        localStorage.setItem('vapeCoins', currentCoins.toString());
+                                        
+                                        // Обновляем глобальную переменную vapeCoins
+                                        vapeCoins = currentCoins;
+                                        
+                                        const savedHistory = localStorage.getItem('vapeCoinsHistory');
+                                        let history = savedHistory ? JSON.parse(savedHistory) : [];
+                                        history.unshift({
+                                            id: `vc_${Date.now()}`,
+                                            date: new Date().toISOString(),
+                                            type: 'earned',
+                                            amount: bonus10Coins,
+                                            description: `Бонус за ${newCompletedSets} ${newCompletedSets === 1 ? 'набор из 10 штампов' : 'наборов из 10 штампов'}`,
+                                            orderId: orderId
+                                        });
+                                        localStorage.setItem('vapeCoinsHistory', JSON.stringify(history));
+                                        
+                                        // Обновляем глобальную переменную vapeCoinsHistory
+                                        vapeCoinsHistory = history;
                                     }
                                     
                                     // Обновляем UI акций для отображения прогресса штампов
@@ -5738,6 +5852,9 @@ function checkOrderStatus(orderId) {
                                 }
                             }
                             
+                            // Сохраняем coinsEarned в заказе для отображения
+                            order.vapeCoinsEarned = coinsEarned;
+                            
                             // Проверяем, не начислены ли уже коины за этот заказ
                             const coinsAlreadyAdded = localStorage.getItem(`coins_added_${orderId}`);
                             
@@ -5773,9 +5890,6 @@ function checkOrderStatus(orderId) {
                                 });
                                 localStorage.setItem('vapeCoinsHistory', JSON.stringify(vapeCoinsHistory));
                             }
-                            
-                            // Обновляем баланс в заказе
-                            order.vapeCoinsEarned = coinsEarned;
                             
                             // Начисляем штампы за заказ (2 товара = 1 штамп, только за товары оплаченные деньгами)
                             // Проверяем, не начислены ли уже штампы за этот заказ
@@ -5818,47 +5932,86 @@ function checkOrderStatus(orderId) {
                                     stamps = totalStampsValue % 10;
                                     partialItemsProgress = newPartialProgress;
                                     
-                                    // Проверяем бонус за 10 штампов только если добавились целые штампы
-                                    if (stampsToAdd > 0) {
+                                    // Проверяем бонусы за штампы (5 и 10)
+                                    // Проверяем бонус за 5 штампов (только если перешли порог 5)
+                                    const oldStampsMod10 = oldTotalStamps % 10;
+                                    const newStampsMod10 = totalStampsValue % 10;
+                                    let bonus5Coins = 0;
+                                    
+                                    // Если перешли порог 5 штампов (было меньше 5, стало 5 или больше)
+                                    if (oldStampsMod10 < 5 && newStampsMod10 >= 5) {
+                                        bonus5Coins = 5;
                                         
-                                        // Проверяем бонус за 10 штампов
-                                        const oldSets = Math.floor(oldTotalStamps / 10);
-                                        const newSets = Math.floor(totalStampsValue / 10);
-                                        const newCompletedSets = newSets - oldSets;
-                                        
-                                        if (newCompletedSets > 0) {
-                                            bonusCoins = newCompletedSets * 10;
-                                            
-                                            // Загружаем актуальный баланс коинов
-                                            const savedCoins = localStorage.getItem('vapeCoins');
-                                            if (savedCoins) {
-                                                vapeCoins = parseFloat(savedCoins) || 0;
-                                            }
-                                            
-                                            vapeCoins += bonusCoins;
-                                            localStorage.setItem('vapeCoins', vapeCoins.toString());
-                                            
-                                            // Загружаем актуальную историю
-                                            const savedHistory = localStorage.getItem('vapeCoinsHistory');
-                                            if (savedHistory) {
-                                                try {
-                                                    vapeCoinsHistory = JSON.parse(savedHistory);
-                                                } catch (e) {
-                                                    vapeCoinsHistory = [];
-                                                }
-                                            }
-                                            
-                                            vapeCoinsHistory.unshift({
-                                                id: `vc_${Date.now()}`,
-                                                date: new Date().toISOString(),
-                                                type: 'earned',
-                                                amount: bonusCoins,
-                                                description: `Бонус за ${newCompletedSets} ${newCompletedSets === 1 ? 'набор из 10 штампов' : 'наборов из 10 штампов'}`,
-                                                orderId: orderId
-                                            });
-                                            localStorage.setItem('vapeCoinsHistory', JSON.stringify(vapeCoinsHistory));
+                                        // Загружаем актуальный баланс коинов
+                                        const savedCoins = localStorage.getItem('vapeCoins');
+                                        if (savedCoins) {
+                                            vapeCoins = parseFloat(savedCoins) || 0;
                                         }
+                                        
+                                        vapeCoins += bonus5Coins;
+                                        localStorage.setItem('vapeCoins', vapeCoins.toString());
+                                        
+                                        // Загружаем актуальную историю
+                                        const savedHistory = localStorage.getItem('vapeCoinsHistory');
+                                        if (savedHistory) {
+                                            try {
+                                                vapeCoinsHistory = JSON.parse(savedHistory);
+                                            } catch (e) {
+                                                vapeCoinsHistory = [];
+                                            }
+                                        }
+                                        
+                                        vapeCoinsHistory.unshift({
+                                            id: `vc_${Date.now()}`,
+                                            date: new Date().toISOString(),
+                                            type: 'earned',
+                                            amount: bonus5Coins,
+                                            description: 'Бонус за 5 штампов',
+                                            orderId: orderId
+                                        });
+                                        localStorage.setItem('vapeCoinsHistory', JSON.stringify(vapeCoinsHistory));
                                     }
+                                    
+                                    // Проверяем бонус за 10 штампов
+                                    const oldSets = Math.floor(oldTotalStamps / 10);
+                                    const newSets = Math.floor(totalStampsValue / 10);
+                                    const newCompletedSets = newSets - oldSets;
+                                    
+                                    if (newCompletedSets > 0) {
+                                        bonusCoins = newCompletedSets * 10;
+                                        
+                                        // Загружаем актуальный баланс коинов
+                                        const savedCoins = localStorage.getItem('vapeCoins');
+                                        if (savedCoins) {
+                                            vapeCoins = parseFloat(savedCoins) || 0;
+                                        }
+                                        
+                                        vapeCoins += bonusCoins;
+                                        localStorage.setItem('vapeCoins', vapeCoins.toString());
+                                        
+                                        // Загружаем актуальную историю
+                                        const savedHistory = localStorage.getItem('vapeCoinsHistory');
+                                        if (savedHistory) {
+                                            try {
+                                                vapeCoinsHistory = JSON.parse(savedHistory);
+                                            } catch (e) {
+                                                vapeCoinsHistory = [];
+                                            }
+                                        }
+                                        
+                                        vapeCoinsHistory.unshift({
+                                            id: `vc_${Date.now()}`,
+                                            date: new Date().toISOString(),
+                                            type: 'earned',
+                                            amount: bonusCoins,
+                                            description: `Бонус за ${newCompletedSets} ${newCompletedSets === 1 ? 'набор из 10 штампов' : 'наборов из 10 штампов'}`,
+                                            orderId: orderId
+                                        });
+                                        localStorage.setItem('vapeCoinsHistory', JSON.stringify(vapeCoinsHistory));
+                                    }
+                                    
+                                    // Обновляем bonusCoins для уведомления
+                                    bonusCoins = bonus5Coins + (bonusCoins || 0);
                                 }
                             }
                             
@@ -5871,26 +6024,38 @@ function checkOrderStatus(orderId) {
                             const currentPartialProgress = savedPartialProgress ? parseFloat(savedPartialProgress) : 0;
                             const partialProgressPercent = Math.round(currentPartialProgress * 100);
                             
-                            if (coinsEarnedValue > 0 && stampsToAdd > 0) {
-                                toastMessage = `Заказ передан!\n+ ${stampsToAdd} ${stampsToAdd === 1 ? 'штамп' : stampsToAdd < 5 ? 'штампа' : 'штампов'}\n+ ${coinsEarnedValue.toFixed(1)} коинов`;
-                            } else if (stampsToAdd > 0) {
-                                toastMessage = `Заказ передан!\n+ ${stampsToAdd} ${stampsToAdd === 1 ? 'штамп' : stampsToAdd < 5 ? 'штампа' : 'штампов'}`;
-                            } else if (coinsEarnedValue > 0 && currentPartialProgress > 0) {
-                                toastMessage = `Заказ передан!\n+ ${coinsEarnedValue.toFixed(1)} коинов\n+ ${partialProgressPercent}% штампа`;
+                            // Определяем текст для штампов (с учетом 0.5)
+                            let stampsText = '';
+                            if (stampsToAdd > 0) {
+                                stampsText = `+ ${stampsToAdd} ${stampsToAdd === 1 ? 'штамп' : stampsToAdd < 5 ? 'штампа' : 'штампов'}`;
+                            } else if (currentPartialProgress > 0) {
+                                // Если добавился только частичный прогресс (0.5 штампа)
+                                stampsText = `+ 0.5 штампа`;
+                            }
+                            
+                            if (coinsEarnedValue > 0 && stampsText) {
+                                toastMessage = `Заказ передан!\n${stampsText}\n+ ${coinsEarnedValue.toFixed(1)} коинов`;
+                            } else if (stampsText) {
+                                toastMessage = `Заказ передан!\n${stampsText}`;
                             } else if (coinsEarnedValue > 0) {
                                 toastMessage = `Заказ передан! Начислено ${coinsEarnedValue.toFixed(1)} Vape Coins`;
-                            } else if (currentPartialProgress > 0) {
-                                toastMessage = `Заказ передан!\n+ ${partialProgressPercent}% штампа`;
                             } else {
                                 toastMessage = 'Заказ передан клиенту';
                             }
                             
                             showToast(toastMessage, 'success', 5000);
                             
-                            if (bonusCoins > 0) {
+                            // Показываем уведомления о бонусах
+                            if (bonus5Coins > 0) {
                                 setTimeout(() => {
-                                    showToast(`Бонус за штампы!\n+ ${bonusCoins} коинов`, 'success', 4000);
+                                    showToast(`Награда за 5 штампов!\n+ ${bonus5Coins} коинов`, 'success', 4000);
                                 }, 3500);
+                            }
+                            
+                            if (bonusCoins > 0 && bonusCoins !== bonus5Coins) {
+                                setTimeout(() => {
+                                    showToast(`Бонус за штампы!\n+ ${bonusCoins - (bonus5Coins || 0)} коинов`, 'success', 4000);
+                                }, bonus5Coins > 0 ? 8000 : 3500);
                             }
                             
                             // ОБЯЗАТЕЛЬНО сохраняем финальный статус
@@ -6926,7 +7091,7 @@ function showFavorites() {
                 border: 2px solid ${colors.border}; box-shadow: 0 4px 12px rgba(0,0,0,${darkMode ? '0.3' : '0.08'}); 
                 position: relative; transform: translateY(20px); opacity: 0; cursor: pointer;
                 transition: transform 0.4s ease ${index * 0.05}s, opacity 0.4s ease ${index * 0.05}s, box-shadow 0.2s ease, margin 0.35s cubic-bezier(0.4, 0, 0.2, 1), padding 0.35s cubic-bezier(0.4, 0, 0.2, 1), height 0.35s cubic-bezier(0.4, 0, 0.2, 1);
-                display: flex; flex-direction: column; height: 100%; ${!isInStock ? 'opacity: 0.5; filter: grayscale(100%);' : ''}"
+                display: flex; flex-direction: column; height: 100%; ${!isInStock ? 'opacity: 0.5;' : ''}"
                 onmouseover="this.style.boxShadow='0 6px 16px rgba(0,0,0,${darkMode ? '0.4' : '0.12'})'"
                 onmouseout="this.style.boxShadow='0 4px 12px rgba(0,0,0,${darkMode ? '0.3' : '0.08'})'">
                 <div style="position: relative; width: 100%; aspect-ratio: 1; background: ${colors.bgSecondary}; border-radius: 12px; 
@@ -6936,10 +7101,10 @@ function showFavorites() {
                         style="position: absolute; top: 8px; right: 8px; width: 36px; height: 36px; 
                         border: none; background: rgba(255, 255, 255, 0.95); cursor: pointer; 
                         border-radius: 50%; display: flex; align-items: center; justify-content: center;
-                        transition: all 0.2s; z-index: 10; padding: 0; box-shadow: 0 2px 8px rgba(0,0,0,0.15);"
+                        transition: all 0.2s; z-index: 10; padding: 0; box-shadow: 0 2px 8px rgba(0,0,0,0.15); filter: none !important;"
                         onmouseover="this.style.transform='scale(1.1)'; this.style.background='rgba(255, 255, 255, 1)'"
                         onmouseout="this.style.transform='scale(1)'; this.style.background='rgba(255, 255, 255, 0.95)'">
-                        <span id="favorite-heart-icon-${productId}-${flavor || ''}-${strength || ''}" style="display: flex; align-items: center; justify-content: center; transition: all 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);">
+                        <span id="favorite-heart-icon-${productId}-${flavor || ''}-${strength || ''}" style="display: flex; align-items: center; justify-content: center; transition: all 0.4s cubic-bezier(0.34, 1.56, 0.64, 1); filter: none !important;">
                             ${getHeartFilledIcon('#ff4444')}
                         </span>
                     </button>
@@ -7705,8 +7870,11 @@ function showOrders() {
                         ${(() => {
                             let rewardsHtml = '';
                             const coinsEarned = order.vapeCoinsEarned || 0;
+                            
+                            // Проверяем начислены ли штампы за этот заказ
                             const stampsAdded = localStorage.getItem(`stamps_added_${order.id}`);
                             let stampsToAdd = 0;
+                            let showPartialStamp = false;
                             
                             if (stampsAdded) {
                                 const totalItems = order.items.reduce((sum, item) => {
@@ -7716,10 +7884,29 @@ function showOrders() {
                                     }
                                     return sum;
                                 }, 0);
-                                stampsToAdd = Math.floor(totalItems / 2);
+                                
+                                if (totalItems > 0) {
+                                    // Используем правильную логику: 1 товар = 0.5 штампа
+                                    // Проверяем сколько штампов было добавлено за этот заказ
+                                    const savedStamps = localStorage.getItem('stamps');
+                                    const currentTotalStamps = savedStamps ? parseInt(savedStamps) : 0;
+                                    
+                                    // Вычисляем сколько штампов добавилось (целые)
+                                    stampsToAdd = Math.floor(totalItems / 2);
+                                    
+                                    // Проверяем частичный прогресс (для 1 товара = 0.5)
+                                    const savedPartialProgress = localStorage.getItem('partialItemsProgress');
+                                    const currentPartialProgress = savedPartialProgress ? parseFloat(savedPartialProgress) : 0;
+                                    
+                                    // Если был 1 товар и нет целых штампов, показываем 0.5
+                                    if (totalItems === 1 && stampsToAdd === 0 && currentPartialProgress >= 0.5) {
+                                        showPartialStamp = true;
+                                    }
+                                }
                             }
                             
-                            if (coinsEarned > 0 || stampsToAdd > 0) {
+                            // Показываем награды если есть коины или штампы
+                            if (coinsEarned > 0 || stampsToAdd > 0 || showPartialStamp) {
                                 rewardsHtml = '<div style="margin-top: 12px; display: flex; flex-direction: column; gap: 8px; align-items: center;">';
                                 
                                 if (coinsEarned > 0) {
@@ -7731,11 +7918,20 @@ function showOrders() {
                                     `;
                                 }
                                 
+                                // Показываем штампы (включая 0.5)
                                 if (stampsToAdd > 0) {
                                     rewardsHtml += `
                                         <div style="display: flex; align-items: center; gap: 6px; color: #FF9800; font-weight: 600; font-size: 15px;">
                                             <span style="width: 20px; height: 20px; display: flex; align-items: center; justify-content: center;">${getTrophyIcon('#FF9800').replace('width="32" height="32"', 'width="20" height="20"')}</span>
                                             <span>+ ${stampsToAdd} ${stampsToAdd === 1 ? 'штамп' : stampsToAdd < 5 ? 'штампа' : 'штампов'}</span>
+                </div>
+                                    `;
+                                } else if (showPartialStamp) {
+                                    // Показываем 0.5 штампа если добавился только частичный прогресс
+                                    rewardsHtml += `
+                                        <div style="display: flex; align-items: center; gap: 6px; color: #FF9800; font-weight: 600; font-size: 15px;">
+                                            <span style="width: 20px; height: 20px; display: flex; align-items: center; justify-content: center;">${getTrophyIcon('#FF9800').replace('width="32" height="32"', 'width="20" height="20"')}</span>
+                                            <span>+ 0.5 штампа</span>
                 </div>
                                     `;
                                 }
