@@ -8,6 +8,9 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
+// Раздаем статические файлы из папки images
+app.use('/images', express.static(path.join(__dirname, 'images')));
+
 // Функции для работы с московским временем (UTC+3)
 function getMoscowTime() {
     const now = new Date();
