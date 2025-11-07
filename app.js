@@ -3437,10 +3437,12 @@ function getBookedTimesForDate(dateKey) {
         
         // Фильтруем заказы по дате и статусу (pending, confirmed и transferred - все занимают время)
         // Исключаем отмененные и отклоненные заказы - их время становится свободным
+        // Учитываем только заказы на самовывоз с точным временем (для доставки точное время не используется)
         const bookedTimes = [];
         allOrders.forEach(order => {
             if (order.selectedDeliveryDay === dateKey && 
                 order.deliveryExactTime && 
+                (order.deliveryType === 'selfPickup' || !order.deliveryType) && // Только самовывоз
                 (order.status === 'pending' || order.status === 'confirmed' || order.status === 'transferred') &&
                 order.status !== 'cancelled' && order.status !== 'rejected') {
                 bookedTimes.push(order.deliveryExactTime);
@@ -3880,31 +3882,34 @@ function setDeliveryTime(time) {
             modalContent.style.transform = 'scale(0.95)';
         }
         
-        // После завершения анимации удаляем и открываем новое окно
+        // После завершения анимации удаляем и открываем новое окно (только для самовывоза)
         setTimeout(() => {
             currentModal.remove();
             document.body.style.overflow = '';
-            // ОБЯЗАТЕЛЬНО открываем новое модальное окно для выбора точного времени
-            // Используем несколько способов для гарантии
-            console.log('Opening exact time modal with:', timeToStore);
+            // Открываем модальное окно точного времени только для самовывоза
+            if (deliveryType === 'selfPickup') {
+                console.log('Opening exact time modal with:', timeToStore);
+                setTimeout(() => {
+                    showExactTimeSelectionModal(timeToStore);
+                }, 50);
+                // Дублируем вызов для надежности
+                setTimeout(() => {
+                    const existing = document.querySelector('.exact-time-modal-overlay');
+                    if (!existing) {
+                        console.log('Modal not found, opening again');
+                        showExactTimeSelectionModal(timeToStore);
+                    }
+                }, 200);
+            }
+        }, 300);
+    } else {
+        // Если нет текущего модального окна, открываем сразу (только для самовывоза)
+        if (deliveryType === 'selfPickup') {
+            console.log('Opening exact time modal with (no current modal):', timeToStore);
             setTimeout(() => {
                 showExactTimeSelectionModal(timeToStore);
             }, 50);
-            // Дублируем вызов для надежности
-            setTimeout(() => {
-                const existing = document.querySelector('.exact-time-modal-overlay');
-                if (!existing) {
-                    console.log('Modal not found, opening again');
-                    showExactTimeSelectionModal(timeToStore);
-                }
-            }, 200);
-        }, 300);
-    } else {
-        // Если нет текущего модального окна, открываем сразу
-        console.log('Opening exact time modal with (no current modal):', timeToStore);
-        setTimeout(() => {
-            showExactTimeSelectionModal(timeToStore);
-        }, 50);
+        }
     }
     
     if (tg && tg.HapticFeedback) {
@@ -4754,11 +4759,10 @@ function checkout() {
         showToast(`Пожалуйста, выберите ${deliveryType === 'selfPickup' ? 'время самовывоза' : 'время доставки'}`, 'error', 3000);
     }
     
-    // Проверяем точное время (обязательно)
-    if (!deliveryExactTime) {
+    // Проверяем точное время (обязательно только для самовывоза)
+    if (deliveryType === 'selfPickup' && !deliveryExactTime) {
         hasErrors = true;
         const timeDisplay = document.getElementById('selected-delivery-time-display');
-        const timeDisplayDelivery = document.getElementById('selected-delivery-time-display-delivery');
         if (timeDisplay) {
             const timeBlock = timeDisplay.closest('div[onclick="showTimeSelectionModal()"]');
             if (timeBlock) {
@@ -4768,19 +4772,6 @@ function checkout() {
                 setTimeout(() => {
                     if (timeBlock) {
                         timeBlock.style.border = '1px solid rgba(255,255,255,0.2)';
-                    }
-                }, 3000);
-            }
-        }
-        if (timeDisplayDelivery) {
-            const timeBlockDelivery = timeDisplayDelivery.closest('div[onclick="showTimeSelectionModal()"]');
-            if (timeBlockDelivery) {
-                timeBlockDelivery.style.transition = 'all 0.3s ease';
-                timeBlockDelivery.style.border = '2px solid #ff3b30';
-                timeBlockDelivery.style.borderRadius = '10px';
-                setTimeout(() => {
-                    if (timeBlockDelivery) {
-                        timeBlockDelivery.style.border = '2px solid #e5e5e5';
                     }
                 }, 3000);
             }
@@ -5094,12 +5085,111 @@ function checkOrderStatus(orderId) {
             
             if (data.success && data.status) {
                 const order = orders.find(o => o.id === orderId);
-                if (order && order.status !== data.status) {
-                    // Если статус изменился, обновляем сразу
-                    order.status = data.status;
-                    localStorage.setItem('orders', JSON.stringify(orders));
+                if (order) {
+                    const oldStatus = order.status;
                     
+                    // Если статус изменился, обновляем сразу
+                    if (oldStatus !== data.status) {
+                        order.status = data.status;
+                        localStorage.setItem('orders', JSON.stringify(orders));
+                    }
+                    
+                    // Если статус 'transferred', начисляем коины и штампы (даже если статус не изменился)
                     if (data.status === 'transferred') {
+                        // Начисляем коины
+                        let coinsEarned = 0;
+                        if (data.order && data.order.vapeCoinsEarned !== undefined && data.order.vapeCoinsEarned !== null) {
+                            coinsEarned = data.order.vapeCoinsEarned;
+                        } else if (order.items && Array.isArray(order.items)) {
+                            order.items.forEach(item => {
+                                const paymentMethod = item.paymentMethod || 'money';
+                                if (paymentMethod === 'money') {
+                                    coinsEarned += (item.price * item.quantity) / 10;
+                                }
+                            });
+                        }
+                        
+                        const coinsAlreadyAdded = localStorage.getItem(`coins_added_${orderId}`);
+                        if (!coinsAlreadyAdded && coinsEarned > 0) {
+                            const savedCoins = localStorage.getItem('vapeCoins');
+                            let currentCoins = savedCoins ? parseFloat(savedCoins) : 0;
+                            currentCoins += coinsEarned;
+                            localStorage.setItem('vapeCoins', currentCoins.toString());
+                            localStorage.setItem(`coins_added_${orderId}`, 'true');
+                            
+                            const savedHistory = localStorage.getItem('vapeCoinsHistory');
+                            let history = savedHistory ? JSON.parse(savedHistory) : [];
+                            history.unshift({
+                                id: `vc_${Date.now()}`,
+                                date: new Date().toISOString(),
+                                type: 'earned',
+                                amount: coinsEarned,
+                                description: `Начислено за заказ: #${orderId.slice(-6)}`,
+                                orderId: orderId
+                            });
+                            localStorage.setItem('vapeCoinsHistory', JSON.stringify(history));
+                        }
+                        
+                        // Начисляем штампы
+                        const stampsAlreadyAdded = localStorage.getItem(`stamps_added_${orderId}`);
+                        if (!stampsAlreadyAdded) {
+                            const savedStamps = localStorage.getItem('stamps');
+                            let totalStampsValue = savedStamps ? parseInt(savedStamps) : 0;
+                            
+                            const totalItems = order.items.reduce((sum, item) => {
+                                const paymentMethod = item.paymentMethod || 'money';
+                                if (paymentMethod === 'money') {
+                                    return sum + item.quantity;
+                                }
+                                return sum;
+                            }, 0);
+                            
+                            if (totalItems > 0) {
+                                const stampsToAdd = Math.floor(totalItems / 2);
+                                if (stampsToAdd > 0) {
+                                    const oldTotalStamps = totalStampsValue;
+                                    totalStampsValue += stampsToAdd;
+                                    localStorage.setItem('stamps', totalStampsValue.toString());
+                                    localStorage.setItem(`stamps_added_${orderId}`, 'true');
+                                    
+                                    // Обновляем глобальные переменные
+                                    completedStampSets = Math.floor(totalStampsValue / 10);
+                                    stamps = totalStampsValue % 10;
+                                    
+                                    // Проверяем бонус за 10 штампов
+                                    const oldSets = Math.floor(oldTotalStamps / 10);
+                                    const newSets = Math.floor(totalStampsValue / 10);
+                                    const newCompletedSets = newSets - oldSets;
+                                    
+                                    if (newCompletedSets > 0) {
+                                        const bonusCoins = newCompletedSets * 10;
+                                        const savedCoins = localStorage.getItem('vapeCoins');
+                                        let currentCoins = savedCoins ? parseFloat(savedCoins) : 0;
+                                        currentCoins += bonusCoins;
+                                        localStorage.setItem('vapeCoins', currentCoins.toString());
+                                        
+                                        // Обновляем глобальную переменную vapeCoins
+                                        vapeCoins = currentCoins;
+                                        
+                                        const savedHistory = localStorage.getItem('vapeCoinsHistory');
+                                        let history = savedHistory ? JSON.parse(savedHistory) : [];
+                                        history.unshift({
+                                            id: `vc_${Date.now()}`,
+                                            date: new Date().toISOString(),
+                                            type: 'earned',
+                                            amount: bonusCoins,
+                                            description: `Бонус за ${newCompletedSets} ${newCompletedSets === 1 ? 'набор из 10 штампов' : 'наборов из 10 штампов'}`,
+                                            orderId: orderId
+                                        });
+                                        localStorage.setItem('vapeCoinsHistory', JSON.stringify(history));
+                                        
+                                        // Обновляем глобальную переменную vapeCoinsHistory
+                                        vapeCoinsHistory = history;
+                                    }
+                                }
+                            }
+                        }
+                        
                         // Перезагружаем заказы и обновляем UI
                         const savedOrders = localStorage.getItem('orders');
                         if (savedOrders) {
@@ -5226,11 +5316,7 @@ function checkOrderStatus(orderId) {
                             if (!stampsAlreadyAdded) {
                                 // Загружаем актуальное количество штампов
                                 const savedStamps = localStorage.getItem('stamps');
-                                if (savedStamps) {
-                                    const totalStampsValue = parseInt(savedStamps) || 0;
-                                    completedStampSets = Math.floor(totalStampsValue / 10);
-                                    stamps = totalStampsValue % 10;
-                                }
+                                let totalStampsValue = savedStamps ? parseInt(savedStamps) : 0;
                                 
                                 const totalItems = order.items.reduce((sum, item) => {
                                     const paymentMethod = item.paymentMethod || 'money';
@@ -5243,15 +5329,20 @@ function checkOrderStatus(orderId) {
                                 if (totalItems > 0) {
                                     stampsToAdd = Math.floor(totalItems / 2);
                                     if (stampsToAdd > 0) {
-                                        const totalStamps = completedStampSets * 10 + stamps;
-                                        const newTotalStamps = totalStamps + stampsToAdd;
-                                        completedStampSets = Math.floor(newTotalStamps / 10);
-                                        stamps = newTotalStamps % 10;
-                                        localStorage.setItem('stamps', newTotalStamps.toString());
+                                        const oldTotalStamps = totalStampsValue;
+                                        totalStampsValue += stampsToAdd;
+                                        localStorage.setItem('stamps', totalStampsValue.toString());
                                         localStorage.setItem(`stamps_added_${orderId}`, 'true'); // Помечаем что штампы начислены
                                         
+                                        // Обновляем глобальные переменные
+                                        completedStampSets = Math.floor(totalStampsValue / 10);
+                                        stamps = totalStampsValue % 10;
+                                        
                                         // Проверяем бонус за 10 штампов
-                                        const newCompletedSets = Math.floor(newTotalStamps / 10) - Math.floor(totalStamps / 10);
+                                        const oldSets = Math.floor(oldTotalStamps / 10);
+                                        const newSets = Math.floor(totalStampsValue / 10);
+                                        const newCompletedSets = newSets - oldSets;
+                                        
                                         if (newCompletedSets > 0) {
                                             bonusCoins = newCompletedSets * 10;
                                             
@@ -6873,7 +6964,8 @@ function showOrders() {
         let timeDisplay = '';
         if (order.deliveryTime) {
             timeDisplay = order.deliveryTime.includes('|') ? order.deliveryTime.split('|')[1] : order.deliveryTime;
-            if (order.deliveryExactTime) {
+            // Точное время показываем только для самовывоза
+            if (order.deliveryExactTime && (order.deliveryType === 'selfPickup' || !order.deliveryType)) {
                 timeDisplay += ` (${order.deliveryExactTime})`;
             }
         }
@@ -7044,13 +7136,13 @@ function showOrders() {
                                 return `
                                     <div style="font-size: 11px; opacity: 0.8; margin-top: 6px; display: flex; align-items: center; gap: 4px;">
                                         <span style="width: 12px; height: 12px; display: flex; align-items: center; justify-content: center;">${getClockIcon('#ffffff').replace('width="24" height="24"', 'width="12" height="12"')}</span>
-                                        <span>${dateText}${order.deliveryTime ? `, ${typeof order.deliveryTime === 'string' && order.deliveryTime.includes('|') ? order.deliveryTime.split('|')[1] : order.deliveryTime}${order.deliveryExactTime ? ` (${order.deliveryExactTime})` : ''}` : ''}</span>
+                                        <span>${dateText}${order.deliveryTime ? `, ${typeof order.deliveryTime === 'string' && order.deliveryTime.includes('|') ? order.deliveryTime.split('|')[1] : order.deliveryTime}${order.deliveryExactTime && (order.deliveryType === 'selfPickup' || !order.deliveryType) ? ` (${order.deliveryExactTime})` : ''}` : ''}</span>
                                     </div>
                                 `;
                             })() : order.deliveryTime ? `
                                 <div style="font-size: 11px; opacity: 0.8; margin-top: 6px; display: flex; align-items: center; gap: 4px;">
                                     <span style="width: 12px; height: 12px; display: flex; align-items: center; justify-content: center;">${getClockIcon('#ffffff').replace('width="24" height="24"', 'width="12" height="12"')}</span>
-                                    <span>${typeof order.deliveryTime === 'string' && order.deliveryTime.includes('|') ? order.deliveryTime.split('|')[1] : order.deliveryTime}${order.deliveryExactTime ? ` (${order.deliveryExactTime})` : ''}</span>
+                                    <span>${typeof order.deliveryTime === 'string' && order.deliveryTime.includes('|') ? order.deliveryTime.split('|')[1] : order.deliveryTime}${order.deliveryExactTime && (order.deliveryType === 'selfPickup' || !order.deliveryType) ? ` (${order.deliveryExactTime})` : ''}</span>
                                 </div>
                             ` : ''}
                             </div>
