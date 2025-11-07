@@ -400,6 +400,31 @@ app.get('/api/orders/:orderId/status', (req, res) => {
     }
 });
 
+// API для получения занятых времен для даты
+app.get('/api/orders/booked-times', (req, res) => {
+    try {
+        const dateKey = req.query.date;
+        if (!dateKey) {
+            return res.status(400).json({ success: false, error: 'Date parameter required' });
+        }
+        
+        // Фильтруем заказы по дате и статусу (pending, confirmed и transferred - все занимают время)
+        const bookedTimes = [];
+        orders.forEach(order => {
+            if (order.selectedDeliveryDay === dateKey && 
+                order.deliveryExactTime && 
+                (order.status === 'pending' || order.status === 'confirmed' || order.status === 'transferred')) {
+                bookedTimes.push(order.deliveryExactTime);
+            }
+        });
+        
+        res.json({ success: true, bookedTimes: bookedTimes });
+    } catch (error) {
+        console.error('Error getting booked times:', error);
+        res.status(500).json({ success: false, error: error.message });
+    }
+});
+
 // API для получения всех заказов (для админа)
 app.get('/api/orders', (req, res) => {
     res.json({ success: true, orders: orders });
