@@ -3608,21 +3608,29 @@ function showExactTimeSelectionModal(timeSlot) {
         }
     }, true);
     
+    // УБЕЖДАЕМСЯ что предыдущие модальные окна удалены
+    document.querySelectorAll('.exact-time-modal-overlay, .time-selection-modal-overlay').forEach(m => m.remove());
+    
     document.body.appendChild(modal);
     document.body.style.overflow = 'hidden';
     
-    // ПРИНУДИТЕЛЬНО показываем модальное окно сразу
+    // ПРИНУДИТЕЛЬНО показываем модальное окно сразу - БЕЗ анимации
     modal.style.display = 'flex';
     modal.style.opacity = '1';
+    modal.style.visibility = 'visible';
     modalContent.style.transform = 'scale(1)';
     modalContent.style.opacity = '1';
+    modalContent.style.visibility = 'visible';
     
     // Дополнительно используем requestAnimationFrame для плавности
     requestAnimationFrame(() => {
         requestAnimationFrame(() => {
             modal.style.opacity = '1';
+            modal.style.visibility = 'visible';
             modalContent.style.transform = 'scale(1)';
             modalContent.style.opacity = '1';
+            modalContent.style.visibility = 'visible';
+            console.log('Exact time modal should be visible now');
         });
     });
     
@@ -3796,23 +3804,27 @@ function setDeliveryTime(time) {
         setTimeout(() => {
             currentModal.remove();
             document.body.style.overflow = '';
-            // Открываем новое модальное окно для выбора точного времени
-            // Используем requestAnimationFrame для надежности
-            requestAnimationFrame(() => {
-                requestAnimationFrame(() => {
-                    console.log('Opening exact time modal with:', timeToStore);
+            // ОБЯЗАТЕЛЬНО открываем новое модальное окно для выбора точного времени
+            // Используем несколько способов для гарантии
+            console.log('Opening exact time modal with:', timeToStore);
+            setTimeout(() => {
+                showExactTimeSelectionModal(timeToStore);
+            }, 50);
+            // Дублируем вызов для надежности
+            setTimeout(() => {
+                const existing = document.querySelector('.exact-time-modal-overlay');
+                if (!existing) {
+                    console.log('Modal not found, opening again');
                     showExactTimeSelectionModal(timeToStore);
-                });
-            });
+                }
+            }, 200);
         }, 300);
     } else {
         // Если нет текущего модального окна, открываем сразу
-        requestAnimationFrame(() => {
-            requestAnimationFrame(() => {
-                console.log('Opening exact time modal with (no current modal):', timeToStore);
-                showExactTimeSelectionModal(timeToStore);
-            });
-        });
+        console.log('Opening exact time modal with (no current modal):', timeToStore);
+        setTimeout(() => {
+            showExactTimeSelectionModal(timeToStore);
+        }, 50);
     }
     
     if (tg && tg.HapticFeedback) {
@@ -4970,27 +4982,27 @@ function checkOrderStatus(orderId) {
                 const order = orders.find(o => o.id === orderId);
                 if (order) {
                     const oldStatus = order.status;
-                    order.status = data.status;
                     
                     // Если статус изменился, обновляем локальное хранилище
                     if (oldStatus !== data.status) {
+                        // ОБЯЗАТЕЛЬНО обновляем статус заказа
+                        order.status = data.status;
                         localStorage.setItem('orders', JSON.stringify(orders));
                         
                         if (data.status === 'confirmed') {
                             showToast('Заказ подтвержден менеджером!', 'success', 4000);
                             // Обновляем отображение заказов ВСЕГДА при изменении статуса
-                            showOrders();
+                            setTimeout(() => {
+                                showOrders();
+                            }, 100);
                         } else if (data.status === 'rejected') {
                             showToast('Заказ отменен менеджером', 'error', 4000);
                             // Обновляем отображение заказов ВСЕГДА при изменении статуса
-                            showOrders();
+                            setTimeout(() => {
+                                showOrders();
+                            }, 100);
                         } else if (data.status === 'transferred') {
-                            // Обновляем статус заказа ПЕРЕД всеми операциями
-                            const oldStatus = order.status;
-                            order.status = 'transferred';
-                            
-                            // Сохраняем изменения в localStorage СРАЗУ
-                            localStorage.setItem('orders', JSON.stringify(orders));
+                            // Статус уже обновлен выше, продолжаем с начислением
                             
                             // Начисляем Vape Coins за заказ (только если еще не начислены)
                             if (data.order && data.order.vapeCoinsEarned !== undefined && data.order.vapeCoinsEarned !== null) {
@@ -5085,8 +5097,12 @@ function checkOrderStatus(orderId) {
                                 }, 3500);
                             }
                             
+                            // ОБЯЗАТЕЛЬНО сохраняем финальный статус
+                            order.status = 'transferred';
+                            localStorage.setItem('orders', JSON.stringify(orders));
+                            
                             // Обновляем отображение заказов ВСЕГДА при изменении статуса
-                            // Используем setTimeout для гарантированного обновления
+                            // Используем несколько вызовов для гарантии
                             setTimeout(() => {
                                 // Перезагружаем заказы из localStorage перед обновлением
                                 const savedOrders = localStorage.getItem('orders');
@@ -5102,25 +5118,23 @@ function checkOrderStatus(orderId) {
                                 }
                                 showOrders();
                             }, 100);
-                        }
-                        
-                        // Обновляем отображение заказов ВСЕГДА при изменении статуса
-                        // Используем setTimeout для гарантированного обновления
-                        setTimeout(() => {
-                            // Перезагружаем заказы из localStorage перед обновлением
-                            const savedOrders = localStorage.getItem('orders');
-                            if (savedOrders) {
-                                try {
-                                    const parsedOrders = JSON.parse(savedOrders);
-                                    if (Array.isArray(parsedOrders)) {
-                                        orders = parsedOrders;
+                            
+                            // Дублируем обновление для надежности
+                            setTimeout(() => {
+                                const savedOrders = localStorage.getItem('orders');
+                                if (savedOrders) {
+                                    try {
+                                        const parsedOrders = JSON.parse(savedOrders);
+                                        if (Array.isArray(parsedOrders)) {
+                                            orders = parsedOrders;
+                                        }
+                                    } catch (e) {
+                                        console.error('Error loading orders:', e);
                                     }
-                                } catch (e) {
-                                    console.error('Error loading orders:', e);
                                 }
-                            }
-                            showOrders();
-                        }, 100);
+                                showOrders();
+                            }, 500);
+                        }
                         
                         // Обновляем баланс Vape Coins, если пользователь на странице Vape Coins
                         if (currentPage === 'vapeCoins') {
