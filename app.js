@@ -88,10 +88,10 @@ function verifyAge(isAdult) {
             if (mainContent) {
                 mainContent.classList.remove('hidden');
                 showPage('catalog');
-                // Инициализируем SVG иконки после показа основного контента
-                setTimeout(() => {
-                    initSVGIcons();
-                }, 150);
+            // Инициализируем SVG иконки после показа основного контента
+            setTimeout(() => {
+                initSVGIcons();
+            }, 150);
             }
             
             if (tg && tg.HapticFeedback) {
@@ -1274,6 +1274,31 @@ function showPage(page, skipHistory = false, resetCatalog = false) {
     // Обновляем отображение точки самовывоза
     updatePickupLocationDisplay();
     
+    // Обновляем правую часть навигации (адрес или vapeshop)
+    const navRightContent = document.getElementById('nav-right-content');
+    if (navRightContent) {
+        if (page === 'catalog') {
+            // Для каталога показываем адрес
+            if (selectedPickupLocation) {
+                const shortLocation = selectedPickupLocation.length > 18 
+                    ? selectedPickupLocation.substring(0, 15) + '...' 
+                    : selectedPickupLocation;
+                navRightContent.textContent = shortLocation;
+                navRightContent.style.cursor = 'pointer';
+                navRightContent.onclick = () => selectPickupLocation();
+            } else {
+                navRightContent.textContent = 'Выберите точку';
+                navRightContent.style.cursor = 'pointer';
+                navRightContent.onclick = () => selectPickupLocation();
+            }
+        } else {
+            // Для других страниц показываем vapeshop с улучшенным стилем
+            navRightContent.innerHTML = '<span style="font-weight: 700; letter-spacing: 1px;">VAPESHOP</span>';
+            navRightContent.style.cursor = 'default';
+            navRightContent.onclick = null;
+        }
+    }
+    
     // Если на странице каталога и точка не выбрана, показываем сообщение
     if (page === 'catalog' && !selectedPickupLocation) {
         showLocationRequiredMessage();
@@ -1313,20 +1338,20 @@ function showPage(page, skipHistory = false, resetCatalog = false) {
         // Если пользователь явно нажал на вкладку "Ассортимент" с другой вкладки (не из товара),
         // проверяем, есть ли сохраненный товар для восстановления
         else if (currentPage !== 'product' && currentPage !== 'catalog') {
-        const savedProduct = localStorage.getItem('lastViewedProduct');
-        if (savedProduct) {
-            try {
-                const productData = JSON.parse(savedProduct);
-                if (productData && productData.id) {
-                    // Восстанавливаем товар
-                    showProduct(productData.id, productData.selectedFlavor, productData.selectedStrength);
-                    localStorage.removeItem('lastViewedProduct'); // Очищаем после восстановления
-                    return;
+            const savedProduct = localStorage.getItem('lastViewedProduct');
+            if (savedProduct) {
+                try {
+                    const productData = JSON.parse(savedProduct);
+                    if (productData && productData.id) {
+                        // Восстанавливаем товар
+                        showProduct(productData.id, productData.selectedFlavor, productData.selectedStrength);
+                        localStorage.removeItem('lastViewedProduct'); // Очищаем после восстановления
+                        return;
+                    }
+                } catch (e) {
+                    console.error('Error restoring product:', e);
                 }
-            } catch (e) {
-                console.error('Error restoring product:', e);
             }
-        }
         }
         
         // Очищаем viewingProduct если переходим на каталог
@@ -1477,7 +1502,7 @@ function goBack() {
         
         // Восстанавливаем позицию скролла в избранном, если возвращаемся туда
         if (previousPage === 'favorites' && favoritesScrollPosition > 0) {
-        showPage(previousPage, true); // skipHistory = true, чтобы не добавлять в историю
+            showPage(previousPage, true); // skipHistory = true, чтобы не добавлять в историю
             // Восстанавливаем позицию после полной загрузки контента
             setTimeout(() => {
                 const pageContent = document.getElementById('page-content');
@@ -1628,9 +1653,11 @@ function displayProducts(productsToShow = null) {
         });
         // Определяем, что показывать - изображение или иконка
         let imageContent;
-        if (product.imageUrl) {
+        if (product.imageUrl && product.imageUrl.trim() !== '') {
             const imgId = `product-img-${product.id}`;
-            imageContent = `<img id="${imgId}" src="${product.imageUrl}" alt="${product.name}" style="width: 100%; height: 100%; object-fit: cover; border-radius: 12px; display: block;" onerror="handleImageError('${imgId}')">`;
+            // Используем полный URL если он относительный
+            const imageUrl = product.imageUrl.startsWith('http') ? product.imageUrl : product.imageUrl;
+            imageContent = `<img id="${imgId}" src="${imageUrl}" alt="${product.name}" style="width: 100%; height: 100%; object-fit: cover; border-radius: 12px; display: block;" onerror="handleImageError('${imgId}')" loading="lazy">`;
         } else {
             imageContent = getPackageIcon('#999999');
         }
@@ -1640,10 +1667,10 @@ function displayProducts(productsToShow = null) {
         
         card.innerHTML = `
             <div class="product-image" data-product-id="${product.id}" style="${product.imageUrl ? 'background: #f8f8f8; overflow: hidden; position: relative;' : 'display: flex; align-items: center; justify-content: center;'} ${!isInStock ? 'opacity: 0.5;' : ''}">${imageContent}</div>
-            <div class="product-info">
-                <div class="product-name" style="${!isInStock ? 'color: #999;' : ''}">${product.name}</div>
-                ${!isInStock ? '<div style="color: #f44336; font-size: 12px; margin-top: 4px;">Нет в наличии</div>' : ''}
-                ${priceDisplay}
+            <div class="product-info" style="display: flex; flex-direction: column; align-items: flex-start; text-align: left; width: 100%;">
+                <div class="product-name" style="${!isInStock ? 'color: #999;' : ''}; text-align: left; width: 100%;">${product.name}</div>
+                ${!isInStock ? '<div style="color: #f44336; font-size: 12px; margin-top: 4px; text-align: left; width: 100%;">Нет в наличии</div>' : ''}
+                <div style="text-align: left; width: 100%;">${priceDisplay}</div>
             </div>
         `;
         container.appendChild(card);
@@ -2186,8 +2213,8 @@ function showFlavorModal() {
         modalContent.style.transform = 'scale(0.95)';
         modalContent.style.opacity = '0';
         setTimeout(() => {
-        document.body.style.overflow = '';
-        modal.remove();
+            document.body.style.overflow = '';
+            modal.remove();
         }, 300);
     };
     
@@ -2622,11 +2649,18 @@ function addToCart(productId, strength = null, flavor = null) {
 function handleImageError(imgId) {
     const img = document.getElementById(imgId);
     if (img && img.parentElement) {
+        // Убираем обработчик ошибки чтобы избежать бесконечного цикла
         img.onerror = null;
         img.style.display = 'none';
+        
         const parent = img.parentElement;
+        // Проверяем что это не уже иконка
+        if (!parent.querySelector('svg')) {
         parent.innerHTML = getPackageIcon('#999999');
         parent.style.display = 'flex';
+            parent.style.alignItems = 'center';
+            parent.style.justifyContent = 'center';
+        }
         parent.style.alignItems = 'center';
         parent.style.justifyContent = 'center';
     }
@@ -2967,8 +3001,8 @@ function selectPickupLocation() {
             modalContent.style.transform = 'scale(0.95)';
             modalContent.style.opacity = '0';
             setTimeout(() => {
-            modal.remove();
-            showCitySelection();
+                modal.remove();
+                showCitySelection();
             }, 300);
         };
         
@@ -3010,9 +3044,9 @@ function selectPickupLocation() {
                 
                 // Если мы на странице корзины, обновляем отображение точки там (без перехода)
                 if (currentPage === 'cart') {
-                    const locDisplay = document.getElementById('selected-pickup-location-display');
-                    if (locDisplay) {
-                        locDisplay.textContent = selectedPickupLocation;
+                const locDisplay = document.getElementById('selected-pickup-location-display');
+                if (locDisplay) {
+                    locDisplay.textContent = selectedPickupLocation;
                     }
                 }
                 
@@ -3023,8 +3057,8 @@ function selectPickupLocation() {
                 modalContent.style.transform = 'scale(0.95)';
                 modalContent.style.opacity = '0';
                 setTimeout(() => {
-                modal.remove();
-                document.body.style.overflow = '';
+                    modal.remove();
+                    document.body.style.overflow = '';
                 }, 300);
                 
                 if (tg && tg.HapticFeedback) {
@@ -3362,7 +3396,7 @@ function generateTimeSlots() {
     ];
     
     // Добавляем вкладки дней и время под ними
-        slots.push(`
+    slots.push(`
         <div style="margin-bottom: 20px;">
             <div style="display: flex; gap: 8px; margin-bottom: 16px;">
                 ${days.map(day => {
@@ -3371,11 +3405,11 @@ function generateTimeSlots() {
                         <button onclick="selectDeliveryDay('${day.key}')" 
                             style="padding: 8px 16px; border: 2px solid ${isSelected ? '#007AFF' : '#e5e5e5'}; 
                             border-radius: 12px; background: ${isSelected ? '#e3f2fd' : '#ffffff'}; 
-                cursor: pointer; font-size: 14px; font-weight: 600; 
-                color: ${isSelected ? '#007AFF' : '#666'}; transition: all 0.3s;
-                white-space: nowrap;">
+                            cursor: pointer; font-size: 14px; font-weight: 600; 
+                            color: ${isSelected ? '#007AFF' : '#666'}; transition: all 0.3s;
+                            white-space: nowrap;">
                             ${day.label}
-            </button>
+                        </button>
                     `;
                 }).join('')}
             </div>
@@ -3402,14 +3436,14 @@ function generateTimeSlots() {
             const isSelected = deliveryExactTime === timeStr;
             exactTimes.push(`
                 <button onclick="setDeliveryExactTime('${timeStr}')" 
-            style="padding: 10px 16px; border: 2px solid ${isSelected ? '#007AFF' : '#e5e5e5'}; 
-            border-radius: 10px; background: ${isSelected ? '#e3f2fd' : '#ffffff'}; 
-            cursor: pointer; font-size: 14px; font-weight: 600; 
-            color: ${isSelected ? '#007AFF' : '#666'}; transition: all 0.3s;
+                    style="padding: 10px 16px; border: 2px solid ${isSelected ? '#007AFF' : '#e5e5e5'}; 
+                    border-radius: 10px; background: ${isSelected ? '#e3f2fd' : '#ffffff'}; 
+                    cursor: pointer; font-size: 14px; font-weight: 600; 
+                    color: ${isSelected ? '#007AFF' : '#666'}; transition: all 0.3s;
                     white-space: nowrap; margin-right: 8px; margin-bottom: 8px;">
                     ${timeStr}
-        </button>
-    `);
+                </button>
+            `);
             currentTime.setMinutes(currentTime.getMinutes() + 15);
         }
         
@@ -3861,38 +3895,38 @@ function selectLocationFromMap() {
     
     // Используем requestLocation для получения текущего местоположения
     if (tg.requestLocation) {
-            tg.requestLocation({
-                callback: function(location) {
-                    if (location && location.latitude && location.longitude) {
+        tg.requestLocation({
+            callback: function(location) {
+                if (location && location.latitude && location.longitude) {
                     // Формируем адрес из координат
-                        deliveryAddress = `Координаты: ${location.latitude.toFixed(6)}, ${location.longitude.toFixed(6)}`;
-                        if (location.address) {
-                            deliveryAddress = location.address;
-                        }
-                        localStorage.setItem('deliveryAddress', deliveryAddress);
-                        
+                    deliveryAddress = `Координаты: ${location.latitude.toFixed(6)}, ${location.longitude.toFixed(6)}`;
+                    if (location.address) {
+                        deliveryAddress = location.address;
+                    }
+                    localStorage.setItem('deliveryAddress', deliveryAddress);
+                    
                     // Обновляем поле ввода
-                        const addressInput = document.getElementById('delivery-address-input');
-                        if (addressInput) {
-                            addressInput.value = deliveryAddress;
-                            addressInput.style.border = '2px solid #e5e5e5';
-                            addressInput.style.boxShadow = '';
+                    const addressInput = document.getElementById('delivery-address-input');
+                    if (addressInput) {
+                        addressInput.value = deliveryAddress;
+                        addressInput.style.border = '2px solid #e5e5e5';
+                        addressInput.style.boxShadow = '';
                         // Теряем фокус, чтобы показать блок времени
                         addressInput.blur();
-                        }
-                        
+                    }
+                    
                     // Обновляем корзину для показа времени
                     setTimeout(() => {
                         showCart();
                     }, 300);
-                        
-                        if (tg && tg.HapticFeedback) {
-                            tg.HapticFeedback.notificationOccurred('success');
-                        }
+                    
+                    if (tg && tg.HapticFeedback) {
+                        tg.HapticFeedback.notificationOccurred('success');
                     }
                 }
-            });
-        } else {
+            }
+        });
+    } else {
         showToast('Геолокация недоступна. Введите адрес вручную', 'info', 3000);
     }
 }
@@ -4368,7 +4402,7 @@ function setDeliveryTime(time) {
         const [dateKey] = time.split('|');
         selectedDeliveryDay = dateKey;
         localStorage.setItem('selectedDeliveryDay', selectedDeliveryDay);
-            } else {
+    } else {
         // Старый формат - преобразуем в новый с сегодняшней датой
         const today = new Date();
         const dateKey = today.toISOString().split('T')[0];
@@ -4420,7 +4454,7 @@ function setDeliveryTime(time) {
             if (deliveryType === 'selfPickup') {
                 console.log('Opening exact time modal with:', timeToStore);
                 setTimeout(() => {
-                    showExactTimeSelectionModal(timeToStore);
+            showExactTimeSelectionModal(timeToStore);
                 }, 50);
                 // Дублируем вызов для надежности
                 setTimeout(() => {
@@ -4429,7 +4463,7 @@ function setDeliveryTime(time) {
                         console.log('Modal not found, opening again');
                         showExactTimeSelectionModal(timeToStore);
                     }
-                }, 200);
+        }, 200);
             }
         }, 300);
     } else {
@@ -4437,7 +4471,7 @@ function setDeliveryTime(time) {
         if (deliveryType === 'selfPickup') {
             console.log('Opening exact time modal with (no current modal):', timeToStore);
             setTimeout(() => {
-                showExactTimeSelectionModal(timeToStore);
+        showExactTimeSelectionModal(timeToStore);
             }, 50);
         }
     }
@@ -4564,16 +4598,16 @@ function showCart() {
             ${deliveryType === 'selfPickup' ? `
                 <div style="background: linear-gradient(135deg, #007AFF 0%, #0056b3 100%); padding: 16px; border-radius: 12px; color: white; margin-bottom: 12px;">
                     <div style="display: flex; align-items: center; gap: 12px; margin-bottom: ${selectedPickupLocation ? '12px' : '0'};">
-                        <span style="width: 24px; height: 24px; display: flex; align-items: center; justify-content: center;">${getLocationIcon('#ffffff')}</span>
-                        <div style="flex: 1;">
-                            <div style="font-weight: 600; margin-bottom: 4px; font-size: 14px; opacity: 0.9;">Точка самовывоза</div>
+                <span style="width: 24px; height: 24px; display: flex; align-items: center; justify-content: center;">${getLocationIcon('#ffffff')}</span>
+                <div style="flex: 1;">
+                    <div style="font-weight: 600; margin-bottom: 4px; font-size: 14px; opacity: 0.9;">Точка самовывоза</div>
                             <div style="font-size: 16px; font-weight: 700;" id="selected-pickup-location-display">${selectedPickupLocation}</div>
-                        </div>
+                </div>
                         <button onclick="selectPickupLocation()" style="padding: 8px 16px; border: 1px solid rgba(255,255,255,0.3); 
-                            border-radius: 20px; background: rgba(255,255,255,0.2); cursor: pointer; font-size: 14px; color: white;
-                            transition: all 0.2s;" 
-                            onmouseover="this.style.background='rgba(255,255,255,0.3)'"
-                            onmouseout="this.style.background='rgba(255,255,255,0.2)'">
+                    border-radius: 20px; background: rgba(255,255,255,0.2); cursor: pointer; font-size: 14px; color: white;
+                    transition: all 0.2s;" 
+                    onmouseover="this.style.background='rgba(255,255,255,0.3)'"
+                    onmouseout="this.style.background='rgba(255,255,255,0.2)'">
                             Выбрать
                         </button>
                     </div>
@@ -4651,8 +4685,8 @@ function showCart() {
                         <button onclick="selectedCity = ''; localStorage.removeItem('selectedCity'); deliveryAddress = ''; localStorage.removeItem('deliveryAddress'); deliveryTime = null; localStorage.removeItem('deliveryTime'); showCart();" 
                             style="padding: 4px 8px; border: 1px solid #e5e5e5; border-radius: 6px; background: #f5f5f5; cursor: pointer; font-size: 12px; color: #666;">
                     Изменить
-                        </button>
-                    </div>
+                </button>
+            </div>
                     <div style="font-size: 16px; font-weight: 700; color: #007AFF;">${selectedCity}</div>
                 </div>
                 `}
@@ -5148,7 +5182,7 @@ function setPaymentMethod(index, method) {
         }
     } else {
         // Если не нашли элементы, перерисовываем корзину
-        showCart();
+    showCart();
     }
     
     if (tg && tg.HapticFeedback) {
@@ -5266,11 +5300,11 @@ function checkout() {
                 timeBlock.style.transition = 'all 0.3s ease';
                 timeBlock.style.border = '2px solid #ff3b30';
                 timeBlock.style.borderRadius = '10px';
-            setTimeout(() => {
+                setTimeout(() => {
                     if (timeBlock) {
                         timeBlock.style.border = '1px solid rgba(255,255,255,0.2)';
-                }
-            }, 3000);
+                    }
+                }, 3000);
             }
         }
         if (timeDisplayDelivery) {
@@ -5279,11 +5313,11 @@ function checkout() {
                 timeBlockDelivery.style.transition = 'all 0.3s ease';
                 timeBlockDelivery.style.border = '2px solid #ff3b30';
                 timeBlockDelivery.style.borderRadius = '10px';
-            setTimeout(() => {
+                setTimeout(() => {
                     if (timeBlockDelivery) {
                         timeBlockDelivery.style.border = '2px solid #e5e5e5';
-                }
-            }, 3000);
+                    }
+                }, 3000);
             }
         }
         showToast(`Пожалуйста, выберите ${deliveryType === 'selfPickup' ? 'время самовывоза' : 'время доставки'}`, 'error', 3000);
@@ -5320,11 +5354,11 @@ function checkout() {
                     pickupContainer.style.transition = 'all 0.3s ease';
                     pickupContainer.style.border = '2px solid #ff3b30';
                     pickupContainer.style.borderRadius = '12px';
-                setTimeout(() => {
+                    setTimeout(() => {
                         if (pickupContainer) {
                             pickupContainer.style.border = '2px solid rgba(255,255,255,0.3)';
-                    }
-                }, 3000);
+                        }
+                    }, 3000);
                 }
             }
             showToast('Пожалуйста, выберите точку самовывоза', 'error', 3000);
@@ -5340,7 +5374,7 @@ function checkout() {
                 setTimeout(() => {
                     if (addressInput) {
                         addressInput.style.border = '2px solid #e5e5e5';
-                    addressInput.style.boxShadow = '';
+                        addressInput.style.boxShadow = '';
                     }
                 }, 3000);
             }
@@ -5496,16 +5530,16 @@ function checkout() {
                     status: 'pending', // Ожидает подтверждения менеджером
                     items: [...cart],
                     location: deliveryType === 'selfPickup' ? selectedPickupLocation : deliveryAddress,
-            deliveryType: deliveryType,
-            deliveryTime: deliveryTime,
+                    deliveryType: deliveryType,
+                    deliveryTime: deliveryTime,
                     deliveryExactTime: deliveryExactTime,
                     selectedDeliveryDay: selectedDeliveryDay,
-            deliveryAddress: deliveryType === 'delivery' ? deliveryAddress : null,
-            pickupLocation: deliveryType === 'selfPickup' ? selectedPickupLocation : null,
-            total: totalMoney,
-            vapeCoinsSpent: totalCoinsNeeded > 0 ? totalCoinsNeeded : 0
-        };
-        
+                    deliveryAddress: deliveryType === 'delivery' ? deliveryAddress : null,
+                    pickupLocation: deliveryType === 'selfPickup' ? selectedPickupLocation : null,
+                    total: totalMoney,
+                    vapeCoinsSpent: totalCoinsNeeded > 0 ? totalCoinsNeeded : 0
+                };
+                
                 // Сохраняем заказ локально
                 orders.unshift(order);
                 localStorage.setItem('orders', JSON.stringify(orders));
@@ -5523,7 +5557,7 @@ function checkout() {
                         showOrders();
                     }, 100);
                 }
-        } else {
+            } else {
                 throw new Error(result.error || 'Ошибка при отправке заказа');
             }
         } catch (error) {
@@ -5622,10 +5656,16 @@ function checkOrderStatus(orderId) {
                     if (oldStatus !== data.status) {
                         order.status = data.status;
                         localStorage.setItem('orders', JSON.stringify(orders));
+                        
+                        // Показываем уведомление при отклонении заказа
+                        if (data.status === 'rejected') {
+                            showToast('Заказ отклонен менеджером', 'error', 4000);
+                        }
                     }
                     
                     // Если статус 'transferred', начисляем коины и штампы (даже если статус не изменился)
-                    if (data.status === 'transferred') {
+                    // Это важно для первого заказа, когда статус уже transferred при первой проверке
+                    if (data.status === 'transferred' || order.status === 'transferred') {
                         // Начисляем коины
                         let coinsEarned = 0;
                         if (data.order && data.order.vapeCoinsEarned !== undefined && data.order.vapeCoinsEarned !== null) {
@@ -5639,7 +5679,11 @@ function checkOrderStatus(orderId) {
                             });
                         }
                         
+                        // Сохраняем coinsEarned в заказе для отображения
+                        order.vapeCoinsEarned = coinsEarned;
+                        
                         const coinsAlreadyAdded = localStorage.getItem(`coins_added_${orderId}`);
+                        // ВСЕГДА начисляем коины если они есть и еще не начислены
                         if (!coinsAlreadyAdded && coinsEarned > 0) {
                             const savedCoins = localStorage.getItem('vapeCoins');
                             let currentCoins = savedCoins ? parseFloat(savedCoins) : 0;
@@ -5820,7 +5864,8 @@ function checkOrderStatus(orderId) {
                                 showOrders();
                             }, 100);
                         } else if (data.status === 'rejected') {
-                            showToast('Заказ отменен менеджером', 'error', 4000);
+                            // Показываем уведомление об отклонении заказа
+                            showToast('Заказ отклонен менеджером', 'error', 4000);
                             // Обновляем отображение заказов ВСЕГДА при изменении статуса
                             setTimeout(() => {
                                 showOrders();
@@ -6083,7 +6128,7 @@ function checkOrderStatus(orderId) {
                             // Обновляем отображение заказов ВСЕГДА при изменении статуса
                             // Используем несколько вызовов для гарантии
                             // Обновляем UI даже если не на странице заказов
-                            if (currentPage === 'orders') {
+                        if (currentPage === 'orders') {
                                 showOrders(); // Сразу обновляем
                             } else {
                                 // Если не на странице заказов, все равно обновляем данные
@@ -6113,7 +6158,7 @@ function checkOrderStatus(orderId) {
                                         console.error('Error loading orders:', e);
                                     }
                                 }
-                                showOrders();
+                            showOrders();
                             }, 100);
                             
                             // Дублируем обновление для надежности
@@ -6177,8 +6222,8 @@ function checkOrderStatus(orderId) {
                         // Даем время на обновление UI перед остановкой проверки
                         setTimeout(() => {
                             if (orderStatusCheckIntervals[orderId]) {
-                                clearInterval(orderStatusCheckIntervals[orderId]);
-                                delete orderStatusCheckIntervals[orderId];
+                        clearInterval(orderStatusCheckIntervals[orderId]);
+                        delete orderStatusCheckIntervals[orderId];
                             }
                         }, 2000); // Останавливаем через 2 секунды после обновления
                     }
@@ -7076,7 +7121,7 @@ function showFavorites() {
         // Для товаров без наличия используем серое изображение
         const imageContent = isInStock 
             ? (imageUrl
-                ? `<img src="${safeImageUrl}" alt="${product.name.replace(/'/g, "&#39;")}" style="width: 100%; height: 100%; object-fit: cover; border-radius: 12px; display: block;" onerror="this.parentElement.innerHTML='${getPackageIcon('#999999')}'">`
+            ? `<img src="${safeImageUrl}" alt="${product.name.replace(/'/g, "&#39;")}" style="width: 100%; height: 100%; object-fit: cover; border-radius: 12px; display: block;" onerror="this.parentElement.innerHTML='${getPackageIcon('#999999')}'">`
                 : getPackageIcon('#999999'))
             : `<div style="width: 100%; height: 100%; background: #e0e0e0; border-radius: 12px; display: flex; align-items: center; justify-content: center; opacity: 0.5;">
                 ${getPackageIcon('#999999')}
@@ -7550,11 +7595,18 @@ function showOrders() {
     // Сортируем заказы: активные выше, отклоненные/отмененные ниже
     const filteredOrders = [...orders].sort((a, b) => {
         // Определяем приоритет статуса (меньше = выше в списке)
+        // Порядок: активные (0) -> отмененные (1) -> переданные (2)
         const getStatusPriority = (status) => {
-            if (status === 'pending' || status === 'processing' || status === 'confirmed' || status === 'transferred') {
-                return 0; // Активные заказы - приоритет 0
+            if (status === 'pending' || status === 'processing' || status === 'confirmed') {
+                return 0; // Активные заказы - приоритет 0 (самые верхние)
             }
-            return 1; // Отклоненные/отмененные - приоритет 1
+            if (status === 'rejected' || status === 'cancelled') {
+                return 1; // Отмененные - приоритет 1 (посередине)
+            }
+            if (status === 'transferred') {
+                return 2; // Переданные - приоритет 2 (внизу)
+            }
+            return 3; // Неизвестные статусы - в самом низу
         };
         
         const priorityA = getStatusPriority(a.status);
@@ -7657,7 +7709,7 @@ function showOrders() {
                           order.status === 'confirmed' ? '#4CAF50' :
                           order.status === 'transferred' ? '#2196F3' :
                           order.status === 'rejected' ? '#f44336' :
-                           order.status === 'cancelled' ? '#999' : '#4CAF50';
+                          order.status === 'cancelled' ? '#999' : '#4CAF50';
         const statusBg = order.status === 'pending' ? 'linear-gradient(135deg, #FFF3E0 0%, #FFE0B2 100%)' :
                         order.status === 'processing' ? 'linear-gradient(135deg, #FFF3E0 0%, #FFE0B2 100%)' : 
                         order.status === 'confirmed' ? 'linear-gradient(135deg, #E8F5E9 0%, #C8E6C9 100%)' :
@@ -7688,7 +7740,7 @@ function showOrders() {
                             </div>
                             <div style="font-size: 12px; opacity: 0.9; display: flex; align-items: center; gap: 4px; margin-top: 4px; flex-direction: column; align-items: flex-start;">
                                 <div style="display: flex; align-items: center; gap: 4px;">
-                                    <span style="width: 14px; height: 14px; display: flex; align-items: center; justify-content: center;">${getClockIcon('#ffffff').replace('width="24" height="24"', 'width="14" height="14"')}</span>
+                                <span style="width: 14px; height: 14px; display: flex; align-items: center; justify-content: center;">${getClockIcon('#ffffff').replace('width="24" height="24"', 'width="14" height="14"')}</span>
                                     <span>${formattedDate}${timeDisplay ? ` • ${timeDisplay}` : ''}</span>
                                 </div>
                                 ${(() => {
@@ -7779,16 +7831,16 @@ function showOrders() {
                 <div style="background: ${darkMode ? colors.bgSecondary : '#f8f9fa'}; padding: 16px; border-radius: 12px; margin-bottom: 16px;">
                     <div style="display: flex; align-items: center; gap: 12px;">
                             <div style="width: 40px; height: 40px; background: linear-gradient(135deg, #FFF3E0 0%, #FFE0B2 100%); 
-                            border-radius: 10px; display: flex; align-items: center; justify-content: center;">
+                                border-radius: 10px; display: flex; align-items: center; justify-content: center;">
                             ${getCoinIcon('#FF9800', 24)}
-                        </div>
+                            </div>
                             <div style="flex: 1;">
                                 <div style="font-size: 12px; color: ${colors.textSecondary}; margin-bottom: 4px;">Оплачено Vape Coins</div>
                             <div style="font-size: 15px; font-weight: 600; color: #FF9800;">
                                 ${order.vapeCoinsSpent.toFixed(1)}
                             </div>
-                            </div>
                                 </div>
+                            </div>
                         </div>
                     ` : ''}
                     
@@ -7800,7 +7852,7 @@ function showOrders() {
                                 <div style="font-size: 11px; opacity: 0.8; margin-bottom: 6px; display: flex; align-items: center; gap: 4px;">
                                     <span style="width: 12px; height: 12px; display: flex; align-items: center; justify-content: center;">${(order.deliveryType === 'delivery' ? getPackageIcon('#ffffff') : getLocationIcon('#ffffff')).replace('width="24" height="24"', 'width="12" height="12"')}</span>
                                     <span>${order.deliveryType === 'delivery' ? 'Доставка' : 'Самовывоз'}</span>
-                                </div>
+                        </div>
                                 <div style="font-size: 13px; font-weight: 600; opacity: 0.95; word-wrap: break-word; overflow-wrap: break-word;">
                                     ${order.deliveryType === 'selfPickup' ? (order.pickupLocation || 'Не указано') : (order.deliveryAddress || 'Не указано')}
                             </div>
@@ -7809,8 +7861,8 @@ function showOrders() {
                                 const deliveryDate = new Date(order.selectedDeliveryDay + 'T12:00:00');
                                 const dateText = deliveryDate.toLocaleDateString('ru-RU', { day: '2-digit', month: '2-digit', year: 'numeric' });
                                 return `
-                                    <div style="font-size: 11px; opacity: 0.8; margin-top: 6px; display: flex; align-items: center; gap: 4px;">
-                                        <span style="width: 12px; height: 12px; display: flex; align-items: center; justify-content: center;">${getClockIcon('#ffffff').replace('width="24" height="24"', 'width="12" height="12"')}</span>
+                                <div style="font-size: 11px; opacity: 0.8; margin-top: 6px; display: flex; align-items: center; gap: 4px;">
+                                    <span style="width: 12px; height: 12px; display: flex; align-items: center; justify-content: center;">${getClockIcon('#ffffff').replace('width="24" height="24"', 'width="12" height="12"')}</span>
                                         <span>${dateText}${order.deliveryTime ? `, ${typeof order.deliveryTime === 'string' && order.deliveryTime.includes('|') ? order.deliveryTime.split('|')[1] : order.deliveryTime}${order.deliveryExactTime && (order.deliveryType === 'selfPickup' || !order.deliveryType) ? ` (${order.deliveryExactTime})` : ''}` : ''}</span>
                                     </div>
                                 `;
@@ -7818,8 +7870,8 @@ function showOrders() {
                                 <div style="font-size: 11px; opacity: 0.8; margin-top: 6px; display: flex; align-items: center; gap: 4px;">
                                     <span style="width: 12px; height: 12px; display: flex; align-items: center; justify-content: center;">${getClockIcon('#ffffff').replace('width="24" height="24"', 'width="12" height="12"')}</span>
                                     <span>${typeof order.deliveryTime === 'string' && order.deliveryTime.includes('|') ? order.deliveryTime.split('|')[1] : order.deliveryTime}${order.deliveryExactTime && (order.deliveryType === 'selfPickup' || !order.deliveryType) ? ` (${order.deliveryExactTime})` : ''}</span>
-                        </div>
-                    ` : ''}
+                                </div>
+                            ` : ''}
                             </div>
                         ` : '<div style="flex: 1;"></div>'}
                         <div style="text-align: right; border-left: ${order.deliveryType || order.location ? '1px solid rgba(255,255,255,0.2); padding-left: 16px;' : 'none;'};">
@@ -7842,8 +7894,8 @@ function showOrders() {
                         transition: all 0.2s;"
                         onmouseover="this.style.transform='scale(1.02)'; this.style.boxShadow='0 6px 16px rgba(244,67,54,0.4)'"
                         onmouseout="this.style.transform='scale(1)'; this.style.boxShadow='0 4px 12px rgba(244,67,54,0.3)'">
-                        Отменить заказ
-                    </button>
+                            Отменить заказ
+                        </button>
                 ` : order.status === 'confirmed' ? `
                     <div style="padding: 16px; background: linear-gradient(135deg, #E8F5E9 0%, #C8E6C9 100%); 
                         border-radius: 12px; text-align: center; border: 2px solid #4CAF50; margin-bottom: 12px;">
@@ -8483,30 +8535,30 @@ function markOrderAsReceived(orderId) {
                 // Если товар оплачен коинами - коины не начисляются
                 // Формула начисления: price / 10 (за каждые 10 BYN получаем 1 коин)
                 let coinsEarned = 0;
-                order.items.forEach(item => {
-                    // Проверяем способ оплаты товара
-                    // Если paymentMethod === 'coins' - не начисляем коины
-                    // Если paymentMethod === 'money' или не указан - начисляем коины
-                    const paymentMethod = item.paymentMethod || 'money'; // По умолчанию 'money' для старых заказов
-                    
-                    if (paymentMethod === 'money') {
-                        // Формула начисления: price / 10 (18 BYN = 1.8 коинов)
-                        const coinsForItem = (item.price * item.quantity) / 10;
-                        coinsEarned += coinsForItem;
-                    }
-                    // Если paymentMethod === 'coins', пропускаем (не начисляем)
-                });
-                
-                // Показываем уведомление о коинах за покупку (если есть)
-                const paidWithCoinsItems = order.items.filter(item => item.paymentMethod === 'coins').reduce((sum, item) => sum + item.quantity, 0);
-                const paidWithMoneyItems = order.items.filter(item => (item.paymentMethod || 'money') === 'money').reduce((sum, item) => sum + item.quantity, 0);
-                
-                if (coinsEarned > 0) {
-                    vapeCoins += coinsEarned;
-                    localStorage.setItem('vapeCoins', vapeCoins.toString());
-                    
-                    // Добавляем в историю
-                    vapeCoinsHistory.unshift({
+        order.items.forEach(item => {
+            // Проверяем способ оплаты товара
+            // Если paymentMethod === 'coins' - не начисляем коины
+            // Если paymentMethod === 'money' или не указан - начисляем коины
+            const paymentMethod = item.paymentMethod || 'money'; // По умолчанию 'money' для старых заказов
+            
+            if (paymentMethod === 'money') {
+                // Формула начисления: price / 10 (18 BYN = 1.8 коинов)
+                const coinsForItem = (item.price * item.quantity) / 10;
+                coinsEarned += coinsForItem;
+            }
+            // Если paymentMethod === 'coins', пропускаем (не начисляем)
+        });
+        
+        // Показываем уведомление о коинах за покупку (если есть)
+        const paidWithCoinsItems = order.items.filter(item => item.paymentMethod === 'coins').reduce((sum, item) => sum + item.quantity, 0);
+        const paidWithMoneyItems = order.items.filter(item => (item.paymentMethod || 'money') === 'money').reduce((sum, item) => sum + item.quantity, 0);
+        
+        if (coinsEarned > 0) {
+            vapeCoins += coinsEarned;
+            localStorage.setItem('vapeCoins', vapeCoins.toString());
+            
+            // Добавляем в историю
+            vapeCoinsHistory.unshift({
                         id: `vc_${Date.now()}`,
                         date: new Date().toISOString(),
                         type: 'earned',
