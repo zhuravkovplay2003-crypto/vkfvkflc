@@ -409,7 +409,13 @@ function init() {
     const savedOrders = localStorage.getItem('orders');
     if (savedOrders) {
         try {
-            orders = JSON.parse(savedOrders);
+            const parsedOrders = JSON.parse(savedOrders);
+            // Убеждаемся, что orders - это массив
+            if (Array.isArray(parsedOrders)) {
+                orders = parsedOrders;
+            } else {
+                orders = [];
+            }
             // Запускаем проверку статусов для всех pending заказов
             orders.forEach(order => {
                 if (order.status === 'pending') {
@@ -3785,22 +3791,22 @@ function setDeliveryTime(time) {
             currentModal.remove();
             document.body.style.overflow = '';
             // Открываем новое модальное окно для выбора точного времени
-            // Используем двойной setTimeout для надежности
-            setTimeout(() => {
-                setTimeout(() => {
+            // Используем requestAnimationFrame для надежности
+            requestAnimationFrame(() => {
+                requestAnimationFrame(() => {
                     console.log('Opening exact time modal with:', timeToStore);
                     showExactTimeSelectionModal(timeToStore);
-                }, 100);
-            }, 100);
-        }, 250);
+                });
+            });
+        }, 300);
     } else {
         // Если нет текущего модального окна, открываем сразу
-        setTimeout(() => {
-            setTimeout(() => {
+        requestAnimationFrame(() => {
+            requestAnimationFrame(() => {
                 console.log('Opening exact time modal with (no current modal):', timeToStore);
                 showExactTimeSelectionModal(timeToStore);
-            }, 100);
-        }, 100);
+            });
+        });
     }
     
     if (tg && tg.HapticFeedback) {
@@ -4853,7 +4859,10 @@ function checkout() {
                 checkOrderStatus(result.orderId);
                 
                 // ВСЕГДА обновляем отображение заказов
-                showOrders();
+                // Используем setTimeout для гарантированного обновления
+                setTimeout(() => {
+                    showOrders();
+                }, 100);
             } else {
                 throw new Error(result.error || 'Ошибка при отправке заказа');
             }
@@ -5062,11 +5071,17 @@ function checkOrderStatus(orderId) {
                             }
                             
                             // Обновляем отображение заказов ВСЕГДА при изменении статуса
-                            showOrders();
+                            // Используем setTimeout для гарантированного обновления
+                            setTimeout(() => {
+                                showOrders();
+                            }, 100);
                         }
                         
                         // Обновляем отображение заказов ВСЕГДА при изменении статуса
-                        showOrders();
+                        // Используем setTimeout для гарантированного обновления
+                        setTimeout(() => {
+                            showOrders();
+                        }, 100);
                         
                         // Обновляем баланс Vape Coins, если пользователь на странице Vape Coins
                         if (currentPage === 'vapeCoins') {
@@ -6351,6 +6366,19 @@ function showOrders() {
     const container = document.getElementById('page-content');
     if (!container) return;
     
+    // Загружаем заказы из localStorage перед отображением
+    const savedOrders = localStorage.getItem('orders');
+    if (savedOrders) {
+        try {
+            const parsedOrders = JSON.parse(savedOrders);
+            if (Array.isArray(parsedOrders)) {
+                orders = parsedOrders;
+            }
+        } catch (e) {
+            console.error('Error loading orders from localStorage:', e);
+        }
+    }
+    
     const colors = getThemeColors();
     
     container.className = '';
@@ -6359,7 +6387,12 @@ function showOrders() {
     container.style.color = colors.text;
     
     // Показываем все заказы по порядку (новые сверху)
-    const filteredOrders = [...orders].sort((a, b) => new Date(b.date) - new Date(a.date));
+    const filteredOrders = [...orders].sort((a, b) => {
+        // Сортируем по дате создания или дате заказа
+        const dateA = a.createdAt ? new Date(a.createdAt) : new Date(a.date);
+        const dateB = b.createdAt ? new Date(b.createdAt) : new Date(b.date);
+        return dateB - dateA;
+    });
     
     // Начальное состояние для анимации
     container.style.opacity = '0';
