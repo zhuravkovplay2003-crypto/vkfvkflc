@@ -248,11 +248,13 @@ function formatOrderForManager(order) {
         ? `\n⏰ Время: ${order.deliveryTime.includes('|') ? order.deliveryTime.split('|')[1] : order.deliveryTime}${order.deliveryExactTime ? ` (${order.deliveryExactTime})` : ''}`
         : '';
     
+    const userInfo = order.userId ? `👤 Клиент ID: ${order.userId}${order.userUsername ? ` (@${order.userUsername})` : ''}` : '👤 Клиент ID: не указан';
+    
     return `📦 <b>Новый заказ #${order.id.slice(-6)}</b>\n\n` +
            `${deliveryInfo}${dateInfo}${timeInfo}\n\n` +
            `<b>Товары:</b>\n${itemsText}\n\n` +
            `<b>Итого:</b> ${totalText}\n\n` +
-           `👤 Клиент ID: ${order.userId || 'не указан'}`;
+           `${userInfo}`;
 }
 
 // API endpoint для приема заказов от клиентского приложения
@@ -300,7 +302,8 @@ app.post('/api/orders', (req, res) => {
             pickupLocation: orderData.pickupLocation || null,
             total: orderData.total || 0,
             vapeCoinsSpent: orderData.vapeCoinsSpent || 0,
-            userId: orderData.userId || 'unknown'
+            userId: orderData.userId || 'unknown',
+            userUsername: orderData.userUsername || null
         };
         
         orders.push(order);
