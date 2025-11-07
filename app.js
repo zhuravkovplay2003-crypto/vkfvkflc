@@ -3055,7 +3055,7 @@ function generateTimeSlots() {
     const isTimeSlotFullyBooked = (startHour, endHour) => {
         if (deliveryType !== 'selfPickup') return false; // Для доставки не проверяем
         
-        const bookedTimes = getBookedTimesForDate(targetDay);
+        const bookedTimes = getBookedTimesForDate(targetDay, selectedPickupLocation);
         if (bookedTimes.length === 0) return false;
         
         // Генерируем все возможные времена в промежутке (каждые 10 минут)
@@ -3082,13 +3082,16 @@ function generateTimeSlots() {
     };
     
     // Асинхронно проверяем заказы с сервера и обновляем UI
-    fetch(`${SERVER_URL}/api/orders/booked-times?date=${targetDay}`)
-        .then(response => response.json())
-        .then(data => {
-            if (data.success && Array.isArray(data.bookedTimes)) {
-                const serverBookedTimes = data.bookedTimes;
-                const localBookedTimes = getBookedTimesForDate(targetDay);
-                const allBookedTimes = [...new Set([...localBookedTimes, ...serverBookedTimes])];
+    // Только для самовывоза проверяем занятость времени
+    if (deliveryType === 'selfPickup' && selectedPickupLocation) {
+        const currentPickupLocation = encodeURIComponent(selectedPickupLocation);
+        fetch(`${SERVER_URL}/api/orders/booked-times?date=${targetDay}&pickupLocation=${currentPickupLocation}`)
+            .then(response => response.json())
+            .then(data => {
+                if (data.success && Array.isArray(data.bookedTimes)) {
+                    const serverBookedTimes = data.bookedTimes;
+                    const localBookedTimes = getBookedTimesForDate(targetDay, selectedPickupLocation);
+                    const allBookedTimes = [...new Set([...localBookedTimes, ...serverBookedTimes])];
                 
                 // Обновляем кнопки временных промежутков
                 const timeSlotButtons = document.querySelectorAll('#time-slots-modal-container button');
@@ -3130,10 +3133,11 @@ function generateTimeSlots() {
                     }
                 });
             }
-        })
-        .catch(error => {
-            console.error('Error fetching booked times:', error);
-        });
+            })
+            .catch(error => {
+                console.error('Error fetching booked times:', error);
+            });
+    }
     
     // Генерируем слоты с 9:00 до 23:00-00:00 (каждый час)
     for (let hour = 9; hour < 23; hour++) {
@@ -3508,7 +3512,7 @@ function selectLocationFromMap() {
 }
 
 // Функция для получения занятых времен для даты
-function getBookedTimesForDate(dateKey) {
+function getBookedTimesForDate(dateKey, pickupLocation = null) {
     try {
         // Загружаем все заказы из localStorage
         const savedOrders = localStorage.getItem('orders');
@@ -3517,7 +3521,10 @@ function getBookedTimesForDate(dateKey) {
         const allOrders = JSON.parse(savedOrders);
         if (!Array.isArray(allOrders)) return [];
         
-        // Фильтруем заказы по дате и статусу (pending, confirmed и transferred - все занимают время)
+        // Используем текущий выбранный адрес самовывоза если не передан
+        const currentPickupLocation = pickupLocation || selectedPickupLocation || '';
+        
+        // Фильтруем заказы по дате, статусу и адресу самовывоза
         // Исключаем отмененные и отклоненные заказы - их время становится свободным
         // Учитываем только заказы на самовывоз с точным временем (для доставки точное время не используется)
         const bookedTimes = [];
@@ -3527,7 +3534,15 @@ function getBookedTimesForDate(dateKey) {
                 (order.deliveryType === 'selfPickup' || !order.deliveryType) && // Только самовывоз
                 (order.status === 'pending' || order.status === 'confirmed' || order.status === 'transferred') &&
                 order.status !== 'cancelled' && order.status !== 'rejected') {
-                bookedTimes.push(order.deliveryExactTime);
+                
+                // Проверяем адрес самовывоза - время занято только для конкретного адреса
+                const orderPickupLocation = order.pickupLocation || order.location || '';
+                if (currentPickupLocation && orderPickupLocation === currentPickupLocation) {
+                    bookedTimes.push(order.deliveryExactTime);
+                } else if (!currentPickupLocation && !orderPickupLocation) {
+                    // Если адрес не указан в запросе и в заказе - считаем что это тот же адрес
+                    bookedTimes.push(order.deliveryExactTime);
+                }
             }
         });
         
@@ -3617,11 +3632,15 @@ function showExactTimeSelectionModal(timeSlot) {
         ];
         
         // Получаем занятые времена для этой даты (локально)
-        let bookedTimes = getBookedTimesForDate(dateKey);
+        // Только для самовывоза проверяем занятость времени
+        let bookedTimes = [];
+        if (deliveryType === 'selfPickup') {
+            bookedTimes = getBookedTimesForDate(dateKey, selectedPickupLocation);
+        }
         
         timeSlots.forEach(timeStr => {
             const isSelected = deliveryExactTime === timeStr;
-            const isBooked = bookedTimes.includes(timeStr);
+            const isBooked = deliveryType === 'selfPickup' && bookedTimes.includes(timeStr);
             const buttonStyle = isBooked 
                 ? `padding: 10px 16px; border: 2px solid #999; border-radius: 10px; background: #e0e0e0; cursor: not-allowed; font-size: 14px; font-weight: 600; color: #999; transition: all 0.3s; white-space: nowrap; margin-right: 8px; margin-bottom: 8px; opacity: 0.5;`
                 : `padding: 10px 16px; border: 2px solid ${isSelected ? '#007AFF' : '#e5e5e5'}; border-radius: 10px; background: ${isSelected ? '#e3f2fd' : '#ffffff'}; cursor: pointer; font-size: 14px; font-weight: 600; color: ${isSelected ? '#007AFF' : '#666'}; transition: all 0.3s; white-space: nowrap; margin-right: 8px; margin-bottom: 8px;`;
@@ -3682,11 +3701,15 @@ function showExactTimeSelectionModal(timeSlot) {
         }
         
         // Получаем занятые времена для этой даты (локально)
-        let bookedTimes = getBookedTimesForDate(dateKey);
+        // Только для самовывоза проверяем занятость времени
+        let bookedTimes = [];
+        if (deliveryType === 'selfPickup') {
+            bookedTimes = getBookedTimesForDate(dateKey, selectedPickupLocation);
+        }
         
         timeSlots.forEach(timeStr => {
             const isSelected = deliveryExactTime === timeStr;
-            const isBooked = bookedTimes.includes(timeStr);
+            const isBooked = deliveryType === 'selfPickup' && bookedTimes.includes(timeStr);
             const buttonStyle = isBooked 
                 ? `padding: 10px 16px; border: 2px solid #999; border-radius: 10px; background: #e0e0e0; cursor: not-allowed; font-size: 14px; font-weight: 600; color: #999; transition: all 0.3s; white-space: nowrap; margin-right: 8px; margin-bottom: 8px; opacity: 0.5;`
                 : `padding: 10px 16px; border: 2px solid ${isSelected ? '#007AFF' : '#e5e5e5'}; border-radius: 10px; background: ${isSelected ? '#e3f2fd' : '#ffffff'}; cursor: pointer; font-size: 14px; font-weight: 600; color: ${isSelected ? '#007AFF' : '#666'}; transition: all 0.3s; white-space: nowrap; margin-right: 8px; margin-bottom: 8px;`;
@@ -3711,37 +3734,42 @@ function showExactTimeSelectionModal(timeSlot) {
     
     // Также проверяем заказы на сервере через API (асинхронно)
     // Это нужно для проверки заказов других пользователей
-    fetch(`${SERVER_URL}/api/orders/booked-times?date=${dateKey}`)
-        .then(response => response.json())
-        .then(data => {
-            if (data.success && Array.isArray(data.bookedTimes)) {
-                // Объединяем с локальными заказами
-                const serverBookedTimes = data.bookedTimes;
-                const localBookedTimes = getBookedTimesForDate(dateKey);
-                const allBookedTimes = [...new Set([...localBookedTimes, ...serverBookedTimes])];
-                
-                // Обновляем модальное окно если оно открыто
-                const modal = document.querySelector('.exact-time-modal-overlay');
-                if (modal) {
-                    const container = document.getElementById('exact-time-slots-container');
-                    if (container) {
-                        // Обновляем кнопки с обновленными данными
-                        const timeSlots = container.querySelectorAll('button');
-                        timeSlots.forEach(btn => {
-                            const timeStr = btn.textContent.split(' ')[0].trim(); // Берем только время без "(занято)"
-                            if (allBookedTimes.includes(timeStr) && !btn.disabled) {
-                                btn.disabled = true;
-                                btn.style.cssText = 'padding: 10px 16px; border: 2px solid #999; border-radius: 10px; background: #e0e0e0; cursor: not-allowed; font-size: 14px; font-weight: 600; color: #999; transition: all 0.3s; white-space: nowrap; margin-right: 8px; margin-bottom: 8px; opacity: 0.5;';
-                                btn.textContent = timeStr + ' (занято)';
-                            }
-                        });
+    // Только для самовывоза проверяем занятость времени
+    if (deliveryType === 'selfPickup' && selectedPickupLocation) {
+        const currentPickupLocation = encodeURIComponent(selectedPickupLocation);
+        fetch(`${SERVER_URL}/api/orders/booked-times?date=${dateKey}&pickupLocation=${currentPickupLocation}`)
+            .then(response => response.json())
+            .then(data => {
+                if (data.success && Array.isArray(data.bookedTimes)) {
+                    // Объединяем с локальными заказами
+                    const serverBookedTimes = data.bookedTimes;
+                    const localBookedTimes = getBookedTimesForDate(dateKey, selectedPickupLocation);
+                    const allBookedTimes = [...new Set([...localBookedTimes, ...serverBookedTimes])];
+                    
+                    // Обновляем модальное окно если оно открыто
+                    const modal = document.querySelector('.exact-time-modal-overlay');
+                    if (modal) {
+                        const container = document.getElementById('exact-time-slots-container');
+                        if (container) {
+                            // Обновляем кнопки с обновленными данными
+                            const timeSlots = container.querySelectorAll('button');
+                            timeSlots.forEach(btn => {
+                                const timeStr = btn.textContent.split(' ')[0].trim(); // Берем только время без "(занято)"
+                                if (allBookedTimes.includes(timeStr) && !btn.disabled) {
+                                    btn.disabled = true;
+                                    btn.style.cssText = 'padding: 10px 16px; border: 2px solid #999; border-radius: 10px; background: #e0e0e0; cursor: not-allowed; font-size: 14px; font-weight: 600; color: #999; transition: all 0.3s; white-space: nowrap; margin-right: 8px; margin-bottom: 8px; opacity: 0.5;';
+                                    btn.textContent = timeStr;
+                                    btn.removeAttribute('onclick');
+                                }
+                            });
+                        }
                     }
                 }
-            }
-        })
-        .catch(err => {
-            console.error('Error fetching booked times from server:', err);
-        });
+            })
+            .catch(err => {
+                console.error('Error fetching booked times from server:', err);
+            });
+    }
     
     // Устанавливаем обработчик BackButton после создания closeModal
     if (tg && tg.BackButton) {
@@ -5226,17 +5254,17 @@ function checkOrderStatus(orderId) {
                                 return sum;
                             }, 0);
                             
-                            if (totalItems > 0) {
-                                // Загружаем частичный прогресс
-                                const savedPartialProgress = localStorage.getItem('partialItemsProgress');
-                                let currentPartialProgress = savedPartialProgress ? parseFloat(savedPartialProgress) : 0;
-                                
-                                // Добавляем прогресс от текущего заказа (1 товар = 0.5 штампа)
-                                const totalProgress = currentPartialProgress + (totalItems / 2);
-                                const stampsToAdd = Math.floor(totalProgress);
-                                const newPartialProgress = totalProgress - stampsToAdd; // Остаток (0-0.99)
-                                
-                                if (stampsToAdd > 0 || totalItems > 0) {
+                                if (totalItems > 0) {
+                                    // Загружаем частичный прогресс
+                                    const savedPartialProgress = localStorage.getItem('partialItemsProgress');
+                                    let currentPartialProgress = savedPartialProgress ? parseFloat(savedPartialProgress) : 0;
+                                    
+                                    // Добавляем прогресс от текущего заказа (1 товар = 0.5 штампа)
+                                    const totalProgress = currentPartialProgress + (totalItems / 2);
+                                    const stampsToAdd = Math.floor(totalProgress);
+                                    const newPartialProgress = totalProgress - stampsToAdd; // Остаток (0-0.99)
+                                    
+                                    // ВСЕГДА сохраняем прогресс, даже если целых штампов не добавилось
                                     const oldTotalStamps = totalStampsValue;
                                     totalStampsValue += stampsToAdd;
                                     localStorage.setItem('stamps', totalStampsValue.toString());
@@ -5248,37 +5276,46 @@ function checkOrderStatus(orderId) {
                                     stamps = totalStampsValue % 10;
                                     partialItemsProgress = newPartialProgress;
                                     
-                                    // Проверяем бонус за 10 штампов
-                                    const oldSets = Math.floor(oldTotalStamps / 10);
-                                    const newSets = Math.floor(totalStampsValue / 10);
-                                    const newCompletedSets = newSets - oldSets;
-                                    
-                                    if (newCompletedSets > 0) {
-                                        const bonusCoins = newCompletedSets * 10;
-                                        const savedCoins = localStorage.getItem('vapeCoins');
-                                        let currentCoins = savedCoins ? parseFloat(savedCoins) : 0;
-                                        currentCoins += bonusCoins;
-                                        localStorage.setItem('vapeCoins', currentCoins.toString());
+                                    // Проверяем бонус за 10 штампов только если добавились целые штампы
+                                    if (stampsToAdd > 0) {
+                                        // Проверяем бонус за 10 штампов
+                                        const oldSets = Math.floor(oldTotalStamps / 10);
+                                        const newSets = Math.floor(totalStampsValue / 10);
+                                        const newCompletedSets = newSets - oldSets;
                                         
-                                        // Обновляем глобальную переменную vapeCoins
-                                        vapeCoins = currentCoins;
-                                        
-                                        const savedHistory = localStorage.getItem('vapeCoinsHistory');
-                                        let history = savedHistory ? JSON.parse(savedHistory) : [];
-                                        history.unshift({
-                                            id: `vc_${Date.now()}`,
-                                            date: new Date().toISOString(),
-                                            type: 'earned',
-                                            amount: bonusCoins,
-                                            description: `Бонус за ${newCompletedSets} ${newCompletedSets === 1 ? 'набор из 10 штампов' : 'наборов из 10 штампов'}`,
-                                            orderId: orderId
-                                        });
-                                        localStorage.setItem('vapeCoinsHistory', JSON.stringify(history));
-                                        
-                                        // Обновляем глобальную переменную vapeCoinsHistory
-                                        vapeCoinsHistory = history;
+                                        if (newCompletedSets > 0) {
+                                            const bonusCoins = newCompletedSets * 10;
+                                            const savedCoins = localStorage.getItem('vapeCoins');
+                                            let currentCoins = savedCoins ? parseFloat(savedCoins) : 0;
+                                            currentCoins += bonusCoins;
+                                            localStorage.setItem('vapeCoins', currentCoins.toString());
+                                            
+                                            // Обновляем глобальную переменную vapeCoins
+                                            vapeCoins = currentCoins;
+                                            
+                                            const savedHistory = localStorage.getItem('vapeCoinsHistory');
+                                            let history = savedHistory ? JSON.parse(savedHistory) : [];
+                                            history.unshift({
+                                                id: `vc_${Date.now()}`,
+                                                date: new Date().toISOString(),
+                                                type: 'earned',
+                                                amount: bonusCoins,
+                                                description: `Бонус за ${newCompletedSets} ${newCompletedSets === 1 ? 'набор из 10 штампов' : 'наборов из 10 штампов'}`,
+                                                orderId: orderId
+                                            });
+                                            localStorage.setItem('vapeCoinsHistory', JSON.stringify(history));
+                                            
+                                            // Обновляем глобальную переменную vapeCoinsHistory
+                                            vapeCoinsHistory = history;
+                                        }
                                     }
-                                }
+                                    
+                                    // Обновляем UI акций для отображения прогресса штампов
+                                    if (currentPage === 'promotions') {
+                                        setTimeout(() => {
+                                            showPromotions();
+                                        }, 100);
+                                    }
                             }
                         }
                         
@@ -5428,17 +5465,20 @@ function checkOrderStatus(orderId) {
                                     stampsToAdd = Math.floor(totalProgress);
                                     const newPartialProgress = totalProgress - stampsToAdd; // Остаток (0-0.99)
                                     
-                                    if (stampsToAdd > 0 || totalItems > 0) {
-                                        const oldTotalStamps = totalStampsValue;
-                                        totalStampsValue += stampsToAdd;
-                                        localStorage.setItem('stamps', totalStampsValue.toString());
-                                        localStorage.setItem('partialItemsProgress', newPartialProgress.toString());
-                                        localStorage.setItem(`stamps_added_${orderId}`, 'true'); // Помечаем что штампы начислены
-                                        
-                                        // Обновляем глобальные переменные
-                                        completedStampSets = Math.floor(totalStampsValue / 10);
-                                        stamps = totalStampsValue % 10;
-                                        partialItemsProgress = newPartialProgress;
+                                    // ВСЕГДА сохраняем прогресс, даже если целых штампов не добавилось
+                                    const oldTotalStamps = totalStampsValue;
+                                    totalStampsValue += stampsToAdd;
+                                    localStorage.setItem('stamps', totalStampsValue.toString());
+                                    localStorage.setItem('partialItemsProgress', newPartialProgress.toString());
+                                    localStorage.setItem(`stamps_added_${orderId}`, 'true'); // Помечаем что штампы начислены
+                                    
+                                    // Обновляем глобальные переменные
+                                    completedStampSets = Math.floor(totalStampsValue / 10);
+                                    stamps = totalStampsValue % 10;
+                                    partialItemsProgress = newPartialProgress;
+                                    
+                                    // Проверяем бонус за 10 штампов только если добавились целые штампы
+                                    if (stampsToAdd > 0) {
                                         
                                         // Проверяем бонус за 10 штампов
                                         const oldSets = Math.floor(oldTotalStamps / 10);
@@ -5484,12 +5524,22 @@ function checkOrderStatus(orderId) {
                             // Формируем сообщение
                             let toastMessage = '';
                             const coinsEarnedValue = data.order && data.order.vapeCoinsEarned !== undefined && data.order.vapeCoinsEarned !== null ? data.order.vapeCoinsEarned : (coinsEarned || 0);
+                            
+                            // Показываем информацию о прогрессе штампов даже если целых штампов не добавилось
+                            const savedPartialProgress = localStorage.getItem('partialItemsProgress');
+                            const currentPartialProgress = savedPartialProgress ? parseFloat(savedPartialProgress) : 0;
+                            const partialProgressPercent = Math.round(currentPartialProgress * 100);
+                            
                             if (coinsEarnedValue > 0 && stampsToAdd > 0) {
                                 toastMessage = `Заказ передан!\n+ ${stampsToAdd} ${stampsToAdd === 1 ? 'штамп' : stampsToAdd < 5 ? 'штампа' : 'штампов'}\n+ ${coinsEarnedValue.toFixed(1)} коинов`;
                             } else if (stampsToAdd > 0) {
                                 toastMessage = `Заказ передан!\n+ ${stampsToAdd} ${stampsToAdd === 1 ? 'штамп' : stampsToAdd < 5 ? 'штампа' : 'штампов'}`;
+                            } else if (coinsEarnedValue > 0 && currentPartialProgress > 0) {
+                                toastMessage = `Заказ передан!\n+ ${coinsEarnedValue.toFixed(1)} коинов\n+ ${partialProgressPercent}% штампа`;
                             } else if (coinsEarnedValue > 0) {
                                 toastMessage = `Заказ передан! Начислено ${coinsEarnedValue.toFixed(1)} Vape Coins`;
+                            } else if (currentPartialProgress > 0) {
+                                toastMessage = `Заказ передан!\n+ ${partialProgressPercent}% штампа`;
                             } else {
                                 toastMessage = 'Заказ передан клиенту';
                             }
