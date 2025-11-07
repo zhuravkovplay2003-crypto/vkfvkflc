@@ -85,32 +85,18 @@ function verifyAge(isAdult) {
             
             // Показываем основной контент
             const mainContent = document.getElementById('main-content');
-            if (mainContent) {
-                mainContent.classList.remove('hidden');
-                showPage('catalog');
-                // Инициализируем SVG иконки после показа основного контента
-                setTimeout(() => {
-                    initSVGIcons();
-                }, 150);
-            }
+        if (mainContent) {
+            mainContent.classList.remove('hidden');
+            showPage('catalog');
+            // Инициализируем SVG иконки после показа основного контента
+            setTimeout(() => {
+                initSVGIcons();
+            }, 150);
+        }
             
             if (tg && tg.HapticFeedback) {
                 tg.HapticFeedback.notificationOccurred('success');
             }
-            
-            // После подтверждения возраста проверяем, выбрана ли точка самовывоза
-            // Если не выбрана - открываем выбор точки
-            setTimeout(() => {
-                if (!selectedPickupLocation) {
-                    console.log('Точка самовывоза не выбрана, открываем выбор...');
-                    selectPickupLocation();
-                } else {
-                    // Если точка уже выбрана, обновляем каталог
-                    console.log('Точка уже выбрана:', selectedPickupLocation);
-                    displayProducts();
-                }
-            }, 300); // Небольшая задержка для плавности
-            
         } else {
             if (tg && tg.showAlert) {
                 tg.showAlert('Доступ запрещен. Продажа никотинсодержащей продукции лицам младше 18 лет запрещена.');
@@ -559,8 +545,7 @@ function init() {
     loadProductsFromGoogleSheets().then((loadedProducts) => {
         console.log('✅ Товары загружены, инициализация завершена');
         console.log('   Загружено товаров:', loadedProducts ? loadedProducts.length : products.length);
-        // Товары будут показаны после выбора точки самовывоза
-        // Если точка уже выбрана (из localStorage), показываем товары
+        // Отображаем товары только если точка выбрана
         if (selectedPickupLocation) {
             if (typeof displayProducts === 'function') {
                 displayProducts();
@@ -569,7 +554,6 @@ function init() {
             }
         } else {
             // Показываем сообщение о необходимости выбора точки
-            // Но не открываем выбор автоматически - это будет после подтверждения возраста
             showLocationRequiredMessage();
         }
     }).catch(err => {
@@ -2971,9 +2955,8 @@ function selectPickupLocation() {
                 // Обновляем отображение точки в шапке
                 updatePickupLocationDisplay();
                 
-                // Всегда обновляем отображение товаров на странице каталога
-                // Это важно, особенно при первом выборе точки после подтверждения возраста
-                if (currentPage === 'catalog' || !currentPage) {
+                // Обновляем отображение товаров, если мы на странице каталога
+                if (currentPage === 'catalog') {
                     displayProducts();
                 }
                 
@@ -6933,7 +6916,7 @@ function showFavorites() {
                 border: 2px solid ${colors.border}; box-shadow: 0 4px 12px rgba(0,0,0,${darkMode ? '0.3' : '0.08'}); 
                 position: relative; transform: translateY(20px); opacity: 0; cursor: pointer;
                 transition: transform 0.4s ease ${index * 0.05}s, opacity 0.4s ease ${index * 0.05}s, box-shadow 0.2s ease, margin 0.35s cubic-bezier(0.4, 0, 0.2, 1), padding 0.35s cubic-bezier(0.4, 0, 0.2, 1), height 0.35s cubic-bezier(0.4, 0, 0.2, 1);
-                display: flex; flex-direction: column; height: 100%; ${!isInStock ? 'opacity: 0.5; filter: grayscale(100%);' : ''}"
+                display: flex; flex-direction: column; height: 100%; ${!isInStock ? 'opacity: 0.5;' : ''}"
                 onmouseover="this.style.boxShadow='0 6px 16px rgba(0,0,0,${darkMode ? '0.4' : '0.12'})'"
                 onmouseout="this.style.boxShadow='0 4px 12px rgba(0,0,0,${darkMode ? '0.3' : '0.08'})'">
                 <div style="position: relative; width: 100%; aspect-ratio: 1; background: ${colors.bgSecondary}; border-radius: 12px; 
@@ -6943,10 +6926,10 @@ function showFavorites() {
                         style="position: absolute; top: 8px; right: 8px; width: 36px; height: 36px; 
                         border: none; background: rgba(255, 255, 255, 0.95); cursor: pointer; 
                         border-radius: 50%; display: flex; align-items: center; justify-content: center;
-                        transition: all 0.2s; z-index: 10; padding: 0; box-shadow: 0 2px 8px rgba(0,0,0,0.15);"
+                        transition: all 0.2s; z-index: 10; padding: 0; box-shadow: 0 2px 8px rgba(0,0,0,0.15); filter: none !important;"
                         onmouseover="this.style.transform='scale(1.1)'; this.style.background='rgba(255, 255, 255, 1)'"
                         onmouseout="this.style.transform='scale(1)'; this.style.background='rgba(255, 255, 255, 0.95)'">
-                        <span id="favorite-heart-icon-${productId}-${flavor || ''}-${strength || ''}" style="display: flex; align-items: center; justify-content: center; transition: all 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);">
+                        <span id="favorite-heart-icon-${productId}-${flavor || ''}-${strength || ''}" style="display: flex; align-items: center; justify-content: center; transition: all 0.4s cubic-bezier(0.34, 1.56, 0.64, 1); filter: none !important;">
                             ${getHeartFilledIcon('#ff4444')}
                         </span>
                     </button>
