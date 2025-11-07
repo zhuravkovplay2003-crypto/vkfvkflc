@@ -326,14 +326,15 @@ function init() {
     if (savedSelectedCity) {
         selectedCity = savedSelectedCity;
     }
-    const savedSelectedDeliveryDay = localStorage.getItem('selectedDeliveryDay');
-    if (savedSelectedDeliveryDay) {
-        selectedDeliveryDay = savedSelectedDeliveryDay;
-    }
-    const savedDeliveryExactTime = localStorage.getItem('deliveryExactTime');
-    if (savedDeliveryExactTime) {
-        deliveryExactTime = savedDeliveryExactTime;
-    }
+    // НЕ загружаем сохраненный день и точное время - нужно выбирать каждый раз при оформлении заказа
+    // const savedSelectedDeliveryDay = localStorage.getItem('selectedDeliveryDay');
+    // if (savedSelectedDeliveryDay) {
+    //     selectedDeliveryDay = savedSelectedDeliveryDay;
+    // }
+    // const savedDeliveryExactTime = localStorage.getItem('deliveryExactTime');
+    // if (savedDeliveryExactTime) {
+    //     deliveryExactTime = savedDeliveryExactTime;
+    // }
     
     // Загружаем данные рефералов
     const savedReferrals = localStorage.getItem('referrals');
@@ -4890,6 +4891,14 @@ function checkout() {
         localStorage.setItem('cart', JSON.stringify(cart));
         updateCartBadge();
         
+        // Сбрасываем время доставки/самовывоза для следующего заказа
+        deliveryTime = null;
+        deliveryExactTime = null;
+        selectedDeliveryDay = null;
+        localStorage.removeItem('deliveryTime');
+        localStorage.removeItem('deliveryExactTime');
+        localStorage.removeItem('selectedDeliveryDay');
+        
         // Убеждаемся, что все модальные окна закрыты и стили восстановлены
         document.body.style.overflow = '';
         document.body.style.transform = '';
@@ -5052,10 +5061,8 @@ function checkOrderStatus(orderId) {
                                 }, 3500);
                             }
                             
-                            // Обновляем отображение заказов только если пользователь уже на странице заказов
-                            if (currentPage === 'orders') {
-                                showOrders();
-                            }
+                            // Обновляем отображение заказов ВСЕГДА при изменении статуса
+                            showOrders();
                         }
                         
                         // Обновляем отображение заказов ВСЕГДА при изменении статуса
@@ -6399,17 +6406,13 @@ function showOrders() {
         // Форматируем дату заказа с учетом московского времени
         let formattedDate = '';
         if (order.selectedDeliveryDay) {
-            // Если есть выбранная дата доставки
-            if (isTomorrow(order.selectedDeliveryDay)) {
-                formattedDate = 'Завтра';
-            } else {
-                const deliveryDate = new Date(order.selectedDeliveryDay + 'T12:00:00');
-                formattedDate = deliveryDate.toLocaleDateString('ru-RU', {
-                    day: '2-digit',
-                    month: '2-digit',
-                    year: 'numeric'
-                });
-            }
+            // Если есть выбранная дата доставки - всегда показываем дату, а не слово "завтра"
+            const deliveryDate = new Date(order.selectedDeliveryDay + 'T12:00:00');
+            formattedDate = deliveryDate.toLocaleDateString('ru-RU', {
+                day: '2-digit',
+                month: '2-digit',
+                year: 'numeric'
+            });
         } else {
             // Используем дату заказа с московским временем
             const orderDate = new Date(order.date);
