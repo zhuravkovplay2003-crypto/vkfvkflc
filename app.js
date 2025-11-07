@@ -85,14 +85,14 @@ function verifyAge(isAdult) {
             
             // Показываем основной контент
             const mainContent = document.getElementById('main-content');
-            if (mainContent) {
-                mainContent.classList.remove('hidden');
-                showPage('catalog');
+        if (mainContent) {
+            mainContent.classList.remove('hidden');
+            showPage('catalog');
             // Инициализируем SVG иконки после показа основного контента
             setTimeout(() => {
                 initSVGIcons();
             }, 150);
-            }
+        }
             
             if (tg && tg.HapticFeedback) {
                 tg.HapticFeedback.notificationOccurred('success');
@@ -112,100 +112,367 @@ function verifyAge(isAdult) {
 // Делаем функцию глобальной СРАЗУ
 window.verifyAge = verifyAge;
 
-// Каталог товаров (примеры из скриншотов)
-const products = [
-    {
-        id: 1,
-        name: "Злая монашка",
-        category: "liquids",
-        price: 18.00,
-        emoji: "💚",
-        description: "Жидкость для вейпа",
-        strengths: ["50 мг", "70 мг"],
-        flavors: ["малиновое варенье", "апельсин с кислой малиной", "энергетик грейпфрут", "нектарин вишня", "ананас ежевика", "фруктовый мармелад лед"],
-        image: "💚",
-        imageUrl: "images/ex2.jpg", // Дефолтное изображение
-        flavorImages: {
-            "малиновое варенье": "images/ex2.jpg",
-            "апельсин с кислой малиной": "images/ex3.jpg"
-        }
-    },
-    {
-        id: 2,
-        name: "Испаритель Aegis Series b",
-        category: "accessories",
-        price: 12.00,
-        emoji: "⚡",
-        description: "Сменный испаритель",
-        image: "⚡",
-        imageUrl: "images/ex1.jpg"
-    },
-    {
-        id: 3,
-        name: "VOOPOO VMATE Cartridge V2",
-        category: "accessories",
-        price: 15.00,
-        emoji: "💨",
-        description: "Картриджи для pod-системы",
-        image: "💨",
-        imageUrl: "images/ex3.jpg",
-        inStock: false // Нет в наличии для примера
-    },
-    {
-        id: 4,
-        name: "Hotspot Don't Chew it",
-        category: "liquids",
-        price: 15.00,
-        emoji: "💜",
-        description: "Жидкость с вкусом маракуйя жвачка",
-        strengths: ["50 мг"],
-        flavors: ["маракуйя жвачка"],
-        image: "💜"
-    },
-    {
-        id: 5,
-        name: "ELF BAR 5000",
-        category: "disposable",
-        price: 25.00,
-        emoji: "🍓",
-        description: "Одноразовая электронная сигарета",
-        image: "🍓"
-    },
-    {
-        id: 6,
-        name: "Жидкость ZERO",
-        category: "liquids",
-        price: 12.00,
-        vapeCoinsPrice: 1.2,
-        emoji: "💙",
-        description: "Жидкость без никотина",
-        image: "💙",
-        strengths: ["0 мг"],
-        flavors: ["клубника", "яблоко", "виноград"]
-    },
-    {
-        id: 7,
-        name: "Испаритель Mesh",
-        category: "accessories",
-        price: 8.00,
-        vapeCoinsPrice: 0.8,
-        emoji: "⚡",
-        description: "Сменный испаритель Mesh",
-        image: "⚡"
-    },
-    {
-        id: 8,
-        name: "Жидкость Премиум",
-        category: "liquids",
-        price: 22.00,
-        vapeCoinsPrice: 2.2,
-        emoji: "💎",
-        description: "Премиум жидкость",
-        image: "💎",
-        strengths: ["50 мг", "70 мг"],
-        flavors: ["манго", "дыня", "персик"]
+// Каталог товаров (загружается из Google таблиц)
+let products = [];
+
+// ===== НАСТРОЙКИ GOOGLE ТАБЛИЦ (основной источник данных) =====
+const GOOGLE_SHEETS_CONFIG = {
+    // ID таблицы (одна таблица для обеих листов)
+    sheetId: '16IWmjfm__yJ2Ryqhm97vjJx-gKVcfkTANdq2lkojmvw',
+    
+    // ID листов (gid) - разные листы в одной таблице
+    productsGid: '0',           // Лист "Товары" (gid=0)
+    variantsGid: '1804830457',  // Лист "Варианты товаров" (gid=1804830457)
+    
+    // API ключ для Google Sheets API (опционально, для получения изображений из ячеек)
+    apiKey: 'AIzaSyAJaShY7Th_2yrG4jXEUS2xIkfl3Glx6x8'
+};
+
+// Функция для обработки ссылок на изображения
+// Если в таблице указан номер (1, 2, 3...), формирует путь к локальному изображению /images/1.jpg
+function processImageUrl(url) {
+    if (!url) return null;
+    
+    const urlStr = String(url).trim();
+    if (!urlStr) return null;
+    
+    // Если это полный URL (http/https), возвращаем как есть
+    if (urlStr.startsWith('http://') || urlStr.startsWith('https://')) {
+        return urlStr;
     }
-];
+    
+    // Если это Base64 изображение, возвращаем как есть
+    if (urlStr.startsWith('data:image/')) {
+        return urlStr;
+    }
+    
+    // Проверяем, является ли значение числом (номером изображения)
+    const cleanNumber = urlStr.replace(/\s/g, '');
+    if (/^\d+$/.test(cleanNumber)) {
+        const imageNumber = parseInt(cleanNumber, 10);
+        return `/images/${imageNumber}.jpg`;
+    }
+    
+    // Если это относительный путь, возвращаем как есть
+    if (urlStr.startsWith('/')) {
+        return urlStr;
+    }
+    
+    console.warn('⚠️ Неизвестный формат URL изображения:', urlStr.substring(0, 50));
+    return urlStr;
+}
+
+// Функция для парсинга CSV
+function parseCSV(csvText) {
+    const lines = csvText.split(/\r?\n/).filter(line => line.trim());
+    if (lines.length === 0) return [];
+    
+    const parseCSVLine = (line) => {
+        const values = [];
+        let current = '';
+        let inQuotes = false;
+        
+        for (let i = 0; i < line.length; i++) {
+            const char = line[i];
+            if (char === '"') {
+                if (inQuotes && line[i + 1] === '"') {
+                    current += '"';
+                    i++;
+                } else {
+                    inQuotes = !inQuotes;
+                }
+            } else if (char === ',' && !inQuotes) {
+                values.push(current.trim());
+                current = '';
+            } else {
+                current += char;
+            }
+        }
+        values.push(current.trim());
+        return values;
+    };
+    
+    const headers = parseCSVLine(lines[0]).map(h => h.replace(/^"|"$/g, ''));
+    
+    const data = [];
+    for (let i = 1; i < lines.length; i++) {
+        const values = parseCSVLine(lines[i]);
+        if (values.length >= headers.length) {
+            const row = {};
+            headers.forEach((header, index) => {
+                row[header] = (values[index] || '').replace(/^"|"$/g, '').trim();
+            });
+            if (Object.values(row).some(v => v !== '')) {
+                data.push(row);
+            }
+        }
+    }
+    
+    return data;
+}
+
+// Загрузка данных из Google таблиц
+async function loadProductsFromGoogleSheets() {
+    try {
+        const sheetId = GOOGLE_SHEETS_CONFIG.sheetId;
+        const productsGid = GOOGLE_SHEETS_CONFIG.productsGid || '0';
+        const variantsGid = GOOGLE_SHEETS_CONFIG.variantsGid || '0';
+        
+        const productsUrl = `https://docs.google.com/spreadsheets/d/${sheetId}/export?format=csv&gid=${productsGid}`;
+        const variantsUrl = `https://docs.google.com/spreadsheets/d/${sheetId}/export?format=csv&gid=${variantsGid}`;
+        
+        console.log('Загрузка товаров из Google таблиц...');
+        
+        const [productsResponse, variantsResponse] = await Promise.all([
+            fetch(productsUrl).catch(err => {
+                console.error('Ошибка загрузки таблицы товаров:', err);
+                return null;
+            }),
+            fetch(variantsUrl).catch(err => {
+                console.error('Ошибка загрузки таблицы вариантов:', err);
+                return null;
+            })
+        ]);
+        
+        if (!productsResponse || !productsResponse.ok) {
+            throw new Error(`Ошибка загрузки товаров: ${productsResponse?.status || 'нет ответа'}`);
+        }
+        
+        const productsText = await productsResponse.text();
+        const variantsText = variantsResponse && variantsResponse.ok ? await variantsResponse.text() : '';
+        
+        const productsData = parseCSV(productsText);
+        const variantsData = variantsText ? parseCSV(variantsText) : [];
+        
+        console.log('Загружено товаров:', productsData.length);
+        console.log('Загружено вариантов:', variantsData.length);
+        
+        products = transformProductsData(productsData, variantsData);
+        console.log('Товары преобразованы:', products.length);
+        
+        return products;
+        
+    } catch (error) {
+        console.error('Ошибка загрузки товаров из Google таблиц:', error);
+        products = [];
+        return products;
+    }
+}
+
+// Преобразование данных из таблиц в формат приложения
+function transformProductsData(productsData, variantsData) {
+    const result = [];
+    
+    const variantsByProductId = {};
+    variantsData.forEach(variant => {
+        const productId = parseInt(variant['ID товара'] || variant['ID']) || 0;
+        if (!variantsByProductId[productId]) {
+            variantsByProductId[productId] = [];
+        }
+        variantsByProductId[productId].push(variant);
+    });
+    
+    productsData.forEach(productRow => {
+        const productId = parseInt(productRow['ID'] || productRow['id']) || 0;
+        if (!productId) return;
+        
+        const product = {
+            id: productId,
+            name: (productRow['Название'] || productRow['name'] || '').trim(),
+            category: (productRow['Категория'] || productRow['category'] || '').toLowerCase().trim(),
+            price: parseFloat(productRow['Цена'] || productRow['price'] || 0),
+            description: (productRow['Описание'] || productRow['description'] || '').trim(),
+            imageUrl: (() => {
+                const url = (productRow['URL дефолтное фото'] || productRow['imageUrl'] || productRow['URL фото'] || '').trim();
+                if (url) {
+                    return processImageUrl(url);
+                }
+                return null;
+            })(),
+            inStock: (productRow['В наличии'] || productRow['inStock'] || '').toString().toLowerCase() === 'да' || 
+                    (productRow['В наличии'] || productRow['inStock'] || '').toString().toLowerCase() === 'true',
+            quantity: parseInt(productRow['Количество'] || productRow['quantity'] || 0) || 0
+        };
+        
+        const variants = variantsByProductId[productId] || [];
+        const strengths = new Set();
+        const flavors = new Set();
+        const resistances = new Set();
+        const colors = new Set();
+        const flavorImages = {};
+        const resistanceImages = {};
+        const colorImages = {};
+        
+        // Объект для хранения количества товара на каждой точке самовывоза
+        // Формат: { "Минск, ст. м. Грушевка": 5, "Минск, ст. м. Площадь Победы": 0, ... }
+        const stockByLocation = {};
+        
+        variants.forEach(variant => {
+            const крепость = (variant['Крепость'] || '').trim();
+            const сопротивление = (variant['Сопротивление'] || '').trim();
+            const вкус = (variant['Вкус'] || '').trim();
+            const цвет = (variant['Цвет'] || '').trim();
+            let urlФото = (variant['URL фото'] || '').trim();
+            
+            if (urlФото) {
+                urlФото = processImageUrl(urlФото);
+            }
+            
+            if (!urlФото && product.imageUrl) {
+                urlФото = product.imageUrl;
+            }
+            
+            // Читаем колонки с точками самовывоза из варианта
+            // Ищем все колонки, которые не являются стандартными (ID товара, Крепость, Сопротивление, Вкус, Цвет, URL фото)
+            const standardColumns = ['ID товара', 'ID', 'Крепость', 'Сопротивление', 'Вкус', 'Цвет', 'URL фото'];
+            Object.keys(variant).forEach(columnName => {
+                if (!standardColumns.includes(columnName) && columnName.trim() !== '') {
+                    // Это колонка с точкой самовывоза
+                    const locationName = columnName.trim();
+                    const quantity = parseInt(variant[columnName] || '0', 10) || 0;
+                    
+                    // Если для этой точки еще не было значения, или текущее значение больше
+                    // (берем максимальное количество из всех вариантов для этой точки)
+                    if (!stockByLocation[locationName] || quantity > stockByLocation[locationName]) {
+                        stockByLocation[locationName] = quantity;
+                    }
+                }
+            });
+            
+            if (крепость && крепость !== '-' && крепость !== '') {
+                strengths.add(крепость);
+                if (вкус && вкус !== '-' && вкус !== '') {
+                    flavors.add(вкус);
+                    if (urlФото) {
+                        flavorImages[вкус] = urlФото;
+                    }
+                }
+            }
+            
+            if (сопротивление && сопротивление !== '-' && сопротивление !== '') {
+                resistances.add(сопротивление);
+                if (urlФото) {
+                    resistanceImages[сопротивление] = urlФото;
+                }
+            }
+            
+            if (вкус && вкус !== '-' && вкус !== '' && !крепость && !сопротивление) {
+                flavors.add(вкус);
+                if (urlФото) {
+                    flavorImages[вкус] = urlФото;
+                }
+            }
+            
+            if (цвет && цвет !== '-' && цвет !== '') {
+                colors.add(цвет);
+                if (urlФото) {
+                    colorImages[цвет] = urlФото;
+                }
+            }
+        });
+        
+        // Сохраняем информацию о количестве на точках самовывоза
+        if (Object.keys(stockByLocation).length > 0) {
+            product.stockByLocation = stockByLocation;
+        }
+        
+        if (strengths.size > 0) product.strengths = Array.from(strengths);
+        if (flavors.size > 0) product.flavors = Array.from(flavors);
+        if (resistances.size > 0) product.resistances = Array.from(resistances);
+        if (colors.size > 0) product.colors = Array.from(colors);
+        if (Object.keys(flavorImages).length > 0) product.flavorImages = flavorImages;
+        if (Object.keys(resistanceImages).length > 0) product.resistanceImages = resistanceImages;
+        if (Object.keys(colorImages).length > 0) product.colorImages = colorImages;
+        
+        result.push(product);
+    });
+    
+    return result;
+}
+
+// Обновление отображения выбранной точки самовывоза в шапке
+function updatePickupLocationDisplay() {
+    const locationText = document.getElementById('pickup-location-text');
+    if (locationText) {
+        if (selectedPickupLocation) {
+            // Обрезаем текст если слишком длинный
+            const shortLocation = selectedPickupLocation.length > 20 
+                ? selectedPickupLocation.substring(0, 17) + '...' 
+                : selectedPickupLocation;
+            locationText.textContent = shortLocation;
+        } else {
+            locationText.textContent = 'Выберите точку';
+        }
+    }
+}
+
+// Показ сообщения о необходимости выбора точки самовывоза
+function showLocationRequiredMessage() {
+    const container = document.getElementById('page-content');
+    if (!container) return;
+    
+    container.className = '';
+    container.style.display = 'flex';
+    container.style.flexDirection = 'column';
+    container.style.alignItems = 'center';
+    container.style.justifyContent = 'center';
+    container.style.padding = '40px 20px';
+    container.style.background = '#f5f5f5';
+    container.style.minHeight = '400px';
+    container.style.textAlign = 'center';
+    
+    container.innerHTML = `
+        <div style="font-size: 64px; margin-bottom: 20px;">📍</div>
+        <div style="font-size: 24px; font-weight: 700; color: #333; margin-bottom: 12px;">
+            Выберите точку самовывоза
+        </div>
+        <div style="font-size: 16px; color: #666; margin-bottom: 30px; line-height: 1.5;">
+            Чтобы увидеть актуальный ассортимент товаров,<br>выберите точку самовывоза в шапке
+        </div>
+        <button onclick="selectPickupLocation()" style="
+            background: #007AFF;
+            color: #ffffff;
+            border: none;
+            border-radius: 12px;
+            padding: 14px 28px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            box-shadow: 0 2px 8px rgba(0,122,255,0.3);
+        ">
+            Выбрать точку
+        </button>
+    `;
+}
+
+// Функция для проверки наличия товара на выбранной точке самовывоза
+function isProductInStockAtLocation(product, location) {
+    // Если товар не в наличии вообще, возвращаем false
+    if (product.inStock === false) {
+        return false;
+    }
+    
+    // Если нет информации о количестве на точках, используем общее количество
+    if (!product.stockByLocation || Object.keys(product.stockByLocation).length === 0) {
+        return product.quantity === undefined || product.quantity > 0;
+    }
+    
+    // Если точка не указана, проверяем общее количество
+    if (!location) {
+        return product.quantity === undefined || product.quantity > 0;
+    }
+    
+    // Проверяем количество на конкретной точке
+    const quantityAtLocation = product.stockByLocation[location];
+    
+    // Если для этой точки нет данных, считаем что товар есть (используем общее количество)
+    if (quantityAtLocation === undefined) {
+        return product.quantity === undefined || product.quantity > 0;
+    }
+    
+    // Товар есть, если количество больше 0
+    return quantityAtLocation > 0;
+}
 
 // Функции для работы с московским временем (UTC+3)
 function getMoscowTime() {
@@ -270,6 +537,38 @@ function init() {
     if (verified === 'true') {
         ageVerified = true;
     }
+    
+    // Обновляем отображение выбранной точки самовывоза
+    updatePickupLocationDisplay();
+    
+    // Загружаем товары из Google таблиц
+    loadProductsFromGoogleSheets().then((loadedProducts) => {
+        console.log('✅ Товары загружены, инициализация завершена');
+        console.log('   Загружено товаров:', loadedProducts ? loadedProducts.length : products.length);
+        // Отображаем товары только если точка выбрана
+        if (selectedPickupLocation) {
+            if (typeof displayProducts === 'function') {
+                displayProducts();
+            } else if (typeof showCatalog === 'function') {
+                showCatalog();
+            }
+        } else {
+            // Показываем сообщение о необходимости выбора точки
+            showLocationRequiredMessage();
+        }
+    }).catch(err => {
+        console.error('❌ Критическая ошибка загрузки товаров:', err);
+        // Даже при ошибке пытаемся показать что есть
+        if (selectedPickupLocation) {
+            if (typeof displayProducts === 'function') {
+                displayProducts();
+            } else if (typeof showCatalog === 'function') {
+                showCatalog();
+            }
+        } else {
+            showLocationRequiredMessage();
+        }
+    });
     
     // Показываем splash экран, а потом проверку возраста
     setTimeout(() => {
@@ -931,32 +1230,40 @@ function showPage(page, skipHistory = false, resetCatalog = false) {
         }
     }
     
-    // Обновляем стиль шапки и "vapeshop" при переходе на Vape Coins
+    // Обновляем стиль шапки при переходе на Vape Coins
     const mainNav = document.querySelector('.main-nav');
-    const vapeshopElement = document.querySelector('.main-nav > div[style*="vapeshop"]');
+    const locationSelector = document.getElementById('pickup-location-selector');
     
     if (page === 'vapeCoins') {
         // Оранжевый градиент для всей шапки
         if (mainNav) {
             mainNav.style.background = 'linear-gradient(135deg, #FF9800 0%, #FF6B00 100%)';
         }
-        // Обновляем стиль "vapeshop"
-        if (vapeshopElement) {
-            vapeshopElement.style.background = 'rgba(255,255,255,0.2)';
-            vapeshopElement.style.color = '#ffffff';
-            vapeshopElement.style.border = '1px solid rgba(255,255,255,0.4)';
+        // Обновляем стиль селектора точки
+        if (locationSelector) {
+            locationSelector.style.background = 'rgba(255,255,255,0.2)';
+            locationSelector.style.color = '#ffffff';
+            locationSelector.style.border = '1px solid rgba(255,255,255,0.4)';
         }
     } else {
         // Возвращаем синий цвет для шапки
         if (mainNav) {
             mainNav.style.background = '#007AFF';
         }
-        // Возвращаем обычный стиль "vapeshop"
-        if (vapeshopElement) {
-            vapeshopElement.style.background = 'linear-gradient(135deg, rgba(255,255,255,0.25) 0%, rgba(255,255,255,0.15) 100%)';
-            vapeshopElement.style.color = '#ffffff';
-            vapeshopElement.style.border = '1px solid rgba(255,255,255,0.3)';
+        // Возвращаем обычный стиль селектора точки
+        if (locationSelector) {
+            locationSelector.style.background = 'linear-gradient(135deg, rgba(255,255,255,0.25) 0%, rgba(255,255,255,0.15) 100%)';
+            locationSelector.style.color = '#ffffff';
+            locationSelector.style.border = '1px solid rgba(255,255,255,0.3)';
         }
+    }
+    
+    // Обновляем отображение точки самовывоза
+    updatePickupLocationDisplay();
+    
+    // Если на странице каталога и точка не выбрана, показываем сообщение
+    if (page === 'catalog' && !selectedPickupLocation) {
+        showLocationRequiredMessage();
     }
     
     // Показываем/скрываем элементы
@@ -993,20 +1300,20 @@ function showPage(page, skipHistory = false, resetCatalog = false) {
         // Если пользователь явно нажал на вкладку "Ассортимент" с другой вкладки (не из товара),
         // проверяем, есть ли сохраненный товар для восстановления
         else if (currentPage !== 'product' && currentPage !== 'catalog') {
-            const savedProduct = localStorage.getItem('lastViewedProduct');
-            if (savedProduct) {
-                try {
-                    const productData = JSON.parse(savedProduct);
-                    if (productData && productData.id) {
-                        // Восстанавливаем товар
-                        showProduct(productData.id, productData.selectedFlavor, productData.selectedStrength);
-                        localStorage.removeItem('lastViewedProduct'); // Очищаем после восстановления
-                        return;
-                    }
-                } catch (e) {
-                    console.error('Error restoring product:', e);
+        const savedProduct = localStorage.getItem('lastViewedProduct');
+        if (savedProduct) {
+            try {
+                const productData = JSON.parse(savedProduct);
+                if (productData && productData.id) {
+                    // Восстанавливаем товар
+                    showProduct(productData.id, productData.selectedFlavor, productData.selectedStrength);
+                    localStorage.removeItem('lastViewedProduct'); // Очищаем после восстановления
+                    return;
                 }
+            } catch (e) {
+                console.error('Error restoring product:', e);
             }
+        }
         }
         
         // Очищаем viewingProduct если переходим на каталог
@@ -1157,7 +1464,7 @@ function goBack() {
         
         // Восстанавливаем позицию скролла в избранном, если возвращаемся туда
         if (previousPage === 'favorites' && favoritesScrollPosition > 0) {
-            showPage(previousPage, true); // skipHistory = true, чтобы не добавлять в историю
+        showPage(previousPage, true); // skipHistory = true, чтобы не добавлять в историю
             // Восстанавливаем позицию после полной загрузки контента
             setTimeout(() => {
                 const pageContent = document.getElementById('page-content');
@@ -1192,6 +1499,12 @@ function goBack() {
 function displayProducts(productsToShow = null) {
     const container = document.getElementById('page-content');
     if (!container) return;
+    
+    // Проверяем, выбрана ли точка самовывоза
+    if (!selectedPickupLocation) {
+        showLocationRequiredMessage();
+        return;
+    }
     
     container.className = 'products-grid';
     
@@ -1243,8 +1556,10 @@ function displayProducts(productsToShow = null) {
         card.className = 'product-card';
         card.setAttribute('data-product-id', product.id);
         
-        // Проверяем наличие товара
-        const isInStock = product.inStock !== false && (product.quantity === undefined || product.quantity > 0);
+        // Проверяем наличие товара на выбранной точке самовывоза
+        const isInStock = deliveryType === 'selfPickup' && selectedPickupLocation
+            ? isProductInStockAtLocation(product, selectedPickupLocation)
+            : (product.inStock !== false && (product.quantity === undefined || product.quantity > 0));
         
         // Стили для отсутствующих товаров
         if (!isInStock) {
@@ -1278,9 +1593,17 @@ function displayProducts(productsToShow = null) {
         card.addEventListener('mouseup', handleRelease);
         card.addEventListener('mouseleave', handleRelease);
         
-        // Предотвращаем двойной клик
+        // Предотвращаем двойной клик и блокируем если точка не выбрана
         let lastClickTime = 0;
         card.addEventListener('click', function(e) {
+            // Блокируем клик если точка самовывоза не выбрана
+            if (!selectedPickupLocation) {
+                e.preventDefault();
+                e.stopPropagation();
+                showToast('Сначала выберите точку самовывоза', 'error', 3000);
+                return;
+            }
+            
             const now = Date.now();
             if (now - lastClickTime < 300) {
                 e.preventDefault();
@@ -1325,6 +1648,13 @@ function displayProducts(productsToShow = null) {
 
 // Показать товар
 function showProduct(productId, favoriteFlavor = null, favoriteStrength = null) {
+    // Блокируем открытие товара если точка самовывоза не выбрана
+    if (!selectedPickupLocation) {
+        showToast('Сначала выберите точку самовывоза', 'error', 3000);
+        selectPickupLocation();
+        return;
+    }
+    
     const product = products.find(p => p.id === productId);
     if (!product) return;
     
@@ -1590,7 +1920,9 @@ function showProduct(productId, favoriteFlavor = null, favoriteStrength = null) 
             ${strengthOptions}
             ${flavorOptions}
             ${(() => {
-                const isInStock = product.inStock !== false && (product.quantity === undefined || product.quantity > 0);
+                const isInStock = deliveryType === 'selfPickup' && selectedPickupLocation
+                    ? isProductInStockAtLocation(product, selectedPickupLocation)
+                    : (product.inStock !== false && (product.quantity === undefined || product.quantity > 0));
                 
                 if (!isInStock) {
                     return `
@@ -1841,8 +2173,8 @@ function showFlavorModal() {
         modalContent.style.transform = 'scale(0.95)';
         modalContent.style.opacity = '0';
         setTimeout(() => {
-            document.body.style.overflow = '';
-            modal.remove();
+        document.body.style.overflow = '';
+        modal.remove();
         }, 300);
     };
     
@@ -2113,8 +2445,10 @@ function addToCart(productId, strength = null, flavor = null) {
     const product = products.find(p => p.id === productId);
     if (!product) return;
     
-    // Проверяем наличие товара
-    const isInStock = product.inStock !== false && (product.quantity === undefined || product.quantity > 0);
+    // Проверяем наличие товара на выбранной точке самовывоза
+    const isInStock = deliveryType === 'selfPickup' && selectedPickupLocation
+        ? isProductInStockAtLocation(product, selectedPickupLocation)
+        : (product.inStock !== false && (product.quantity === undefined || product.quantity > 0));
     if (!isInStock) {
         showToast('Товар временно недоступен', 'error', 3000);
         return;
@@ -2586,8 +2920,8 @@ function selectPickupLocation() {
             modalContent.style.transform = 'scale(0.95)';
             modalContent.style.opacity = '0';
             setTimeout(() => {
-                modal.remove();
-                showCitySelection();
+            modal.remove();
+            showCitySelection();
             }, 300);
         };
         
@@ -2618,22 +2952,19 @@ function selectPickupLocation() {
                     localStorage.removeItem('deliveryTime');
                 }
                 
-                // Обновляем отображение в корзине без полной перерисовки
-                const locDisplay = document.getElementById('selected-pickup-location-display');
-                if (locDisplay) {
-                    locDisplay.textContent = selectedPickupLocation;
+                // Обновляем отображение точки в шапке
+                updatePickupLocationDisplay();
+                
+                // Обновляем отображение товаров, если мы на странице каталога
+                if (currentPage === 'catalog') {
+                    displayProducts();
                 }
                 
-                // Проверяем, нужно ли показать блок времени
-                const timeBlock = document.getElementById('selected-delivery-time-display');
-                if (!timeBlock) {
-                    // Если блока времени нет, обновляем корзину
-                    showCart();
-                } else {
-                    // Если блок есть, просто обновляем его
-                    const timeBlockParent = timeBlock.closest('div[onclick="showTimeSelectionModal()"]');
-                    if (timeBlockParent && timeBlockParent.style.display === 'none') {
-                        timeBlockParent.style.display = 'block';
+                // Если мы на странице корзины, обновляем отображение точки там (без перехода)
+                if (currentPage === 'cart') {
+                    const locDisplay = document.getElementById('selected-pickup-location-display');
+                    if (locDisplay) {
+                        locDisplay.textContent = selectedPickupLocation;
                     }
                 }
                 
@@ -2644,8 +2975,8 @@ function selectPickupLocation() {
                 modalContent.style.transform = 'scale(0.95)';
                 modalContent.style.opacity = '0';
                 setTimeout(() => {
-                    modal.remove();
-                    document.body.style.overflow = '';
+                modal.remove();
+                document.body.style.overflow = '';
                 }, 300);
                 
                 if (tg && tg.HapticFeedback) {
@@ -2983,7 +3314,7 @@ function generateTimeSlots() {
     ];
     
     // Добавляем вкладки дней и время под ними
-    slots.push(`
+        slots.push(`
         <div style="margin-bottom: 20px;">
             <div style="display: flex; gap: 8px; margin-bottom: 16px;">
                 ${days.map(day => {
@@ -2992,11 +3323,11 @@ function generateTimeSlots() {
                         <button onclick="selectDeliveryDay('${day.key}')" 
                             style="padding: 8px 16px; border: 2px solid ${isSelected ? '#007AFF' : '#e5e5e5'}; 
                             border-radius: 12px; background: ${isSelected ? '#e3f2fd' : '#ffffff'}; 
-                            cursor: pointer; font-size: 14px; font-weight: 600; 
-                            color: ${isSelected ? '#007AFF' : '#666'}; transition: all 0.3s;
-                            white-space: nowrap;">
+                cursor: pointer; font-size: 14px; font-weight: 600; 
+                color: ${isSelected ? '#007AFF' : '#666'}; transition: all 0.3s;
+                white-space: nowrap;">
                             ${day.label}
-                        </button>
+            </button>
                     `;
                 }).join('')}
             </div>
@@ -3023,14 +3354,14 @@ function generateTimeSlots() {
             const isSelected = deliveryExactTime === timeStr;
             exactTimes.push(`
                 <button onclick="setDeliveryExactTime('${timeStr}')" 
-                    style="padding: 10px 16px; border: 2px solid ${isSelected ? '#007AFF' : '#e5e5e5'}; 
-                    border-radius: 10px; background: ${isSelected ? '#e3f2fd' : '#ffffff'}; 
-                    cursor: pointer; font-size: 14px; font-weight: 600; 
-                    color: ${isSelected ? '#007AFF' : '#666'}; transition: all 0.3s;
+            style="padding: 10px 16px; border: 2px solid ${isSelected ? '#007AFF' : '#e5e5e5'}; 
+            border-radius: 10px; background: ${isSelected ? '#e3f2fd' : '#ffffff'}; 
+            cursor: pointer; font-size: 14px; font-weight: 600; 
+            color: ${isSelected ? '#007AFF' : '#666'}; transition: all 0.3s;
                     white-space: nowrap; margin-right: 8px; margin-bottom: 8px;">
                     ${timeStr}
-                </button>
-            `);
+        </button>
+    `);
             currentTime.setMinutes(currentTime.getMinutes() + 15);
         }
         
@@ -3475,38 +3806,38 @@ function selectLocationFromMap() {
     
     // Используем requestLocation для получения текущего местоположения
     if (tg.requestLocation) {
-        tg.requestLocation({
-            callback: function(location) {
-                if (location && location.latitude && location.longitude) {
+            tg.requestLocation({
+                callback: function(location) {
+                    if (location && location.latitude && location.longitude) {
                     // Формируем адрес из координат
-                    deliveryAddress = `Координаты: ${location.latitude.toFixed(6)}, ${location.longitude.toFixed(6)}`;
-                    if (location.address) {
-                        deliveryAddress = location.address;
-                    }
-                    localStorage.setItem('deliveryAddress', deliveryAddress);
-                    
+                        deliveryAddress = `Координаты: ${location.latitude.toFixed(6)}, ${location.longitude.toFixed(6)}`;
+                        if (location.address) {
+                            deliveryAddress = location.address;
+                        }
+                        localStorage.setItem('deliveryAddress', deliveryAddress);
+                        
                     // Обновляем поле ввода
-                    const addressInput = document.getElementById('delivery-address-input');
-                    if (addressInput) {
-                        addressInput.value = deliveryAddress;
-                        addressInput.style.border = '2px solid #e5e5e5';
-                        addressInput.style.boxShadow = '';
+                        const addressInput = document.getElementById('delivery-address-input');
+                        if (addressInput) {
+                            addressInput.value = deliveryAddress;
+                            addressInput.style.border = '2px solid #e5e5e5';
+                            addressInput.style.boxShadow = '';
                         // Теряем фокус, чтобы показать блок времени
                         addressInput.blur();
-                    }
-                    
+                        }
+                        
                     // Обновляем корзину для показа времени
                     setTimeout(() => {
                         showCart();
                     }, 300);
-                    
-                    if (tg && tg.HapticFeedback) {
-                        tg.HapticFeedback.notificationOccurred('success');
+                        
+                        if (tg && tg.HapticFeedback) {
+                            tg.HapticFeedback.notificationOccurred('success');
+                        }
                     }
                 }
-            }
-        });
-    } else {
+            });
+        } else {
         showToast('Геолокация недоступна. Введите адрес вручную', 'info', 3000);
     }
 }
@@ -3948,7 +4279,7 @@ function setDeliveryTime(time) {
         const [dateKey] = time.split('|');
         selectedDeliveryDay = dateKey;
         localStorage.setItem('selectedDeliveryDay', selectedDeliveryDay);
-    } else {
+            } else {
         // Старый формат - преобразуем в новый с сегодняшней датой
         const today = new Date();
         const dateKey = today.toISOString().split('T')[0];
@@ -3962,17 +4293,17 @@ function setDeliveryTime(time) {
     // Сбрасываем точное время при выборе нового промежутка
     deliveryExactTime = null;
     localStorage.removeItem('deliveryExactTime');
-    
-    // Обновляем отображение времени в корзине
+            
+            // Обновляем отображение времени в корзине
     if (currentPage === 'cart') {
-        const timeDisplay = document.getElementById('selected-delivery-time-display');
+            const timeDisplay = document.getElementById('selected-delivery-time-display');
         const timeDisplayDelivery = document.getElementById('selected-delivery-time-display-delivery');
         const timeText = time.includes('|') ? time.split('|')[1] : time;
         
-        if (timeDisplay) {
+            if (timeDisplay) {
             timeDisplay.textContent = timeText;
-        }
-        if (timeDisplayDelivery) {
+            }
+            if (timeDisplayDelivery) {
             timeDisplayDelivery.textContent = timeText;
         }
     }
@@ -4144,16 +4475,16 @@ function showCart() {
             ${deliveryType === 'selfPickup' ? `
                 <div style="background: linear-gradient(135deg, #007AFF 0%, #0056b3 100%); padding: 16px; border-radius: 12px; color: white; margin-bottom: 12px;">
                     <div style="display: flex; align-items: center; gap: 12px; margin-bottom: ${selectedPickupLocation ? '12px' : '0'};">
-                <span style="width: 24px; height: 24px; display: flex; align-items: center; justify-content: center;">${getLocationIcon('#ffffff')}</span>
-                <div style="flex: 1;">
-                    <div style="font-weight: 600; margin-bottom: 4px; font-size: 14px; opacity: 0.9;">Точка самовывоза</div>
+                        <span style="width: 24px; height: 24px; display: flex; align-items: center; justify-content: center;">${getLocationIcon('#ffffff')}</span>
+                        <div style="flex: 1;">
+                            <div style="font-weight: 600; margin-bottom: 4px; font-size: 14px; opacity: 0.9;">Точка самовывоза</div>
                             <div style="font-size: 16px; font-weight: 700;" id="selected-pickup-location-display">${selectedPickupLocation}</div>
-                </div>
+                        </div>
                         <button onclick="selectPickupLocation()" style="padding: 8px 16px; border: 1px solid rgba(255,255,255,0.3); 
-                    border-radius: 20px; background: rgba(255,255,255,0.2); cursor: pointer; font-size: 14px; color: white;
-                    transition: all 0.2s;" 
-                    onmouseover="this.style.background='rgba(255,255,255,0.3)'"
-                    onmouseout="this.style.background='rgba(255,255,255,0.2)'">
+                            border-radius: 20px; background: rgba(255,255,255,0.2); cursor: pointer; font-size: 14px; color: white;
+                            transition: all 0.2s;" 
+                            onmouseover="this.style.background='rgba(255,255,255,0.3)'"
+                            onmouseout="this.style.background='rgba(255,255,255,0.2)'">
                             Выбрать
                         </button>
                     </div>
@@ -4231,8 +4562,8 @@ function showCart() {
                         <button onclick="selectedCity = ''; localStorage.removeItem('selectedCity'); deliveryAddress = ''; localStorage.removeItem('deliveryAddress'); deliveryTime = null; localStorage.removeItem('deliveryTime'); showCart();" 
                             style="padding: 4px 8px; border: 1px solid #e5e5e5; border-radius: 6px; background: #f5f5f5; cursor: pointer; font-size: 12px; color: #666;">
                     Изменить
-                </button>
-            </div>
+                        </button>
+                    </div>
                     <div style="font-size: 16px; font-weight: 700; color: #007AFF;">${selectedCity}</div>
                 </div>
                 `}
@@ -4728,7 +5059,7 @@ function setPaymentMethod(index, method) {
         }
     } else {
         // Если не нашли элементы, перерисовываем корзину
-    showCart();
+        showCart();
     }
     
     if (tg && tg.HapticFeedback) {
@@ -4846,11 +5177,11 @@ function checkout() {
                 timeBlock.style.transition = 'all 0.3s ease';
                 timeBlock.style.border = '2px solid #ff3b30';
                 timeBlock.style.borderRadius = '10px';
-                setTimeout(() => {
+            setTimeout(() => {
                     if (timeBlock) {
                         timeBlock.style.border = '1px solid rgba(255,255,255,0.2)';
-                    }
-                }, 3000);
+                }
+            }, 3000);
             }
         }
         if (timeDisplayDelivery) {
@@ -4859,11 +5190,11 @@ function checkout() {
                 timeBlockDelivery.style.transition = 'all 0.3s ease';
                 timeBlockDelivery.style.border = '2px solid #ff3b30';
                 timeBlockDelivery.style.borderRadius = '10px';
-                setTimeout(() => {
+            setTimeout(() => {
                     if (timeBlockDelivery) {
                         timeBlockDelivery.style.border = '2px solid #e5e5e5';
-                    }
-                }, 3000);
+                }
+            }, 3000);
             }
         }
         showToast(`Пожалуйста, выберите ${deliveryType === 'selfPickup' ? 'время самовывоза' : 'время доставки'}`, 'error', 3000);
@@ -4900,11 +5231,11 @@ function checkout() {
                     pickupContainer.style.transition = 'all 0.3s ease';
                     pickupContainer.style.border = '2px solid #ff3b30';
                     pickupContainer.style.borderRadius = '12px';
-                    setTimeout(() => {
+                setTimeout(() => {
                         if (pickupContainer) {
                             pickupContainer.style.border = '2px solid rgba(255,255,255,0.3)';
-                        }
-                    }, 3000);
+                    }
+                }, 3000);
                 }
             }
             showToast('Пожалуйста, выберите точку самовывоза', 'error', 3000);
@@ -4920,7 +5251,7 @@ function checkout() {
                 setTimeout(() => {
                     if (addressInput) {
                         addressInput.style.border = '2px solid #e5e5e5';
-                        addressInput.style.boxShadow = '';
+                    addressInput.style.boxShadow = '';
                     }
                 }, 3000);
             }
@@ -5076,16 +5407,16 @@ function checkout() {
                     status: 'pending', // Ожидает подтверждения менеджером
                     items: [...cart],
                     location: deliveryType === 'selfPickup' ? selectedPickupLocation : deliveryAddress,
-                    deliveryType: deliveryType,
-                    deliveryTime: deliveryTime,
+            deliveryType: deliveryType,
+            deliveryTime: deliveryTime,
                     deliveryExactTime: deliveryExactTime,
                     selectedDeliveryDay: selectedDeliveryDay,
-                    deliveryAddress: deliveryType === 'delivery' ? deliveryAddress : null,
-                    pickupLocation: deliveryType === 'selfPickup' ? selectedPickupLocation : null,
-                    total: totalMoney,
-                    vapeCoinsSpent: totalCoinsNeeded > 0 ? totalCoinsNeeded : 0
-                };
-                
+            deliveryAddress: deliveryType === 'delivery' ? deliveryAddress : null,
+            pickupLocation: deliveryType === 'selfPickup' ? selectedPickupLocation : null,
+            total: totalMoney,
+            vapeCoinsSpent: totalCoinsNeeded > 0 ? totalCoinsNeeded : 0
+        };
+        
                 // Сохраняем заказ локально
                 orders.unshift(order);
                 localStorage.setItem('orders', JSON.stringify(orders));
@@ -5103,7 +5434,7 @@ function checkout() {
                         showOrders();
                     }, 100);
                 }
-            } else {
+        } else {
                 throw new Error(result.error || 'Ошибка при отправке заказа');
             }
         } catch (error) {
@@ -6560,7 +6891,9 @@ function showFavorites() {
         }
         
         // Проверяем наличие товара
-        const isInStock = product.inStock !== false && (product.quantity === undefined || product.quantity > 0);
+        const isInStock = deliveryType === 'selfPickup' && selectedPickupLocation
+            ? isProductInStockAtLocation(product, selectedPickupLocation)
+            : (product.inStock !== false && (product.quantity === undefined || product.quantity > 0));
         
         // Правильно экранируем кавычки в URL для изображения
         const safeImageUrl = imageUrl ? imageUrl.replace(/'/g, "&#39;").replace(/"/g, "&quot;") : '';
@@ -7117,12 +7450,12 @@ function showOrders() {
             });
         } else {
             // Используем дату заказа с московским временем
-            const orderDate = new Date(order.date);
+        const orderDate = new Date(order.date);
             const moscowOffset = 3 * 60 * 60 * 1000;
             const moscowDate = new Date(orderDate.getTime() + moscowOffset);
             formattedDate = moscowDate.toLocaleDateString('ru-RU', {
-                day: '2-digit',
-                month: '2-digit',
+            day: '2-digit',
+            month: '2-digit',
                 year: 'numeric'
             });
         }
@@ -7149,7 +7482,7 @@ function showOrders() {
                           order.status === 'confirmed' ? '#4CAF50' :
                           order.status === 'transferred' ? '#2196F3' :
                           order.status === 'rejected' ? '#f44336' :
-                          order.status === 'cancelled' ? '#999' : '#4CAF50';
+                           order.status === 'cancelled' ? '#999' : '#4CAF50';
         const statusBg = order.status === 'pending' ? 'linear-gradient(135deg, #FFF3E0 0%, #FFE0B2 100%)' :
                         order.status === 'processing' ? 'linear-gradient(135deg, #FFF3E0 0%, #FFE0B2 100%)' : 
                         order.status === 'confirmed' ? 'linear-gradient(135deg, #E8F5E9 0%, #C8E6C9 100%)' :
@@ -7271,16 +7604,16 @@ function showOrders() {
                 <div style="background: ${darkMode ? colors.bgSecondary : '#f8f9fa'}; padding: 16px; border-radius: 12px; margin-bottom: 16px;">
                     <div style="display: flex; align-items: center; gap: 12px;">
                             <div style="width: 40px; height: 40px; background: linear-gradient(135deg, #FFF3E0 0%, #FFE0B2 100%); 
-                                border-radius: 10px; display: flex; align-items: center; justify-content: center;">
+                            border-radius: 10px; display: flex; align-items: center; justify-content: center;">
                             ${getCoinIcon('#FF9800', 24)}
-                            </div>
+                        </div>
                             <div style="flex: 1;">
                                 <div style="font-size: 12px; color: ${colors.textSecondary}; margin-bottom: 4px;">Оплачено Vape Coins</div>
                             <div style="font-size: 15px; font-weight: 600; color: #FF9800;">
                                 ${order.vapeCoinsSpent.toFixed(1)}
                             </div>
-                                </div>
                             </div>
+                                </div>
                         </div>
                     ` : ''}
                     
@@ -7292,7 +7625,7 @@ function showOrders() {
                                 <div style="font-size: 11px; opacity: 0.8; margin-bottom: 6px; display: flex; align-items: center; gap: 4px;">
                                     <span style="width: 12px; height: 12px; display: flex; align-items: center; justify-content: center;">${(order.deliveryType === 'delivery' ? getPackageIcon('#ffffff') : getLocationIcon('#ffffff')).replace('width="24" height="24"', 'width="12" height="12"')}</span>
                                     <span>${order.deliveryType === 'delivery' ? 'Доставка' : 'Самовывоз'}</span>
-                        </div>
+                                </div>
                                 <div style="font-size: 13px; font-weight: 600; opacity: 0.95; word-wrap: break-word; overflow-wrap: break-word;">
                                     ${order.deliveryType === 'selfPickup' ? (order.pickupLocation || 'Не указано') : (order.deliveryAddress || 'Не указано')}
                             </div>
@@ -7310,8 +7643,8 @@ function showOrders() {
                                 <div style="font-size: 11px; opacity: 0.8; margin-top: 6px; display: flex; align-items: center; gap: 4px;">
                                     <span style="width: 12px; height: 12px; display: flex; align-items: center; justify-content: center;">${getClockIcon('#ffffff').replace('width="24" height="24"', 'width="12" height="12"')}</span>
                                     <span>${typeof order.deliveryTime === 'string' && order.deliveryTime.includes('|') ? order.deliveryTime.split('|')[1] : order.deliveryTime}${order.deliveryExactTime && (order.deliveryType === 'selfPickup' || !order.deliveryType) ? ` (${order.deliveryExactTime})` : ''}</span>
-                                </div>
-                            ` : ''}
+                        </div>
+                    ` : ''}
                             </div>
                         ` : '<div style="flex: 1;"></div>'}
                         <div style="text-align: right; border-left: ${order.deliveryType || order.location ? '1px solid rgba(255,255,255,0.2); padding-left: 16px;' : 'none;'};">
@@ -7327,7 +7660,7 @@ function showOrders() {
                         <div style="width: 32px; height: 32px; margin: 0 auto 8px; display: flex; align-items: center; justify-content: center;">${getClockIcon('#FF9800')}</div>
                         <div style="font-weight: 600; color: #F57C00; font-size: 14px; margin-bottom: 4px;">${statusText}</div>
                         <div style="font-size: 12px; color: #666;">Заказ отправлен менеджеру и будет обработан в ближайшее время</div>
-                    </div>
+                        </div>
                     <button onclick="cancelOrder('${order.id}')" style="width: 100%; padding: 16px; 
                         background: linear-gradient(135deg, #f44336 0%, #d32f2f 100%); color: white; border: none; border-radius: 12px; 
                         font-size: 16px; font-weight: 700; cursor: pointer; box-shadow: 0 4px 12px rgba(244,67,54,0.3);
@@ -7342,7 +7675,7 @@ function showOrders() {
                         <div style="width: 32px; height: 32px; margin: 0 auto 8px; display: flex; align-items: center; justify-content: center;">${getSuccessIcon('#4CAF50')}</div>
                         <div style="font-weight: 600; color: #2E7D32; font-size: 14px; margin-bottom: 4px;">Заказ принят</div>
                         <div style="font-size: 12px; color: #666;">Ожидание подтверждения передачи товара</div>
-                    </div>
+                            </div>
                     <div>
                         <button onclick="cancelOrder('${order.id}')" style="width: 100%; padding: 16px; 
                             background: linear-gradient(135deg, #f44336 0%, #d32f2f 100%); color: white; border: none; border-radius: 12px; 
@@ -7352,7 +7685,7 @@ function showOrders() {
                             onmouseout="this.style.transform='scale(1)'; this.style.boxShadow='0 4px 12px rgba(244,67,54,0.3)'">
                             <span>Отменить заказ</span>
                         </button>
-                    </div>
+                        </div>
                 ` : order.status === 'transferred' ? `
                     <div style="padding: 16px; background: linear-gradient(135deg, #E3F2FD 0%, #BBDEFB 100%); 
                         border-radius: 12px; text-align: center; border: 2px solid #2196F3; margin-bottom: 12px;">
@@ -7384,7 +7717,7 @@ function showOrders() {
                                         <div style="display: flex; align-items: center; gap: 6px; color: #FF9800; font-weight: 600; font-size: 15px;">
                                             <span style="width: 20px; height: 20px; display: flex; align-items: center; justify-content: center;">${getCoinIcon('#FF9800', 20)}</span>
                                             <span>+ ${coinsEarned.toFixed(1)} коинов</span>
-                                        </div>
+                    </div>
                                     `;
                                 }
                                 
@@ -7393,7 +7726,7 @@ function showOrders() {
                                         <div style="display: flex; align-items: center; gap: 6px; color: #FF9800; font-weight: 600; font-size: 15px;">
                                             <span style="width: 20px; height: 20px; display: flex; align-items: center; justify-content: center;">${getTrophyIcon('#FF9800').replace('width="32" height="32"', 'width="20" height="20"')}</span>
                                             <span>+ ${stampsToAdd} ${stampsToAdd === 1 ? 'штамп' : stampsToAdd < 5 ? 'штампа' : 'штампов'}</span>
-                                        </div>
+                </div>
                                     `;
                                 }
                                 
@@ -7944,30 +8277,30 @@ function markOrderAsReceived(orderId) {
                 // Если товар оплачен коинами - коины не начисляются
                 // Формула начисления: price / 10 (за каждые 10 BYN получаем 1 коин)
                 let coinsEarned = 0;
-        order.items.forEach(item => {
-            // Проверяем способ оплаты товара
-            // Если paymentMethod === 'coins' - не начисляем коины
-            // Если paymentMethod === 'money' или не указан - начисляем коины
-            const paymentMethod = item.paymentMethod || 'money'; // По умолчанию 'money' для старых заказов
-            
-            if (paymentMethod === 'money') {
-                // Формула начисления: price / 10 (18 BYN = 1.8 коинов)
-                const coinsForItem = (item.price * item.quantity) / 10;
-                coinsEarned += coinsForItem;
-            }
-            // Если paymentMethod === 'coins', пропускаем (не начисляем)
-        });
-        
-        // Показываем уведомление о коинах за покупку (если есть)
-        const paidWithCoinsItems = order.items.filter(item => item.paymentMethod === 'coins').reduce((sum, item) => sum + item.quantity, 0);
-        const paidWithMoneyItems = order.items.filter(item => (item.paymentMethod || 'money') === 'money').reduce((sum, item) => sum + item.quantity, 0);
-        
-        if (coinsEarned > 0) {
-            vapeCoins += coinsEarned;
-            localStorage.setItem('vapeCoins', vapeCoins.toString());
-            
-            // Добавляем в историю
-            vapeCoinsHistory.unshift({
+                order.items.forEach(item => {
+                    // Проверяем способ оплаты товара
+                    // Если paymentMethod === 'coins' - не начисляем коины
+                    // Если paymentMethod === 'money' или не указан - начисляем коины
+                    const paymentMethod = item.paymentMethod || 'money'; // По умолчанию 'money' для старых заказов
+                    
+                    if (paymentMethod === 'money') {
+                        // Формула начисления: price / 10 (18 BYN = 1.8 коинов)
+                        const coinsForItem = (item.price * item.quantity) / 10;
+                        coinsEarned += coinsForItem;
+                    }
+                    // Если paymentMethod === 'coins', пропускаем (не начисляем)
+                });
+                
+                // Показываем уведомление о коинах за покупку (если есть)
+                const paidWithCoinsItems = order.items.filter(item => item.paymentMethod === 'coins').reduce((sum, item) => sum + item.quantity, 0);
+                const paidWithMoneyItems = order.items.filter(item => (item.paymentMethod || 'money') === 'money').reduce((sum, item) => sum + item.quantity, 0);
+                
+                if (coinsEarned > 0) {
+                    vapeCoins += coinsEarned;
+                    localStorage.setItem('vapeCoins', vapeCoins.toString());
+                    
+                    // Добавляем в историю
+                    vapeCoinsHistory.unshift({
                         id: `vc_${Date.now()}`,
                         date: new Date().toISOString(),
                         type: 'earned',
