@@ -147,7 +147,7 @@ function getCityFromLocation(location) {
 
 // Форматируем заказ для менеджера
 // Функция для обновления всех сообщений о заказе для всех менеджеров
-async function updateOrderMessagesForAllManagers(order, messageText, replyMarkup = null) {
+async function updateOrderMessagesForAllManagers(order, messageText, replyMarkup = null, confirmedBy = null) {
     if (!order.orderMessages) {
         console.log('No orderMessages found for order', order.id);
         return;
@@ -160,14 +160,25 @@ async function updateOrderMessagesForAllManagers(order, messageText, replyMarkup
         const messageId = order.orderMessages[managerId];
         if (messageId) {
             try {
+                // Если заказ подтвержден и это не тот менеджер, который подтвердил - показываем что заказ взят другим
+                let finalMessageText = messageText;
+                let finalReplyMarkup = replyMarkup;
+                
+                if (confirmedBy && order.confirmedBy && order.confirmedBy.toString() !== managerId.toString()) {
+                    // Это другой менеджер - показываем что заказ уже взят
+                    const confirmedByUsername = order.confirmedByUsername || 'менеджер';
+                    finalMessageText = messageText + `\n\n⚠️ Заказ уже взят менеджером ${confirmedByUsername} (ID: ${order.confirmedBy})`;
+                    finalReplyMarkup = null; // Убираем кнопки для других менеджеров
+                }
+                
                 await bot.telegram.editMessageText(
                     managerId,
                     messageId,
                     null,
-                    messageText,
+                    finalMessageText,
                     {
                         parse_mode: 'HTML',
-                        reply_markup: replyMarkup
+                        reply_markup: finalReplyMarkup
                     }
                 );
                 console.log(`Updated message for manager ${managerId}, message_id: ${messageId}`);
@@ -229,11 +240,8 @@ function formatOrderForManager(order) {
         const deliveryDateOnly = new Date(deliveryDate);
         deliveryDateOnly.setHours(0, 0, 0, 0);
         
-        if (deliveryDateOnly.getTime() === tomorrow.getTime()) {
-            dateInfo = '\n📅 <b>Дата доставки: Завтра</b>';
-        } else {
-            dateInfo = `\n📅 <b>Дата доставки: ${deliveryDate.toLocaleDateString('ru-RU', { day: '2-digit', month: '2-digit', year: 'numeric' })}</b>`;
-        }
+        // Всегда показываем дату, а не слово "завтра"
+        dateInfo = `\n📅 <b>Дата доставки: ${deliveryDate.toLocaleDateString('ru-RU', { day: '2-digit', month: '2-digit', year: 'numeric' })}</b>`;
     }
     
     const timeInfo = order.deliveryTime 
@@ -532,6 +540,7 @@ bot.on('callback_query', async (ctx) => {
         }
         
         // Для transfer проверяем, что заказ подтвержден, но еще не передан
+        // И что это тот менеджер, который подтвердил заказ
         if (action === 'transfer') {
             if (order.status !== 'confirmed') {
                 if (order.status === 'transferred') {
@@ -541,6 +550,17 @@ bot.on('callback_query', async (ctx) => {
                 } else if (order.status === 'rejected') {
                     return ctx.answerCbQuery('Заказ был отклонен');
                 }
+            }
+            // Проверяем, что это тот менеджер, который подтвердил заказ
+            if (order.confirmedBy && order.confirmedBy.toString() !== ctx.from.id.toString()) {
+                return ctx.answerCbQuery('Заказ управляется другим менеджером');
+            }
+        }
+        
+        // Для reject проверяем, что это тот менеджер, который подтвердил заказ (если заказ был confirmed)
+        if (action === 'reject' && order.status === 'confirmed') {
+            if (order.confirmedBy && order.confirmedBy.toString() !== ctx.from.id.toString()) {
+                return ctx.answerCbQuery('Заказ управляется другим менеджером');
             }
         }
         
@@ -574,7 +594,8 @@ bot.on('callback_query', async (ctx) => {
             };
             
             // Обновляем все сообщения для всех менеджеров
-            await updateOrderMessagesForAllManagers(order, confirmMessage, confirmReplyMarkup);
+            // Только подтвердивший менеджер может управлять заказом
+            await updateOrderMessagesForAllManagers(order, confirmMessage, confirmReplyMarkup, ctx.from.id);
             
             // Отправляем уведомление клиенту
             const deliveryDateText = order.selectedDeliveryDay 
@@ -621,7 +642,8 @@ bot.on('callback_query', async (ctx) => {
                 `Время: ${moscowTime.toLocaleString('ru-RU', { timeZone: 'Europe/Moscow' })}`;
             
             // Обновляем все сообщения для всех менеджеров (убираем кнопки)
-            await updateOrderMessagesForAllManagers(order, rejectMessage, null);
+            // Если заказ был confirmed, передаем confirmedBy чтобы другие менеджеры видели что заказ взят
+            await updateOrderMessagesForAllManagers(order, rejectMessage, null, order.confirmedBy || null);
             
             // Отправляем уведомление клиенту (всегда, даже если заказ был confirmed)
             const deliveryDateText = order.selectedDeliveryDay 
@@ -646,6 +668,11 @@ bot.on('callback_query', async (ctx) => {
             // Заказ передан клиенту
             if (order.status !== 'confirmed') {
                 return ctx.answerCbQuery('⚠️ Заказ должен быть сначала подтвержден');
+            }
+            
+            // Проверяем, что это тот менеджер, который подтвердил заказ
+            if (order.confirmedBy && order.confirmedBy.toString() !== ctx.from.id.toString()) {
+                return ctx.answerCbQuery('Заказ управляется другим менеджером');
             }
             
             order.status = 'transferred';
@@ -681,7 +708,8 @@ bot.on('callback_query', async (ctx) => {
                 `💰 Начислено Vape Coins: ${coinsToAdd} 🪙`;
             
             // Обновляем все сообщения для всех менеджеров
-            await updateOrderMessagesForAllManagers(order, transferMessage);
+            // Только подтвердивший менеджер может управлять заказом
+            await updateOrderMessagesForAllManagers(order, transferMessage, null, order.confirmedBy);
             
             // Отправляем уведомление клиенту
             const deliveryDateText = order.selectedDeliveryDay 
