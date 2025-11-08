@@ -74,79 +74,6 @@ const ADMIN_IDS = process.env.ADMIN_IDS ? process.env.ADMIN_IDS.split(',') : ['8
 // Инициализация бота
 const bot = new Telegraf(BOT_TOKEN);
 
-// Функция для создания кнопки Web App
-// Если WEB_APP_URL не указан, Telegram будет использовать URL из настроек бота (через BotFather)
-function createWebAppButton(text = '🛍 Открыть магазин') {
-    // Пытаемся получить URL из переменной окружения
-    // Если не указан - Telegram использует URL, настроенный в BotFather через /setmenubutton
-    const webAppUrl = process.env.WEB_APP_URL;
-    
-    // Если URL указан - используем его, иначе пустая строка (Telegram возьмет из настроек бота)
-    const url = webAppUrl || '';
-    
-    return {
-        text: text,
-        web_app: { url: url }
-    };
-}
-
-// Обработка команды /start
-bot.command('start', async (ctx) => {
-    try {
-        console.log('Команда /start получена от пользователя:', ctx.from.id, ctx.from.first_name);
-        const firstName = ctx.from.first_name || '';
-        
-        // Приветственное сообщение
-        const welcomeMessage = `Привет, ${firstName}!\n\n` +
-            `Добро пожаловать в наш Vape app!\n\n` +
-            `🎁 Что вы можете делать:\n` +
-            `• Заказать вейп продукцию\n` +
-            `• Накапливать и тратить VapeCoins за покупки\n` +
-            `• Повышать свою репутацию\n` +
-            `• Получать эксклюзивные предложения\n\n` +
-            `🚀 Нажмите кнопку ниже, чтобы открыть каталог!`;
-        
-        // Кнопка "Открыть магазин" с Web App
-        const keyboard = {
-            inline_keyboard: [[
-                createWebAppButton('🛍 Открыть магазин')
-            ]]
-        };
-        
-        await ctx.reply(welcomeMessage, { reply_markup: keyboard });
-        console.log('Приветственное сообщение отправлено пользователю:', ctx.from.id);
-    } catch (error) {
-        console.error('Ошибка при обработке команды /start:', error);
-        try {
-            await ctx.reply('Произошла ошибка. Попробуйте позже.');
-        } catch (e) {
-            console.error('Не удалось отправить сообщение об ошибке:', e);
-        }
-    }
-});
-
-// Команда /shop
-bot.command('shop', async (ctx) => {
-    const keyboard = {
-        inline_keyboard: [[
-            createWebAppButton('🛍 Открыть магазин')
-        ]]
-    };
-    
-    await ctx.reply('Откройте магазин, чтобы просмотреть каталог товаров!', { reply_markup: keyboard });
-});
-
-// Обработка текстового сообщения "Магазин"
-bot.hears(['Магазин', 'магазин'], async (ctx) => {
-    const keyboard = {
-        inline_keyboard: [[
-            createWebAppButton('🛍 Открыть магазин')
-        ]]
-    };
-    
-    await ctx.reply('Откройте магазин, чтобы просмотреть каталог товаров!', { reply_markup: keyboard });
-});
-
 // Проверка, является ли пользователь администратором
 function isAdmin(userId) {
     return ADMIN_IDS.includes(userId.toString());
@@ -1000,6 +927,36 @@ bot.command('orders', async (ctx) => {
     });
 });
 
+// Обработка команды /start
+bot.command('start', async (ctx) => {
+    const firstName = ctx.from?.first_name || 'друг';
+    const username = ctx.from?.username || '';
+    
+    const welcomeMessage = `👋 Привет, ${firstName}!\n\n` +
+        'Добро пожаловать в наш Vape app!\n\n' +
+        '🎁 У нас вы можете:\n' +
+        '• Заказать вейп продукцию\n' +
+        '• Накапливать и тратить VapeCoins за покупки\n' +
+        '• Повышать свою репутацию\n' +
+        '• Получать эксклюзивные предложения\n\n' +
+        '🚀 Нажмите кнопку ниже, чтобы открыть каталог!';
+    
+    // URL мини-приложения (нужно будет получить из переменной окружения или config)
+    const WEB_APP_URL = process.env.WEB_APP_URL || 'https://superlative-taffy-b59db4.netlify.app';
+    
+    try {
+        await ctx.reply(welcomeMessage, {
+            reply_markup: {
+                inline_keyboard: [
+                    [{ text: '🛍️ Открыть магазин', web_app: { url: WEB_APP_URL } }]
+                ]
+            }
+        });
+    } catch (error) {
+        console.error('Error sending start message:', error);
+    }
+});
+
 // Команда помощи
 bot.command('help', (ctx) => {
     const isAdminUser = isAdmin(ctx.from.id);
@@ -1035,62 +992,55 @@ app.listen(PORT, () => {
 
 // Webhook endpoint для Telegram
 app.post('/webhook', (req, res) => {
-    try {
-        console.log('Webhook получен:', req.body);
-        bot.handleUpdate(req.body);
-        res.sendStatus(200);
-    } catch (error) {
-        console.error('Ошибка в webhook:', error);
-        res.sendStatus(200); // Все равно отвечаем 200, чтобы Telegram не повторял запрос
-    }
+    bot.handleUpdate(req.body);
+    res.sendStatus(200);
 });
 
-// Настройка команд бота
-async function setupBotMenu() {
-    try {
-        // Настройка команд бота
-        await bot.telegram.setMyCommands([
-            { command: 'start', description: 'Запустить бота' },
-            { command: 'shop', description: 'Открыть магазин' },
-            { command: 'help', description: 'Помощь' }
-        ]);
-        
-        console.log('✅ Команды бота настроены');
-        console.log('📱 Для настройки постоянной кнопки "Магазин" используйте BotFather:');
-        console.log('   1. Откройте @BotFather в Telegram');
-        console.log('   2. Отправьте /setmenubutton');
-        console.log('   3. Выберите вашего бота');
-        console.log('   4. Введите текст: Магазин');
-        console.log('   5. Введите URL вашего Web App (или оставьте пустым, если настроено в BotFather)');
-    } catch (error) {
-        console.error('❌ Ошибка настройки меню бота:', error);
-    }
-}
-
 // Запуск бота
-// Используем polling по умолчанию (не требует настройки webhook)
-// Сначала удаляем webhook, если он был установлен, чтобы избежать конфликта 409
-bot.telegram.deleteWebhook({ drop_pending_updates: true })
-    .then(() => {
-        console.log('✅ Webhook removed, starting polling...');
-        return bot.launch();
-    })
-    .catch(err => {
-        // Если удаление webhook не удалось, все равно пытаемся запустить polling
-        console.log('⚠️ Webhook removal failed or not needed, trying to start polling...');
-        return bot.launch();
-    })
-    .then(() => {
-        console.log('🤖 Telegram bot started (polling mode)');
-        console.log('📱 Бот работает в режиме polling - не требует настройки webhook');
-        // Настраиваем меню бота после запуска
-        setupBotMenu();
-    })
-    .catch(err => {
-        console.error('❌ Error starting bot:', err);
-        // Не завершаем процесс, чтобы сервер продолжал работать
-        console.log('⚠️ Bot failed to start, but server continues running');
-    });
+const isProduction = process.env.NODE_ENV === 'production' || process.env.RENDER_EXTERNAL_URL;
+const webhookUrl = process.env.RENDER_EXTERNAL_URL ? `${process.env.RENDER_EXTERNAL_URL}/webhook` : null;
+
+if (isProduction && webhookUrl) {
+    // Используем webhook для продакшена
+    // Сначала удаляем webhook, если он был установлен ранее, чтобы избежать конфликтов
+    bot.telegram.deleteWebhook({ drop_pending_updates: true })
+        .then(() => {
+            console.log('✅ Old webhook removed');
+            // Затем устанавливаем новый webhook
+            return bot.telegram.setWebhook(webhookUrl);
+        })
+        .then(() => {
+            console.log('🤖 Telegram bot webhook set:', webhookUrl);
+        })
+        .catch(err => {
+            console.error('❌ Error setting webhook:', err);
+            // Пытаемся установить webhook напрямую, если удаление не удалось
+            bot.telegram.setWebhook(webhookUrl).catch(e => {
+                console.error('❌ Failed to set webhook after delete:', e);
+            });
+        });
+} else {
+    // Используем polling для разработки
+    // Сначала удаляем webhook, если он был установлен, чтобы избежать конфликта 409
+    bot.telegram.deleteWebhook({ drop_pending_updates: true })
+        .then(() => {
+            console.log('✅ Webhook removed, starting polling...');
+            return bot.launch();
+        })
+        .catch(err => {
+            // Если удаление webhook не удалось, все равно пытаемся запустить polling
+            console.log('⚠️ Webhook removal failed or not needed, trying to start polling...');
+            return bot.launch();
+        })
+        .then(() => {
+            console.log('🤖 Telegram bot started (polling mode)');
+        })
+        .catch(err => {
+            console.error('❌ Error starting bot:', err);
+            // Не завершаем процесс, чтобы сервер продолжал работать
+            console.log('⚠️ Bot failed to start, but server continues running');
+        });
+}
 
 // Запускаем автоматический ping каждые 10 минут
 const http = require('http');
@@ -1126,8 +1076,12 @@ setInterval(() => {
 
 // Graceful shutdown
 process.once('SIGINT', () => {
-    bot.stop('SIGINT');
+    if (!isProduction || !webhookUrl) {
+        bot.stop('SIGINT');
+    }
 });
 process.once('SIGTERM', () => {
-    bot.stop('SIGTERM');
+    if (!isProduction || !webhookUrl) {
+        bot.stop('SIGTERM');
+    }
 });
