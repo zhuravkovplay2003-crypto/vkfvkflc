@@ -92,26 +92,37 @@ function createWebAppButton(text = '🛍 Открыть магазин') {
 
 // Обработка команды /start
 bot.command('start', async (ctx) => {
-    const firstName = ctx.from.first_name || '';
-    
-    // Приветственное сообщение
-    const welcomeMessage = `Привет, ${firstName}!\n\n` +
-        `Добро пожаловать в наш Vape app!\n\n` +
-        `🎁 Что вы можете делать:\n` +
-        `• Заказать вейп продукцию\n` +
-        `• Накапливать и тратить VapeCoins за покупки\n` +
-        `• Повышать свою репутацию\n` +
-        `• Получать эксклюзивные предложения\n\n` +
-        `🚀 Нажмите кнопку ниже, чтобы открыть каталог!`;
-    
-    // Кнопка "Открыть магазин" с Web App
-    const keyboard = {
-        inline_keyboard: [[
-            createWebAppButton('🛍 Открыть магазин')
-        ]]
-    };
-    
-    await ctx.reply(welcomeMessage, { reply_markup: keyboard });
+    try {
+        console.log('Команда /start получена от пользователя:', ctx.from.id, ctx.from.first_name);
+        const firstName = ctx.from.first_name || '';
+        
+        // Приветственное сообщение
+        const welcomeMessage = `Привет, ${firstName}!\n\n` +
+            `Добро пожаловать в наш Vape app!\n\n` +
+            `🎁 Что вы можете делать:\n` +
+            `• Заказать вейп продукцию\n` +
+            `• Накапливать и тратить VapeCoins за покупки\n` +
+            `• Повышать свою репутацию\n` +
+            `• Получать эксклюзивные предложения\n\n` +
+            `🚀 Нажмите кнопку ниже, чтобы открыть каталог!`;
+        
+        // Кнопка "Открыть магазин" с Web App
+        const keyboard = {
+            inline_keyboard: [[
+                createWebAppButton('🛍 Открыть магазин')
+            ]]
+        };
+        
+        await ctx.reply(welcomeMessage, { reply_markup: keyboard });
+        console.log('Приветственное сообщение отправлено пользователю:', ctx.from.id);
+    } catch (error) {
+        console.error('Ошибка при обработке команды /start:', error);
+        try {
+            await ctx.reply('Произошла ошибка. Попробуйте позже.');
+        } catch (e) {
+            console.error('Не удалось отправить сообщение об ошибке:', e);
+        }
+    }
 });
 
 // Команда /shop
@@ -1024,8 +1035,14 @@ app.listen(PORT, () => {
 
 // Webhook endpoint для Telegram
 app.post('/webhook', (req, res) => {
-    bot.handleUpdate(req.body);
-    res.sendStatus(200);
+    try {
+        console.log('Webhook получен:', req.body);
+        bot.handleUpdate(req.body);
+        res.sendStatus(200);
+    } catch (error) {
+        console.error('Ошибка в webhook:', error);
+        res.sendStatus(200); // Все равно отвечаем 200, чтобы Telegram не повторял запрос
+    }
 });
 
 // Настройка команд бота
@@ -1051,54 +1068,29 @@ async function setupBotMenu() {
 }
 
 // Запуск бота
-const isProduction = process.env.NODE_ENV === 'production' || process.env.RENDER_EXTERNAL_URL;
-const webhookUrl = process.env.RENDER_EXTERNAL_URL ? `${process.env.RENDER_EXTERNAL_URL}/webhook` : null;
-
-if (isProduction && webhookUrl) {
-    // Используем webhook для продакшена
-    // Сначала удаляем webhook, если он был установлен ранее, чтобы избежать конфликтов
-    bot.telegram.deleteWebhook({ drop_pending_updates: true })
-        .then(() => {
-            console.log('✅ Old webhook removed');
-            // Затем устанавливаем новый webhook
-            return bot.telegram.setWebhook(webhookUrl);
-        })
-        .then(() => {
-            console.log('🤖 Telegram bot webhook set:', webhookUrl);
-            // Настраиваем меню бота после установки webhook
-            setupBotMenu();
-        })
-        .catch(err => {
-            console.error('❌ Error setting webhook:', err);
-            // Пытаемся установить webhook напрямую, если удаление не удалось
-            bot.telegram.setWebhook(webhookUrl).catch(e => {
-                console.error('❌ Failed to set webhook after delete:', e);
-            });
-        });
-} else {
-    // Используем polling для разработки
-    // Сначала удаляем webhook, если он был установлен, чтобы избежать конфликта 409
-    bot.telegram.deleteWebhook({ drop_pending_updates: true })
-        .then(() => {
-            console.log('✅ Webhook removed, starting polling...');
-            return bot.launch();
-        })
-        .catch(err => {
-            // Если удаление webhook не удалось, все равно пытаемся запустить polling
-            console.log('⚠️ Webhook removal failed or not needed, trying to start polling...');
-            return bot.launch();
-        })
-        .then(() => {
-            console.log('🤖 Telegram bot started (polling mode)');
-            // Настраиваем меню бота после запуска
-            setupBotMenu();
-        })
-        .catch(err => {
-            console.error('❌ Error starting bot:', err);
-            // Не завершаем процесс, чтобы сервер продолжал работать
-            console.log('⚠️ Bot failed to start, but server continues running');
-        });
-}
+// Используем polling по умолчанию (не требует настройки webhook)
+// Сначала удаляем webhook, если он был установлен, чтобы избежать конфликта 409
+bot.telegram.deleteWebhook({ drop_pending_updates: true })
+    .then(() => {
+        console.log('✅ Webhook removed, starting polling...');
+        return bot.launch();
+    })
+    .catch(err => {
+        // Если удаление webhook не удалось, все равно пытаемся запустить polling
+        console.log('⚠️ Webhook removal failed or not needed, trying to start polling...');
+        return bot.launch();
+    })
+    .then(() => {
+        console.log('🤖 Telegram bot started (polling mode)');
+        console.log('📱 Бот работает в режиме polling - не требует настройки webhook');
+        // Настраиваем меню бота после запуска
+        setupBotMenu();
+    })
+    .catch(err => {
+        console.error('❌ Error starting bot:', err);
+        // Не завершаем процесс, чтобы сервер продолжал работать
+        console.log('⚠️ Bot failed to start, but server continues running');
+    });
 
 // Запускаем автоматический ping каждые 10 минут
 const http = require('http');
@@ -1134,12 +1126,8 @@ setInterval(() => {
 
 // Graceful shutdown
 process.once('SIGINT', () => {
-    if (!isProduction || !webhookUrl) {
-        bot.stop('SIGINT');
-    }
+    bot.stop('SIGINT');
 });
 process.once('SIGTERM', () => {
-    if (!isProduction || !webhookUrl) {
-        bot.stop('SIGTERM');
-    }
+    bot.stop('SIGTERM');
 });
