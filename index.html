@@ -118,7 +118,7 @@
             bottom: 0;
             background: rgba(248, 249, 250, 0.98);
             backdrop-filter: blur(8px);
-            display: none;
+            display: none !important;
             align-items: center;
             justify-content: center;
             z-index: 999999;
@@ -126,7 +126,7 @@
         }
         
         .mobile-only-overlay.show {
-            display: flex;
+            display: flex !important;
             animation: fadeIn 0.3s ease;
         }
         
@@ -875,63 +875,82 @@
     <script>
         // Проверка устройства сразу при загрузке страницы (до загрузки app.js)
         (function() {
-            function checkDevice() {
+            function isMobileDevice() {
                 // Проверяем, запущено ли в Telegram WebApp (всегда мобильное)
-                const isTelegramWebApp = typeof window.Telegram !== 'undefined' && window.Telegram.WebApp;
-                
-                if (isTelegramWebApp) {
-                    return true; // Мобильное
-                }
-                
-                // Проверяем через user agent
-                const userAgent = navigator.userAgent || navigator.vendor || window.opera;
-                
-                // Проверяем user agent на мобильные устройства
-                const mobileRegex = /android|webos|iphone|ipad|ipod|blackberry|iemobile|opera mini|mobile/i;
-                const isMobileUA = mobileRegex.test(userAgent);
-                
-                // Проверяем на десктопные платформы (Windows, Mac, Linux)
-                const desktopRegex = /windows|win32|win64|macintosh|mac os x|linux/i;
-                const isDesktopUA = desktopRegex.test(userAgent);
-                
-                // Если это явно десктопный user agent И не мобильный - это десктоп
-                if (isDesktopUA && !isMobileUA) {
-                    return false; // Десктоп
-                }
-                
-                // Если это мобильный user agent - мобильное
-                if (isMobileUA) {
+                if (typeof window.Telegram !== 'undefined' && window.Telegram.WebApp) {
                     return true;
                 }
                 
-                // Если большой экран (> 1024px) - вероятно десктоп
-                if (window.innerWidth > 1024) {
+                const userAgent = navigator.userAgent || navigator.vendor || window.opera || '';
+                const ua = userAgent.toLowerCase();
+                
+                // Явно мобильные устройства
+                const mobileDevices = /android|webos|iphone|ipad|ipod|blackberry|iemobile|opera mini|mobile|tablet/i;
+                if (mobileDevices.test(ua)) {
+                    return true;
+                }
+                
+                // Явно десктопные платформы
+                const desktopPlatforms = /windows|win32|win64|macintosh|mac os x|linux|ubuntu|fedora/i;
+                if (desktopPlatforms.test(ua)) {
+                    // Если это десктопная платформа И нет признаков мобильного - это десктоп
                     return false;
                 }
                 
-                // Иначе считаем мобильным только если маленький экран И есть touch
-                const isSmallScreen = window.innerWidth <= 768;
-                const hasTouch = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
-                return isSmallScreen && hasTouch;
+                // Проверяем размер экрана
+                const screenWidth = window.innerWidth || screen.width;
+                if (screenWidth > 1024) {
+                    return false; // Большой экран = десктоп
+                }
+                
+                // Если маленький экран И есть touch - вероятно мобильное
+                if (screenWidth <= 768 && ('ontouchstart' in window || navigator.maxTouchPoints > 0)) {
+                    return true;
+                }
+                
+                // По умолчанию считаем десктопом
+                return false;
+            }
+            
+            function showMobileOnlyMessage() {
+                const overlay = document.getElementById('mobile-only-overlay');
+                if (overlay) {
+                    overlay.style.display = 'flex';
+                    overlay.classList.add('show');
+                    console.log('Показываем окно для десктопов');
+                } else {
+                    console.error('Элемент mobile-only-overlay не найден');
+                }
             }
             
             // Проверяем устройство сразу
-            if (!checkDevice()) {
+            const isMobile = isMobileDevice();
+            console.log('Проверка устройства:', {
+                userAgent: navigator.userAgent,
+                screenWidth: window.innerWidth || screen.width,
+                isMobile: isMobile
+            });
+            
+            if (!isMobile) {
                 // Показываем окно сразу, не дожидаясь загрузки app.js
-                document.addEventListener('DOMContentLoaded', function() {
-                    const overlay = document.getElementById('mobile-only-overlay');
-                    if (overlay) {
-                        overlay.classList.add('show');
-                    }
-                });
+                if (document.readyState === 'loading') {
+                    document.addEventListener('DOMContentLoaded', function() {
+                        showMobileOnlyMessage();
+                    });
+                } else {
+                    // DOM уже готов
+                    showMobileOnlyMessage();
+                }
                 
-                // Также проверяем после небольшой задержки на случай, если DOM еще не готов
+                // Дублируем проверку после задержки для надежности
                 setTimeout(function() {
-                    const overlay = document.getElementById('mobile-only-overlay');
-                    if (overlay) {
-                        overlay.classList.add('show');
-                    }
-                }, 100);
+                    showMobileOnlyMessage();
+                }, 200);
+                
+                // Еще одна проверка после полной загрузки
+                window.addEventListener('load', function() {
+                    showMobileOnlyMessage();
+                });
             }
         })();
     </script>
