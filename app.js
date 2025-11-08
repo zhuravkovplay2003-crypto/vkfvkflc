@@ -3174,6 +3174,28 @@ function showFlavorModal() {
         modal.style.opacity = '1';
         modalContent.style.transform = 'scale(1)';
         modalContent.style.opacity = '1';
+        
+        // Прокручиваем к выбранному вкусу после открытия модального окна
+        setTimeout(() => {
+            // Находим выбранный вкус в модальном окне
+            const selectedFlavorCard = Array.from(grid.children).find((card) => {
+                const flavorText = card.querySelector('div[style*="font-size: 13px"]');
+                if (flavorText) {
+                    const flavorName = flavorText.textContent.trim();
+                    return flavorName === selectedFlavor || flavorName === viewingProduct.flavors[selectedFlavorIndex];
+                }
+                return false;
+            });
+            
+            if (selectedFlavorCard) {
+                // Прокручиваем к выбранному вкусу
+                selectedFlavorCard.scrollIntoView({ 
+                    behavior: 'smooth', 
+                    block: 'center',
+                    inline: 'nearest'
+                });
+            }
+        }, 200);
     });
     
     // Восстанавливаем прокрутку при закрытии
@@ -3898,9 +3920,11 @@ function selectPickupLocation() {
                 // Если мы на странице корзины, полностью перерисовываем корзину
                 // Используем setTimeout чтобы убедиться что selectedPickupLocation обновился
                 if (currentPage === 'cart') {
+                    // Сначала обновляем переменную из localStorage
+                    selectedPickupLocation = fullLocation;
                     setTimeout(() => {
                         updateCartItemsDisplay();
-                    }, 50);
+                    }, 100);
                 }
                 
                 // Плавно закрываем модальное окно
@@ -5368,6 +5392,12 @@ function showCart() {
         }
     }
     
+    // Всегда загружаем актуальный адрес из localStorage перед проверкой наличия
+    const savedLocation = localStorage.getItem('selectedPickupLocation');
+    if (savedLocation) {
+        selectedPickupLocation = savedLocation;
+    }
+    
     const colors = getThemeColors();
     
     container.className = '';
@@ -6114,8 +6144,17 @@ function setPaymentMethod(index, method) {
 function updateCartItemsDisplay() {
     if (currentPage !== 'cart') return;
     
+    // Убеждаемся что selectedPickupLocation обновлен из localStorage
+    const savedLocation = localStorage.getItem('selectedPickupLocation');
+    if (savedLocation) {
+        selectedPickupLocation = savedLocation;
+    }
+    
     // Полностью перерисовываем корзину для правильного обновления всех элементов
-    showCart();
+    // Используем setTimeout чтобы гарантировать что все переменные обновлены
+    setTimeout(() => {
+        showCart();
+    }, 10);
 }
 
 // Обновление итоговой суммы корзины без полной перерисовки
