@@ -1342,13 +1342,31 @@ function showPage(page, skipHistory = false, resetCatalog = false) {
     // Сохраняем только если переходим из product в другую основную вкладку (cart, favorites, profile, promotions)
     if (currentPage === 'product' && viewingProduct && page !== 'product' && page !== 'catalog' && 
         (page === 'cart' || page === 'favorites' || page === 'profile' || page === 'promotions')) {
+        // Определяем, откуда был открыт товар (из избранного или из каталога)
+        let fromPage = 'catalog'; // По умолчанию из каталога
+        if (pageHistory.length > 0 && pageHistory[pageHistory.length - 1] === 'favorites') {
+            fromPage = 'favorites';
+        }
+        // Также проверяем сохраненные данные, если они есть
+        const savedProduct = localStorage.getItem('lastViewedProduct');
+        if (savedProduct) {
+            try {
+                const productData = JSON.parse(savedProduct);
+                if (productData.fromPage) {
+                    fromPage = productData.fromPage;
+                }
+            } catch (e) {
+                // Игнорируем ошибку парсинга
+            }
+        }
+        
         // Сохраняем товар в localStorage для восстановления при возврате в каталог
         localStorage.setItem('lastViewedProduct', JSON.stringify({
             id: viewingProduct.id,
             selectedFlavor: viewingProduct.selectedFlavor,
             selectedStrength: viewingProduct.selectedStrength,
             selectedFlavorIndex: viewingProduct.selectedFlavorIndex,
-            fromPage: currentPage // Сохраняем откуда переходим
+            fromPage: fromPage // Сохраняем откуда был открыт товар (из избранного или из каталога)
         }));
     } else if (currentPage === 'product' && viewingProduct && page === 'catalog') {
         // Если переходим из product в catalog, очищаем сохраненный товар
@@ -1452,9 +1470,23 @@ function showPage(page, skipHistory = false, resetCatalog = false) {
                         }
                         
                         // Показываем товар с восстановленными параметрами
-                        // Передаем сохраненные flavor и strength для правильного восстановления состояния
+                        // ВАЖНО: НЕ передаем favoriteFlavor/favoriteStrength, чтобы не определялось как избранное
+                        // Передаем null для обоих параметров, чтобы товар открылся как из каталога
                         setTimeout(() => {
-                            showProduct(productData.id, productData.selectedFlavor || null, productData.selectedStrength || null);
+                            showProduct(productData.id, null, null);
+                            // Восстанавливаем выбранный вкус и крепость после открытия товара
+                            setTimeout(() => {
+                                if (productData.selectedFlavor) {
+                                    const flavorIndex = product.flavors ? product.flavors.indexOf(productData.selectedFlavor) : -1;
+                                    if (flavorIndex >= 0) {
+                                        selectFlavor(productData.selectedFlavor, flavorIndex);
+                                    }
+                                }
+                                if (productData.selectedStrength && viewingProduct) {
+                                    viewingProduct.selectedStrength = productData.selectedStrength;
+                                    selectStrength(productData.selectedStrength);
+                                }
+                            }, 100);
                         }, 50);
                         localStorage.removeItem('lastViewedProduct'); // Очищаем после восстановления
                         // Подсвечиваем кнопку "Ассортимент" при восстановлении товара
@@ -1669,7 +1701,34 @@ function showPage(page, skipHistory = false, resetCatalog = false) {
                     const productData = JSON.parse(savedProduct);
                     if (productData && productData.id) {
                         // Восстанавливаем товар
-                        showProduct(productData.id, productData.selectedFlavor, productData.selectedStrength);
+                        // ВАЖНО: Не передаем selectedFlavor и selectedStrength как favoriteFlavor/favoriteStrength,
+                        // чтобы товар не считался открытым из избранного. Вместо этого открываем товар без этих параметров,
+                        // а затем устанавливаем выбранные значения отдельно
+                        const wasFromFavorites = productData.fromPage === 'favorites';
+                        showProduct(
+                            productData.id, 
+                            wasFromFavorites ? productData.selectedFlavor : null, 
+                            wasFromFavorites ? productData.selectedStrength : null
+                        );
+                        // Если товар был открыт не из избранного, устанавливаем выбранные значения после открытия
+                        if (!wasFromFavorites && (productData.selectedFlavor || productData.selectedStrength)) {
+                            setTimeout(() => {
+                                if (viewingProduct) {
+                                    if (productData.selectedFlavor) {
+                                        const product = products.find(p => p.id === productData.id);
+                                        if (product && product.flavors) {
+                                            const flavorIndex = product.flavors.indexOf(productData.selectedFlavor);
+                                            if (flavorIndex >= 0) {
+                                                selectFlavor(productData.selectedFlavor, flavorIndex);
+                                            }
+                                        }
+                                    }
+                                    if (productData.selectedStrength) {
+                                        selectStrength(productData.selectedStrength);
+                                    }
+                                }
+                            }, 100);
+                        }
                         localStorage.removeItem('lastViewedProduct'); // Очищаем после восстановления
                         return;
                     }
@@ -2152,7 +2211,11 @@ function showProduct(productId, favoriteFlavor = null, favoriteStrength = null) 
     showPage('product', true);
     
     // Определяем, откуда открыт товар - из избранного или из каталога
-    const isFromFavorites = currentPage === 'favorites' || (favoriteFlavor !== null && favoriteFlavor !== undefined) || (favoriteStrength !== null && favoriteStrength !== undefined);
+    // ВАЖНО: favoriteFlavor и favoriteStrength передаются только при открытии из избранного
+    // Если они null или undefined, значит товар открыт из каталога
+    const isFromFavorites = currentPage === 'favorites' || 
+                            (favoriteFlavor !== null && favoriteFlavor !== undefined && favoriteFlavor !== '') || 
+                            (favoriteStrength !== null && favoriteStrength !== undefined && favoriteStrength !== '');
     
     // Подсвечиваем правильную кнопку в зависимости от того, откуда открыт товар
     setTimeout(() => {
@@ -2738,11 +2801,33 @@ function selectStrength(strength) {
     
     // Сохраняем состояние товара в localStorage для восстановления при возврате из другой вкладки
     if (currentPage === 'product' && viewingProduct) {
+        // Определяем, откуда был открыт товар (из избранного или из каталога)
+        const savedProduct = localStorage.getItem('lastViewedProduct');
+        let fromPage = 'catalog'; // По умолчанию из каталога
+        if (savedProduct) {
+            try {
+                const productData = JSON.parse(savedProduct);
+                if (productData.fromPage) {
+                    fromPage = productData.fromPage;
+                } else if (pageHistory.length > 0 && pageHistory[pageHistory.length - 1] === 'favorites') {
+                    fromPage = 'favorites';
+                }
+            } catch (e) {
+                // Если не удалось распарсить, определяем по pageHistory
+                if (pageHistory.length > 0 && pageHistory[pageHistory.length - 1] === 'favorites') {
+                    fromPage = 'favorites';
+                }
+            }
+        } else if (pageHistory.length > 0 && pageHistory[pageHistory.length - 1] === 'favorites') {
+            fromPage = 'favorites';
+        }
+        
         localStorage.setItem('lastViewedProduct', JSON.stringify({
             id: viewingProduct.id,
             selectedFlavor: viewingProduct.selectedFlavor,
             selectedStrength: viewingProduct.selectedStrength,
-            selectedFlavorIndex: viewingProduct.selectedFlavorIndex
+            selectedFlavorIndex: viewingProduct.selectedFlavorIndex,
+            fromPage: fromPage
         }));
     }
     
@@ -3056,12 +3141,35 @@ function selectFlavor(flavor, index) {
     }
     
     // Сохраняем состояние товара в localStorage для восстановления при возврате из другой вкладки
-    if (currentPage === 'product' && viewingProduct) {
+    // ВАЖНО: Сохраняем только если мы на странице товара и не переходим никуда
+    if (currentPage === 'product' && viewingProduct && pageContent) {
+        // Определяем, откуда был открыт товар (из избранного или из каталога)
+        const savedProduct = localStorage.getItem('lastViewedProduct');
+        let fromPage = 'catalog'; // По умолчанию из каталога
+        if (savedProduct) {
+            try {
+                const productData = JSON.parse(savedProduct);
+                if (productData.fromPage) {
+                    fromPage = productData.fromPage;
+                } else if (pageHistory.length > 0 && pageHistory[pageHistory.length - 1] === 'favorites') {
+                    fromPage = 'favorites';
+                }
+            } catch (e) {
+                // Если не удалось распарсить, определяем по pageHistory
+                if (pageHistory.length > 0 && pageHistory[pageHistory.length - 1] === 'favorites') {
+                    fromPage = 'favorites';
+                }
+            }
+        } else if (pageHistory.length > 0 && pageHistory[pageHistory.length - 1] === 'favorites') {
+            fromPage = 'favorites';
+        }
+        
         localStorage.setItem('lastViewedProduct', JSON.stringify({
             id: viewingProduct.id,
             selectedFlavor: viewingProduct.selectedFlavor,
             selectedStrength: viewingProduct.selectedStrength,
-            selectedFlavorIndex: viewingProduct.selectedFlavorIndex
+            selectedFlavorIndex: viewingProduct.selectedFlavorIndex,
+            fromPage: fromPage
         }));
     }
     
