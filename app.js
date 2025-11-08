@@ -2786,51 +2786,45 @@ function selectFlavor(flavor, index) {
         viewingProduct.selectedFlavor = flavor;
     }
     
-    // ВАЖНО: Всегда перерисовываем всю карточку товара при выборе вкуса
-    // Это гарантирует, что фото и информация загружаются даже для недоступных вкусов
+    // Обновляем только изображение и визуальное состояние БЕЗ полной перерисовки
     const container = document.getElementById('page-content');
     if (container && currentPage === 'product') {
-        // Сохраняем позиции скролла перед перерисовкой для плавности
-        const verticalScrollPosition = container.scrollTop;
-        
-        // Сохраняем позицию горизонтального скролла контейнера вкусов
-        const flavorSection = document.querySelector('[onclick="showFlavorModal()"]')?.closest('div[style*="margin: 20px 0"]');
-        let horizontalScrollPosition = 0;
-        if (flavorSection) {
-            const flavorsContainer = flavorSection.querySelector('.flavors-scroll-container') || 
-                                     flavorSection.querySelector('div[style*="overflow-x: auto"]');
-            if (flavorsContainer) {
-                horizontalScrollPosition = flavorsContainer.scrollLeft || 0;
+        // Обновляем изображение товара
+        const imageContainer = document.getElementById('product-image-container');
+        if (imageContainer && product) {
+            let productImageUrl = product.imageUrl;
+            if (flavor && product.flavorImages && product.flavorImages[flavor]) {
+                productImageUrl = product.flavorImages[flavor];
             }
-        }
-        
-        // Перерисовываем всю карточку товара с новым выбранным вкусом
-        renderProductContent(container, product, null, null);
-        
-        // Восстанавливаем позиции скролла сразу после перерисовки
-        requestAnimationFrame(() => {
-            container.scrollTop = verticalScrollPosition;
             
-            // Восстанавливаем горизонтальный скролл контейнера вкусов
-            const newFlavorSection = document.querySelector('[onclick="showFlavorModal()"]')?.closest('div[style*="margin: 20px 0"]');
-            if (newFlavorSection) {
-                const newFlavorsContainer = newFlavorSection.querySelector('.flavors-scroll-container') || 
-                                            newFlavorSection.querySelector('div[style*="overflow-x: auto"]');
-                if (newFlavorsContainer) {
-                    newFlavorsContainer.scrollLeft = horizontalScrollPosition;
+            // Проверяем наличие для применения стилей
+            const isProductInStock = deliveryType === 'selfPickup' && selectedPickupLocation
+                ? (flavor ? isFlavorInStockAtLocation(product, flavor, selectedPickupLocation) : isProductInStockAtLocation(product, selectedPickupLocation))
+                : (product.inStock !== false && (product.quantity === undefined || product.quantity > 0));
+            
+            if (productImageUrl) {
+                const img = imageContainer.querySelector('img');
+                if (img) {
+                    img.src = productImageUrl;
+                    img.style.opacity = isProductInStock ? '1' : '0.5';
+                    img.style.filter = isProductInStock ? 'none' : 'grayscale(100%)';
+                } else {
+                    imageContainer.innerHTML = `<img src="${productImageUrl}" alt="${product.name}" style="width: 100%; height: 100%; object-fit: contain; border-radius: 12px; ${!isProductInStock ? 'opacity: 0.5; filter: grayscale(100%);' : ''}" onerror="this.parentElement.innerHTML='${getPackageIcon('#999999')}'">`;
                 }
             }
-        });
+            
+            // Применяем стили к контейнеру изображения
+            imageContainer.style.opacity = isProductInStock ? '1' : '0.5';
+            imageContainer.style.filter = isProductInStock ? 'none' : 'grayscale(100%)';
+        }
         
-        // Обновляем визуальное состояние выбранного вкуса после перерисовки
-        setTimeout(() => {
-            const flavorSectionAfter = document.querySelector('[onclick="showFlavorModal()"]')?.closest('div[style*="margin: 20px 0"]');
-            if (flavorSectionAfter) {
-                const flavorsContainer = flavorSectionAfter.querySelector('.flavors-scroll-container') || 
-                                         flavorSectionAfter.querySelector('div[style*="overflow-x: auto"]');
+        // Обновляем визуальное состояние выбранного вкуса БЕЗ перерисовки
+        requestAnimationFrame(() => {
+            const flavorSection = document.querySelector('[onclick="showFlavorModal()"]')?.closest('div[style*="margin: 20px 0"]');
+            if (flavorSection) {
+                const flavorsContainer = flavorSection.querySelector('.flavors-scroll-container') || 
+                                         flavorSection.querySelector('div[style*="overflow-x: auto"]');
                 if (flavorsContainer) {
-                    // Восстанавливаем горизонтальный скролл еще раз для надежности
-                    flavorsContainer.scrollLeft = horizontalScrollPosition;
                     // Плавно убираем выделение со всех
                     flavorsContainer.querySelectorAll('[id^="flavor-"]').forEach(flavorEl => {
                         const circleDiv = flavorEl.querySelector('div[style*="border-radius: 50%"]');
@@ -2891,14 +2885,9 @@ function selectFlavor(flavor, index) {
                             textDiv.style.fontWeight = '600';
                         }
                     }
-                    
-                    // Восстанавливаем горизонтальный скролл еще раз после обновления визуального состояния
-                    requestAnimationFrame(() => {
-                        flavorsContainer.scrollLeft = horizontalScrollPosition;
-                    });
                 }
             }
-        }, 100);
+        });
     } else {
         // Если контейнер не найден, пытаемся обновить только изображение
         if (product && product.flavorImages && product.flavorImages[flavor]) {
@@ -3138,7 +3127,11 @@ function selectFlavor(flavor, index) {
 
 // Модальное окно вкусов
 function showFlavorModal() {
-    if (!viewingProduct || !viewingProduct.flavors) return;
+    if (!viewingProduct) return;
+    // Проверяем наличие вкусов - если их нет, просто возвращаемся
+    if (!viewingProduct.flavors || viewingProduct.flavors.length === 0) {
+        return;
+    }
     
     // Удаляем предыдущее модальное окно если есть
     const existingModal = document.querySelector('.modal-overlay');
@@ -3351,8 +3344,34 @@ function showFlavorModal() {
                 document.body.style.overflow = '';
                 modal.remove();
                 
-                // НЕ скроллим автоматически к выбранному вкусу - это вызывает прыжки
-                // Пользователь сам может прокрутить к нужному вкусу
+                // Плавно скроллим к выбранному вкусу в скроллбаре
+                requestAnimationFrame(() => {
+                    setTimeout(() => {
+                        const flavorSection = document.querySelector('[onclick="showFlavorModal()"]')?.closest('div[style*="margin: 20px 0"]');
+                        if (flavorSection) {
+                            const flavorElement = document.getElementById(`flavor-${originalIndex}`);
+                            if (flavorElement) {
+                                const flavorsContainer = flavorSection.querySelector('.flavors-scroll-container') || 
+                                                         flavorSection.querySelector('div[style*="overflow-x: auto"]');
+                                if (flavorsContainer) {
+                                    // Плавно скроллим к выбранному вкусу
+                                    const elementLeft = flavorElement.offsetLeft;
+                                    const elementWidth = flavorElement.offsetWidth;
+                                    const containerWidth = flavorsContainer.offsetWidth;
+                                    const scrollLeft = flavorsContainer.scrollLeft;
+                                    const elementCenter = elementLeft + elementWidth / 2;
+                                    const containerCenter = scrollLeft + containerWidth / 2;
+                                    const targetScroll = elementCenter - containerWidth / 2;
+                                    
+                                    flavorsContainer.scrollTo({
+                                        left: targetScroll,
+                                        behavior: 'smooth'
+                                    });
+                                }
+                            }
+                        }
+                    }, 100);
+                });
             }, 200);
             
             if (tg && tg.HapticFeedback) {
