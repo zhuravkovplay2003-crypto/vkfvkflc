@@ -1903,32 +1903,8 @@ function showProduct(productId, favoriteFlavor = null, favoriteStrength = null) 
     const product = products.find(p => p.id === productId);
     if (!product) return;
     
-    // Проверяем наличие товара на выбранной точке перед открытием
-    const isProductAvailable = deliveryType === 'selfPickup' && selectedPickupLocation
-        ? isProductInStockAtLocation(product, selectedPickupLocation)
-        : (product.inStock !== false && (product.quantity === undefined || product.quantity > 0));
-    
-    // Если товар не в наличии и нет ни одной точки где он есть, не открываем карточку
-    if (!isProductAvailable) {
-        const locationsWithStock = getLocationsWithStock(product);
-        const selectedCity = selectedPickupLocation ? getCityFromLocation(selectedPickupLocation) : null;
-        let filteredLocations = locationsWithStock;
-        if (selectedCity) {
-            filteredLocations = locationsWithStock.filter(location => {
-                if (selectedCity === 'Минск') {
-                    return location.includes('Минск');
-                } else if (selectedCity === 'Могилёв' || selectedCity === 'Могилев') {
-                    return location.includes('Могилёв') || location.includes('Могилев');
-                }
-                return true;
-            });
-        }
-        
-        if (filteredLocations.length === 0) {
-            showToast('Товара нет ни на одной точке', 'error', 3000);
-            return;
-        }
-    }
+    // Убираем блокировку открытия товара - всегда позволяем открыть карточку
+    // Информация о наличии будет показана на самой карточке
     
     // Сохраняем позицию скролла, если мы на странице избранного
     if (currentPage === 'favorites') {
@@ -3625,7 +3601,7 @@ function selectPickupLocation() {
                                 showToast(`На выбранной точке нет в наличии: ${unavailableItems.map(i => i.name).join(', ')}`, 'error', 5000);
                             }
                             // Обновляем корзину для отображения актуального состояния
-                            showCart();
+                            updateCartItemsDisplay();
                         } catch (e) {
                             console.error('Error checking cart items:', e);
                         }
@@ -7841,17 +7817,25 @@ function showFavorites() {
             imageUrl = product.flavorImages[flavor];
         }
         
-        // Проверяем наличие товара
-        const isInStock = deliveryType === 'selfPickup' && selectedPickupLocation
-            ? isProductInStockAtLocation(product, selectedPickupLocation)
-            : (product.inStock !== false && (product.quantity === undefined || product.quantity > 0));
+        // Проверяем наличие товара на выбранной точке
+        let isInStock = true;
+        if (deliveryType === 'selfPickup' && selectedPickupLocation) {
+            // Проверяем наличие конкретного вкуса если он указан
+            if (flavor) {
+                isInStock = isFlavorInStockAtLocation(product, flavor, selectedPickupLocation);
+            } else {
+                isInStock = isProductInStockAtLocation(product, selectedPickupLocation);
+            }
+        } else {
+            isInStock = product.inStock !== false && (product.quantity === undefined || product.quantity > 0);
+        }
         
         // Правильно экранируем кавычки в URL для изображения
         const safeImageUrl = imageUrl ? imageUrl.replace(/'/g, "&#39;").replace(/"/g, "&quot;") : '';
         
-        // Не показываем фото, если товар не в наличии
-        const imageContent = isInStock && imageUrl
-            ? `<img src="${safeImageUrl}" alt="${product.name.replace(/'/g, "&#39;")}" style="width: 100%; height: 100%; object-fit: cover; border-radius: 12px; display: block;" onerror="this.parentElement.innerHTML='${getPackageIcon('#999999')}'">`
+        // Показываем фото всегда, но делаем серым если нет в наличии
+        const imageContent = imageUrl
+            ? `<img src="${safeImageUrl}" alt="${product.name.replace(/'/g, "&#39;")}" style="width: 100%; height: 100%; object-fit: cover; border-radius: 12px; display: block; ${!isInStock ? 'opacity: 0.5; filter: grayscale(100%);' : ''}" onerror="this.parentElement.innerHTML='${getPackageIcon('#999999')}'">`
             : getPackageIcon('#999999');
         
         // Формируем параметры для передачи в showProduct - правильно экранируем
@@ -7867,7 +7851,7 @@ function showFavorites() {
                 onmouseover="this.style.boxShadow='0 6px 16px rgba(0,0,0,${darkMode ? '0.4' : '0.12'})'"
                 onmouseout="this.style.boxShadow='0 4px 12px rgba(0,0,0,${darkMode ? '0.3' : '0.08'})'">
                 <div style="position: relative; width: 100%; aspect-ratio: 1; background: ${colors.bgSecondary}; border-radius: 12px; 
-                    overflow: hidden; margin-bottom: 12px; flex-shrink: 0; ${!isInStock ? 'opacity: 0.5; filter: grayscale(100%);' : ''}">
+                    overflow: hidden; margin-bottom: 12px; flex-shrink: 0;">
                         ${imageContent}
                     <button id="favorite-heart-btn-${productId}-${flavor || ''}-${strength || ''}" onclick="event.stopPropagation(); animateHeartRemoval(${productId}, '${flavor || ''}', '${strength || ''}')" 
                         style="position: absolute; top: 8px; right: 8px; width: 36px; height: 36px; 
@@ -7903,7 +7887,7 @@ function showFavorites() {
                     </div>
                     ${!isInStock ? `
                         <div style="color: #f44336; font-size: 12px; margin-bottom: 8px; font-weight: 600;">
-                            Товара нет в наличии
+                            На данном адресе этого товара нет
                         </div>
                         ${(() => {
                             let locationsWithStock = [];
