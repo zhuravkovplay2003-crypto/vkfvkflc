@@ -1424,15 +1424,30 @@ function showPage(page, skipHistory = false, resetCatalog = false) {
         if (page === 'catalog') {
             // Для каталога показываем адрес с SVG иконкой
             if (selectedPickupLocation) {
-                const shortLocation = selectedPickupLocation.length > 18 
-                    ? selectedPickupLocation.substring(0, 15) + '...' 
-                    : selectedPickupLocation;
-                navRightContent.innerHTML = `<span style="display: inline-flex; align-items: center; gap: 6px;"><span style="width: 16px; height: 16px; display: flex; align-items: center; justify-content: center; flex-shrink: 0;">${getLocationIcon('#ffffff').replace('width="24" height="24"', 'width="16" height="16"')}</span><span style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${shortLocation}</span></span>`;
+                // Форматируем адрес для лучшего отображения
+                let displayLocation = selectedPickupLocation;
+                // Если адрес слишком длинный, обрезаем но стараемся сохранить важную часть
+                if (displayLocation.length > 20) {
+                    // Пытаемся найти запятую и обрезать после неё
+                    const commaIndex = displayLocation.indexOf(',');
+                    if (commaIndex > 0 && commaIndex < 15) {
+                        displayLocation = displayLocation.substring(0, commaIndex + 1) + '...';
+                    } else {
+                        displayLocation = displayLocation.substring(0, 17) + '...';
+                    }
+                }
+                navRightContent.innerHTML = `<span style="display: inline-flex; align-items: center; gap: 6px; justify-content: center; width: 100%;"><span style="width: 16px; height: 16px; display: flex; align-items: center; justify-content: center; flex-shrink: 0;">${getLocationIcon('#ffffff').replace('width="24" height="24"', 'width="16" height="16"')}</span><span style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-align: center; flex: 1; min-width: 0;">${displayLocation}</span></span>`;
                 navRightContent.style.cursor = 'pointer';
+                navRightContent.style.textAlign = 'center';
+                navRightContent.style.justifyContent = 'center';
+                navRightContent.style.display = 'flex';
                 navRightContent.onclick = () => selectPickupLocation();
             } else {
-                navRightContent.innerHTML = `<span style="display: inline-flex; align-items: center; gap: 6px;"><span style="width: 16px; height: 16px; display: flex; align-items: center; justify-content: center; flex-shrink: 0;">${getLocationIcon('#ffffff').replace('width="24" height="24"', 'width="16" height="16"')}</span><span>Выберите точку</span></span>`;
+                navRightContent.innerHTML = `<span style="display: inline-flex; align-items: center; gap: 6px; justify-content: center; width: 100%;"><span style="width: 16px; height: 16px; display: flex; align-items: center; justify-content: center; flex-shrink: 0;">${getLocationIcon('#ffffff').replace('width="24" height="24"', 'width="16" height="16"')}</span><span style="text-align: center;">Выберите точку</span></span>`;
                 navRightContent.style.cursor = 'pointer';
+                navRightContent.style.textAlign = 'center';
+                navRightContent.style.justifyContent = 'center';
+                navRightContent.style.display = 'flex';
                 navRightContent.onclick = () => selectPickupLocation();
             }
         } else {
@@ -1888,6 +1903,33 @@ function showProduct(productId, favoriteFlavor = null, favoriteStrength = null) 
     const product = products.find(p => p.id === productId);
     if (!product) return;
     
+    // Проверяем наличие товара на выбранной точке перед открытием
+    const isProductAvailable = deliveryType === 'selfPickup' && selectedPickupLocation
+        ? isProductInStockAtLocation(product, selectedPickupLocation)
+        : (product.inStock !== false && (product.quantity === undefined || product.quantity > 0));
+    
+    // Если товар не в наличии и нет ни одной точки где он есть, не открываем карточку
+    if (!isProductAvailable) {
+        const locationsWithStock = getLocationsWithStock(product);
+        const selectedCity = selectedPickupLocation ? getCityFromLocation(selectedPickupLocation) : null;
+        let filteredLocations = locationsWithStock;
+        if (selectedCity) {
+            filteredLocations = locationsWithStock.filter(location => {
+                if (selectedCity === 'Минск') {
+                    return location.includes('Минск');
+                } else if (selectedCity === 'Могилёв' || selectedCity === 'Могилев') {
+                    return location.includes('Могилёв') || location.includes('Могилев');
+                }
+                return true;
+            });
+        }
+        
+        if (filteredLocations.length === 0) {
+            showToast('Товара нет ни на одной точке', 'error', 3000);
+            return;
+        }
+    }
+    
     // Сохраняем позицию скролла, если мы на странице избранного
     if (currentPage === 'favorites') {
         const pageContent = document.getElementById('page-content');
@@ -2067,7 +2109,7 @@ function showProduct(productId, favoriteFlavor = null, favoriteStrength = null) 
                             <div style="font-weight: 600; margin-bottom: 4px; color: #333;">Есть в наличии на:</div>
                             <div>${flavorLocations.join(', ')}</div>
                         </div>
-                    ` : ''}
+                    ` : (!isFlavorInStock && flavorLocations.length === 0 ? '<div style="margin-top: 12px; padding: 12px; background: #fff3f3; border-radius: 12px; font-size: 13px; color: #f44336; line-height: 1.5; text-align: center; font-weight: 600;">Товара нет ни на одной точке</div>' : '')}
                 </div>
             `;
         } else {
@@ -2099,8 +2141,8 @@ function showProduct(productId, favoriteFlavor = null, favoriteStrength = null) 
                     <div style="display: flex; justify-content: flex-start; gap: 12px; overflow-x: auto; padding-bottom: 8px; -webkit-overflow-scrolling: touch;">
                         ${allFlavors.map((flavor, idx) => {
                             const originalIndex = product.flavors.indexOf(flavor);
-                            // Используем строгое сравнение с индексом и вкусом
-                            const isSelected = (originalIndex === currentSelectedIndex) || (flavor === currentSelectedFlavor);
+                            // Используем строгое сравнение - проверяем что и индекс и вкус совпадают
+                            const isSelected = (originalIndex === currentSelectedIndex) && (flavor === currentSelectedFlavor);
                             
                             // Проверяем наличие вкуса на выбранной точке
                             const isFlavorInStock = deliveryType === 'selfPickup' && selectedPickupLocation
@@ -2140,7 +2182,7 @@ function showProduct(productId, favoriteFlavor = null, favoriteStrength = null) 
                                 <div style="font-size: 12px; color: ${isSelected ? '#007AFF' : (!isFlavorInStock ? '#999' : '#000')}; font-weight: ${isSelected ? '600' : '400'}; text-align: center; width: 100%;">
                                     ${flavor.length > 15 ? flavor.substring(0, 15) + '...' : flavor}
                                 </div>
-                                ${!isFlavorInStock ? '<div style="font-size: 10px; color: #999; text-align: center; width: 100%; margin-top: 2px;">Нет в наличии</div>' : ''}
+                                ${stockMessage}
                             </div>
                         `;
                         }).join('')}
@@ -2254,7 +2296,7 @@ function showProduct(productId, favoriteFlavor = null, favoriteStrength = null) 
                                     <div style="font-weight: 600; margin-bottom: 4px; color: #333;">Есть в наличии на:</div>
                                     <div>${locationsWithStock.join(', ')}</div>
                                 </div>
-                            ` : ''}
+                            ` : '<div style="margin-top: 12px; padding: 12px; background: #fff3f3; border-radius: 12px; font-size: 13px; color: #f44336; line-height: 1.5; text-align: center; font-weight: 600;">Товара нет ни на одной точке</div>'}
                         </div>
                         `;
                 } else {
@@ -2290,7 +2332,7 @@ function showProduct(productId, favoriteFlavor = null, favoriteStrength = null) 
                                         <div style="font-weight: 600; margin-bottom: 4px; color: #333;">Есть в наличии на:</div>
                                         <div>${flavorLocations.join(', ')}</div>
                                     </div>
-                                ` : ''}
+                                ` : '<div style="margin-top: 12px; padding: 12px; background: #fff3f3; border-radius: 12px; font-size: 13px; color: #f44336; line-height: 1.5; text-align: center; font-weight: 600;">Товара нет ни на одной точке</div>'}
                             </div>
                         `;
                     }
@@ -2459,12 +2501,17 @@ function selectFlavor(flavor, index) {
             
             const allFlavors = [...product.flavors];
             
-            const flavorsContainer = flavorSection.querySelector('div[style*="display: flex; gap: 12px"]');
+            // Ищем контейнер вкусов - может быть в разных местах
+            const flavorsContainer = flavorSection.querySelector('div[style*="display: flex"]') || 
+                                     flavorSection.querySelector('div[style*="overflow-x: auto"]') ||
+                                     flavorSection.querySelector('div[style*="gap: 12px"]');
             if (flavorsContainer) {
-                flavorsContainer.innerHTML = allFlavors.map((flavorItem) => {
-                    const originalIndex = product.flavors.indexOf(flavorItem);
-                    // Используем строгое сравнение с индексом и вкусом
-                    const isSelected = (originalIndex === currentSelectedIndex) || (flavorItem === selectedFlavor);
+                // Используем requestAnimationFrame для гарантированного обновления
+                requestAnimationFrame(() => {
+                    flavorsContainer.innerHTML = allFlavors.map((flavorItem) => {
+                        const originalIndex = product.flavors.indexOf(flavorItem);
+                        // Используем строгое сравнение - проверяем что и индекс и вкус совпадают
+                        const isSelected = (originalIndex === viewingProduct.selectedFlavorIndex) && (flavorItem === viewingProduct.selectedFlavor);
                     
                     // Проверяем наличие вкуса на выбранной точке
                     const isFlavorInStock = deliveryType === 'selfPickup' && selectedPickupLocation
@@ -2497,10 +2544,22 @@ function selectFlavor(flavor, index) {
                             <div style="font-size: 12px; color: ${isSelected ? '#007AFF' : (!isFlavorInStock ? '#999' : '#000')}; font-weight: ${isSelected ? '600' : '400'};">
                                 ${flavorItem.length > 15 ? flavorItem.substring(0, 15) + '...' : flavorItem}
                             </div>
-                            ${!isFlavorInStock ? '<div style="font-size: 10px; color: #999; text-align: center; width: 100%; margin-top: 2px;">Нет в наличии</div>' : ''}
+                            ${(() => {
+                                if (!isFlavorInStock) {
+                                    const selectedCity = selectedPickupLocation ? getCityFromLocation(selectedPickupLocation) : null;
+                                    const flavorLocations = getLocationsWithFlavorStockByCity(product, flavorItem, selectedCity);
+                                    if (flavorLocations.length === 0) {
+                                        return '<div style="font-size: 10px; color: #f44336; text-align: center; width: 100%; margin-top: 2px;">Нет ни на одной точке</div>';
+                                    } else {
+                                        return '<div style="font-size: 10px; color: #999; text-align: center; width: 100%; margin-top: 2px;">Нет в наличии</div>';
+                                    }
+                                }
+                                return '';
+                            })()}
                         </div>
                     `;
-                }).join('');
+                    }).join('');
+                });
             }
         }
     }
@@ -2557,7 +2616,7 @@ function selectFlavor(flavor, index) {
                             <div style="font-weight: 600; margin-bottom: 4px; color: #333;">Есть в наличии на:</div>
                             <div>${locationsWithStock.join(', ')}</div>
                         </div>
-                    ` : '';
+                    ` : '<div style="margin-top: 12px; padding: 12px; background: #fff3f3; border-radius: 12px; font-size: 13px; color: #f44336; line-height: 1.5; text-align: center; font-weight: 600;">Товара нет ни на одной точке</div>';
                     buttonContainer.innerHTML = `
                         <button disabled style="width: 100%; padding: 16px; 
                             background: #cccccc; color: white; border: none; border-radius: 12px; 
@@ -3525,6 +3584,11 @@ function selectPickupLocation() {
                 const previousLocation = selectedPickupLocation;
                 selectedPickupLocation = fullLocation;
                 localStorage.setItem('selectedPickupLocation', selectedPickupLocation);
+                
+                // Обновляем корзину если мы на странице корзины
+                if (currentPage === 'cart') {
+                    updateCartItemsDisplay();
+                }
                 
                 // Если точка изменилась, сбрасываем время
                 if (previousLocation !== selectedPickupLocation) {
@@ -5315,14 +5379,30 @@ function showCart() {
             const itemTotalMoney = paymentMethod === 'money' ? (item.price * item.quantity) : 0;
             const itemTotalCoins = paymentMethod === 'coins' ? (coinsPrice * item.quantity) : 0;
             
+            // Проверяем наличие товара на выбранной точке
+            const product = products.find(p => p.id === item.productId);
+            let isItemInStock = true;
+            if (product) {
+                if (deliveryType === 'selfPickup' && selectedPickupLocation) {
+                    // Проверяем наличие конкретного вкуса если он указан
+                    if (item.flavor) {
+                        isItemInStock = isFlavorInStockAtLocation(product, item.flavor, selectedPickupLocation);
+                    } else {
+                        isItemInStock = isProductInStockAtLocation(product, selectedPickupLocation);
+                    }
+                } else {
+                    isItemInStock = product.inStock !== false && (product.quantity === undefined || product.quantity > 0);
+                }
+            }
+            
             return `
             <div style="background: #ffffff; padding: 20px; border-radius: 16px; margin-bottom: 16px; 
                 border: 2px solid #e5e5e5; box-shadow: 0 4px 12px rgba(0,0,0,0.08);">
                 <div style="display: flex; gap: 16px; position: relative; margin-bottom: 16px; align-items: flex-start;">
-                    <div style="width: 100px; height: 100px; background: linear-gradient(135deg, #f8f8f8 0%, #f0f0f0 100%); 
+                    <div id="cart-item-image-${idx}" style="width: 100px; height: 100px; background: linear-gradient(135deg, #f8f8f8 0%, #f0f0f0 100%); 
                         border-radius: 12px; display: flex; align-items: center; justify-content: center; 
-                        flex-shrink: 0; border: 3px solid #f0f0f0; box-shadow: 0 4px 12px rgba(0,0,0,0.1); overflow: hidden; position: relative;">
-                        ${item.imageUrl ? `<img src="${item.imageUrl}" alt="${item.name}" style="width: 100%; height: 100%; object-fit: cover; position: absolute; top: 0; left: 0; border-radius: 12px; display: block; margin: 0; padding: 0;" onerror="this.style.display='none'; this.parentElement.innerHTML='${getPackageIcon('#999999')}'">` : `<div style="width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; position: absolute; top: 0; left: 0;">${item.image || getPackageIcon('#999999')}</div>`}
+                        flex-shrink: 0; border: 3px solid #f0f0f0; box-shadow: 0 4px 12px rgba(0,0,0,0.1); overflow: hidden; position: relative; ${!isItemInStock ? 'opacity: 0.5; filter: grayscale(100%);' : ''}">
+                        ${item.imageUrl ? `<img src="${item.imageUrl}" alt="${item.name}" style="width: 100%; height: 100%; object-fit: cover; position: absolute; top: 0; left: 0; border-radius: 12px; display: block; margin: 0; padding: 0; ${!isItemInStock ? 'opacity: 0.5; filter: grayscale(100%);' : ''}" onerror="this.style.display='none'; this.parentElement.innerHTML='${getPackageIcon('#999999')}'">` : `<div style="width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; position: absolute; top: 0; left: 0;">${item.image || getPackageIcon('#999999')}</div>`}
                     </div>
                     <div style="flex: 1; min-width: 0; word-wrap: break-word; overflow-wrap: break-word;">
                         <div style="font-weight: 700; font-size: 18px; margin-bottom: 8px; color: #000; 
@@ -5340,6 +5420,12 @@ function showCart() {
                                 margin-bottom: 8px; font-size: 13px; color: #1976d2; font-weight: 600; border: 1px solid #90caf9;">
                                 <span style="width: 14px; height: 14px; display: flex; align-items: center; justify-content: center;">${getLightningIcon('#1976d2')}</span>
                                 <span>${item.strength}</span>
+                            </div>
+                        ` : ''}
+                        ${!isItemInStock ? `
+                            <div id="cart-item-stock-message-${idx}" style="margin-top: 8px; padding: 8px 12px; background: #fff3f3; border-radius: 8px; 
+                                font-size: 13px; color: #f44336; font-weight: 600; border: 1px solid #ffcdd2;">
+                                На данной точке этого товара нет
                             </div>
                         ` : ''}
                     </div>
@@ -5722,6 +5808,77 @@ function setPaymentMethod(index, method) {
     if (tg && tg.HapticFeedback) {
         tg.HapticFeedback.impactOccurred('light');
     }
+}
+
+// Обновление отображения товаров в корзине при смене адреса
+function updateCartItemsDisplay() {
+    if (currentPage !== 'cart') return;
+    
+    const pageContent = document.getElementById('page-content');
+    if (!pageContent) return;
+    
+    // Обновляем каждый товар в корзине
+    cart.forEach((item, idx) => {
+        const product = products.find(p => p.id === item.productId);
+        if (!product) return;
+        
+        // Проверяем наличие товара на выбранной точке
+        let isItemInStock = true;
+        if (deliveryType === 'selfPickup' && selectedPickupLocation) {
+            if (item.flavor) {
+                isItemInStock = isFlavorInStockAtLocation(product, item.flavor, selectedPickupLocation);
+            } else {
+                isItemInStock = isProductInStockAtLocation(product, selectedPickupLocation);
+            }
+        } else {
+            isItemInStock = product.inStock !== false && (product.quantity === undefined || product.quantity > 0);
+        }
+        
+        // Обновляем изображение
+        const imageContainer = document.getElementById(`cart-item-image-${idx}`);
+        if (imageContainer) {
+            if (isItemInStock) {
+                imageContainer.style.opacity = '1';
+                imageContainer.style.filter = 'none';
+                const img = imageContainer.querySelector('img');
+                if (img) {
+                    img.style.opacity = '1';
+                    img.style.filter = 'none';
+                }
+            } else {
+                imageContainer.style.opacity = '0.5';
+                imageContainer.style.filter = 'grayscale(100%)';
+                const img = imageContainer.querySelector('img');
+                if (img) {
+                    img.style.opacity = '0.5';
+                    img.style.filter = 'grayscale(100%)';
+                }
+            }
+        }
+        
+        // Обновляем сообщение о наличии
+        const stockMessage = document.getElementById(`cart-item-stock-message-${idx}`);
+        if (isItemInStock) {
+            if (stockMessage) {
+                stockMessage.remove();
+            }
+        } else {
+            if (!stockMessage) {
+                // Находим контейнер с информацией о товаре
+                const itemContainer = imageContainer?.closest('div[style*="display: flex; gap: 16px"]');
+                if (itemContainer) {
+                    const infoContainer = itemContainer.querySelector('div[style*="flex: 1"]');
+                    if (infoContainer) {
+                        const messageDiv = document.createElement('div');
+                        messageDiv.id = `cart-item-stock-message-${idx}`;
+                        messageDiv.style.cssText = 'margin-top: 8px; padding: 8px 12px; background: #fff3f3; border-radius: 8px; font-size: 13px; color: #f44336; font-weight: 600; border: 1px solid #ffcdd2;';
+                        messageDiv.textContent = 'На данной точке этого товара нет';
+                        infoContainer.appendChild(messageDiv);
+                    }
+                }
+            }
+        }
+    });
 }
 
 // Обновление итоговой суммы корзины без полной перерисовки
