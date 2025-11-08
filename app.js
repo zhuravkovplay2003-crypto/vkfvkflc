@@ -2910,9 +2910,31 @@ function selectFlavor(flavor, index) {
     }
     
     if (container && currentPage === 'product') {
-        // Убеждаемся что мы на странице товара, не переходим никуда
-        // Обновляем изображение товара
+        // ВАЖНО: При клике на недоступный вкус всегда перерисовываем всю карточку,
+        // чтобы гарантировать что вся информация о товаре отображается
+        // Проверяем наличие выбранного вкуса
+        const isProductInStock = deliveryType === 'selfPickup' && selectedPickupLocation
+            ? (flavor ? isFlavorInStockAtLocation(product, flavor, selectedPickupLocation) : isProductInStockAtLocation(product, selectedPickupLocation))
+            : (product.inStock !== false && (product.quantity === undefined || product.quantity > 0));
+        
+        // Если вкус недоступен, перерисовываем всю карточку для гарантии отображения всей информации
+        if (!isProductInStock) {
+            renderProductContent(container, viewingProduct, null, null);
+            return;
+        }
+        
+        // Если вкус доступен, обновляем только отдельные элементы для производительности
         const imageContainer = document.getElementById('product-image-container');
+        const productNameDiv = document.getElementById('product-name-display');
+        const buttonContainer = document.querySelector('button[onclick*="addToCart"]')?.parentElement || 
+                               document.querySelector('button[disabled][style*="Нет в наличии"]')?.parentElement;
+        
+        // Если основные элементы не найдены, перерисовываем всю карточку
+        if (!imageContainer || !productNameDiv || !buttonContainer) {
+            renderProductContent(container, viewingProduct, null, null);
+            return;
+        }
+        
         if (imageContainer && product) {
             let productImageUrl = product.imageUrl;
             if (flavor && product.flavorImages && product.flavorImages[flavor]) {
@@ -2957,7 +2979,6 @@ function selectFlavor(flavor, index) {
         }
         
         // Обновляем название товара с выбранным вкусом
-        const productNameDiv = document.getElementById('product-name-display');
         if (productNameDiv && product) {
             const displayName = flavor ? `${product.name}, ${flavor}` : product.name;
             productNameDiv.textContent = displayName;
@@ -2966,7 +2987,7 @@ function selectFlavor(flavor, index) {
         // Обновляем кнопку "В корзину" и информацию о наличии товара
         const addToCartButton = document.querySelector('button[onclick*="addToCart"]');
         const disabledButton = document.querySelector('button[disabled][style*="Нет в наличии"]');
-        const buttonContainer = (addToCartButton || disabledButton)?.parentElement;
+        // buttonContainer уже объявлен выше
         
         if (buttonContainer) {
             const isProductInStock = deliveryType === 'selfPickup' && selectedPickupLocation
