@@ -682,7 +682,10 @@ function init() {
     
     if (tg) {
         tg.expand();
-        tg.enableClosingConfirmation();
+        // Отключаем модальное окно подтверждения при закрытии - просто закрываем приложение
+        if (tg.disableClosingConfirmation) {
+            tg.disableClosingConfirmation();
+        }
         
         // Отключаем вертикальные свайпы для закрытия приложения
         if (tg.disableVerticalSwipes) {
@@ -1334,13 +1337,20 @@ function showPage(page, skipHistory = false, resetCatalog = false) {
     }
     
     // Сохраняем состояние просмотра товара, если мы на странице товара и переходим на другую вкладку
-    if (currentPage === 'product' && viewingProduct && page !== 'product' && page !== 'catalog') {
+    // НЕ сохраняем при переходе в корзину, чтобы не восстанавливать товар после корзины
+    if (currentPage === 'product' && viewingProduct && page !== 'product' && page !== 'catalog' && page !== 'cart') {
         // Сохраняем товар в localStorage для восстановления при возврате
         localStorage.setItem('lastViewedProduct', JSON.stringify({
             id: viewingProduct.id,
             selectedFlavor: viewingProduct.selectedFlavor,
-            selectedStrength: viewingProduct.selectedStrength
+            selectedStrength: viewingProduct.selectedStrength,
+            selectedFlavorIndex: viewingProduct.selectedFlavorIndex
         }));
+    }
+    
+    // Очищаем сохраненный товар при переходе в корзину
+    if (page === 'cart' && currentPage === 'product') {
+        localStorage.removeItem('lastViewedProduct');
     }
     
     // Добавляем текущую страницу в историю (если не пропущено)
@@ -1365,6 +1375,7 @@ function showPage(page, skipHistory = false, resetCatalog = false) {
                     viewingProduct = product;
                     if (productData.selectedFlavor) viewingProduct.selectedFlavor = productData.selectedFlavor;
                     if (productData.selectedStrength) viewingProduct.selectedStrength = productData.selectedStrength;
+                    if (productData.selectedFlavorIndex !== undefined) viewingProduct.selectedFlavorIndex = productData.selectedFlavorIndex;
                     // Показываем товар
                     showProduct(productData.id, productData.selectedFlavor || null, productData.selectedStrength || null);
                     localStorage.removeItem('lastViewedProduct'); // Очищаем после восстановления
@@ -1518,11 +1529,12 @@ function showPage(page, skipHistory = false, resetCatalog = false) {
                 navRightContent.onclick = () => selectPickupLocation();
             }
         } else {
-            // Для других страниц показываем vapeshop с фиксированным размером
-            navRightContent.innerHTML = '<span style="font-weight: 700; letter-spacing: 2px; font-size: 16px; text-transform: uppercase;">VAPESHOP</span>';
+            // Для других страниц показываем vapeshop с улучшенным стилем
+            navRightContent.innerHTML = '<span style="font-weight: 800; letter-spacing: 3px; font-size: 18px; text-transform: uppercase; background: linear-gradient(135deg, #ffffff 0%, #f0f0f0 100%); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; text-shadow: 0 2px 4px rgba(0,0,0,0.1);">VAPESHOP</span>';
             navRightContent.style.cursor = 'default';
-            navRightContent.style.minWidth = '140px';
-            navRightContent.style.maxWidth = '140px';
+            navRightContent.style.minWidth = '160px';
+            navRightContent.style.maxWidth = '180px';
+            navRightContent.style.padding = '8px 16px';
             navRightContent.style.width = '140px';
             navRightContent.style.flex = '0 0 140px';
             navRightContent.onclick = null;
@@ -2829,10 +2841,11 @@ function showFlavorModal() {
     let originalBackButtonHandler = null;
     if (tg && tg.BackButton) {
         originalBackButtonHandler = tg.BackButton.onClick;
-        tg.BackButton.hide();
+        // Показываем кнопку "Назад" вместо скрытия
+        tg.BackButton.show();
         tg.BackButton.onClick(function() {
-            // Блокируем кнопку "Назад" - закрываем модальное окно
-            closeBtn.click();
+            // Закрываем модальное окно и возвращаемся в ассортимент
+            closeModal();
         });
     }
     
@@ -2840,7 +2853,7 @@ function showFlavorModal() {
         // Восстанавливаем кнопку "Назад"
         if (tg && tg.BackButton && originalBackButtonHandler) {
             tg.BackButton.onClick(originalBackButtonHandler);
-            // Если мы на странице товара, показываем кнопку "Назад" (не "Закрыть")
+            // Если мы на странице товара, показываем кнопку "Назад"
             if (currentPage === 'product') {
                 tg.BackButton.show();
             } else {
@@ -5585,20 +5598,20 @@ function showCart() {
             }
             
             return `
-            <div style="background: #ffffff; padding: 20px; border-radius: 16px; margin-bottom: 16px; 
-                border: 2px solid #e5e5e5; box-shadow: 0 4px 12px rgba(0,0,0,0.08);">
+            <div style="background: ${!isItemInStock ? '#f5f5f5' : '#ffffff'}; padding: 20px; border-radius: 16px; margin-bottom: 16px; 
+                border: 2px solid ${!isItemInStock ? '#d0d0d0' : '#e5e5e5'}; box-shadow: 0 4px 12px rgba(0,0,0,0.08); ${!isItemInStock ? 'opacity: 0.8;' : ''}">
                 <div style="display: flex; gap: 16px; position: relative; margin-bottom: 16px; align-items: flex-start;">
                     <div id="cart-item-image-${idx}" style="width: 100px; height: 100px; background: linear-gradient(135deg, #f8f8f8 0%, #f0f0f0 100%); 
                         border-radius: 12px; display: flex; align-items: center; justify-content: center; 
                         flex-shrink: 0; border: 3px solid #f0f0f0; box-shadow: 0 4px 12px rgba(0,0,0,0.1); overflow: hidden; position: relative; ${!isItemInStock ? 'opacity: 0.5; filter: grayscale(100%);' : ''}">
                         ${item.imageUrl ? `<img src="${item.imageUrl}" alt="${item.name}" style="width: 100%; height: 100%; object-fit: cover; position: absolute; top: 0; left: 0; border-radius: 12px; display: block; margin: 0; padding: 0; ${!isItemInStock ? 'opacity: 0.5; filter: grayscale(100%);' : ''}" onerror="this.style.display='none'; this.parentElement.innerHTML='${getPackageIcon('#999999')}'">` : `<div style="width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; position: absolute; top: 0; left: 0;">${item.image || getPackageIcon('#999999')}</div>`}
                     </div>
-                    <div style="flex: 1; min-width: 0; word-wrap: break-word; overflow-wrap: break-word;">
-                        <div style="font-weight: 700; font-size: 18px; margin-bottom: 8px; color: #000; 
+                    <div style="flex: 1; min-width: 0; word-wrap: break-word; overflow-wrap: break-word; ${!isItemInStock ? 'pointer-events: none;' : ''}">
+                        <div style="font-weight: 700; font-size: 18px; margin-bottom: 8px; color: ${!isItemInStock ? '#999' : '#000'}; 
                             line-height: 1.3; word-wrap: break-word; overflow-wrap: break-word;">${item.name}</div>
                         ${item.flavor ? `
                             <div style="background: linear-gradient(135deg, #fff5f5 0%, #ffe5e5 100%); padding: 6px 12px; border-radius: 8px; 
-                                display: inline-flex; align-items: center; gap: 4px; margin-bottom: 8px; font-size: 13px; color: #d32f2f; font-weight: 600; border: 1px solid #ffcdd2;">
+                                display: inline-flex; align-items: center; gap: 4px; margin-bottom: 8px; font-size: 13px; color: #d32f2f; font-weight: 600; border: 1px solid #ffcdd2; ${!isItemInStock ? 'opacity: 0.6;' : ''}">
                                 <span style="width: 14px; height: 14px; display: flex; align-items: center; justify-content: center;">${getCandyIcon('#d32f2f')}</span>
                                 <span>${item.flavor}</span>
                             </div>
@@ -5606,29 +5619,29 @@ function showCart() {
                         ${item.strength ? `
                             <div style="background: linear-gradient(135deg, #e3f2fd 0%, #bbdefb 100%); padding: 6px 12px; border-radius: 8px; 
                                 display: inline-flex; align-items: center; gap: 4px; margin-left: ${item.flavor ? '8px' : '0'}; 
-                                margin-bottom: 8px; font-size: 13px; color: #1976d2; font-weight: 600; border: 1px solid #90caf9;">
+                                margin-bottom: 8px; font-size: 13px; color: #1976d2; font-weight: 600; border: 1px solid #90caf9; ${!isItemInStock ? 'opacity: 0.6;' : ''}">
                                 <span style="width: 14px; height: 14px; display: flex; align-items: center; justify-content: center;">${getLightningIcon('#1976d2')}</span>
                                 <span>${item.strength}</span>
                             </div>
                         ` : ''}
                         ${!isItemInStock ? `
-                            <div id="cart-item-stock-message-${idx}" style="margin-top: 8px; padding: 8px 12px; background: #fff3f3; border-radius: 8px; 
-                                font-size: 13px; color: #f44336; font-weight: 600; border: 1px solid #ffcdd2;">
-                                На данной точке этого товара нет
+                            <div id="cart-item-stock-message-${idx}" style="margin-top: 8px; padding: 10px 14px; background: #fff3f3; border-radius: 8px; 
+                                font-size: 14px; color: #f44336; font-weight: 700; border: 2px solid #ffcdd2; text-align: center;">
+                                На данном адресе этого товара нет в наличии
                             </div>
                         ` : ''}
                     </div>
-                    <button onclick="removeFromCart(${idx})" style="width: 40px; height: 40px; 
-                        border: none; background: #f8f8f8; cursor: pointer; font-size: 20px; color: #999; 
-                        border-radius: 10px; display: flex; align-items: center; justify-content: center;
-                        transition: all 0.2s; flex-shrink: 0; position: absolute; top: 0; right: 0;" 
-                        onmouseover="this.style.background='#ff4444'; this.style.color='white'; this.style.transform='scale(1.1)'"
-                        onmouseout="this.style.background='#f8f8f8'; this.style.color='#999'; this.style.transform='scale(1)'">
+                    <button onclick="removeFromCart(${idx})" style="width: 36px; height: 36px; 
+                        border: none; background: transparent; cursor: pointer; font-size: 24px; color: #999; 
+                        border-radius: 50%; display: flex; align-items: center; justify-content: center;
+                        transition: all 0.2s; flex-shrink: 0; position: absolute; top: -8px; right: -8px; z-index: 10;" 
+                        onmouseover="this.style.color='#ff4444'; this.style.transform='scale(1.15)'"
+                        onmouseout="this.style.color='#999'; this.style.transform='scale(1)'">
                         &times;
                     </button>
                 </div>
                 
-                <div style="background: #f8f9fa; padding: 16px; border-radius: 12px; margin-bottom: 16px;">
+                <div style="background: ${!isItemInStock ? '#e8e8e8' : '#f8f9fa'}; padding: 16px; border-radius: 12px; margin-bottom: 16px; ${!isItemInStock ? 'pointer-events: none; opacity: 0.6;' : ''}">
                     <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
                         <div style="font-weight: 600; color: #666; font-size: 14px;">Количество</div>
                         <div style="display: flex; align-items: center; gap: 12px; background: #ffffff; 
