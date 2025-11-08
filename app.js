@@ -1442,9 +1442,9 @@ function showPage(page, skipHistory = false, resetCatalog = false) {
                     }
                     
                     // Показываем товар с восстановленными параметрами
-                    // Передаем явно null чтобы показать все варианты вкусов, а не только один
+                    // Передаем сохраненные flavor и strength для правильного восстановления состояния
                     setTimeout(() => {
-                        showProduct(productData.id, null, null);
+                        showProduct(productData.id, productData.selectedFlavor || null, productData.selectedStrength || null);
                     }, 50);
                     localStorage.removeItem('lastViewedProduct'); // Очищаем после восстановления
                     // Подсвечиваем кнопку "Ассортимент" при восстановлении товара
@@ -1808,16 +1808,23 @@ function goBack() {
     
     // Сбрасываем счетчик при успешной навигации
     if (viewingProduct) {
-        // Если открыт товар, возвращаемся на предыдущую страницу из истории вкладки
-        if (!tabHistory[currentTab]) {
-            tabHistory[currentTab] = [];
-        }
-        
+        // Если открыт товар, возвращаемся на предыдущую страницу из истории
+        // Используем pageHistory для определения, откуда был открыт товар
         let previousPage = 'catalog';
-        if (tabHistory[currentTab].length > 0) {
-            previousPage = tabHistory[currentTab].pop();
-        } else if (currentTab === 'catalog') {
-            previousPage = 'catalog';
+        if (pageHistory.length > 0) {
+            // Берем последнюю страницу из истории (откуда открыли товар)
+            previousPage = pageHistory[pageHistory.length - 1];
+            pageHistory.pop(); // Удаляем из истории
+        } else {
+            // Если истории нет, проверяем tabHistory
+            if (!tabHistory[currentTab]) {
+                tabHistory[currentTab] = [];
+            }
+            if (tabHistory[currentTab].length > 0) {
+                previousPage = tabHistory[currentTab].pop();
+            } else if (currentTab === 'catalog') {
+                previousPage = 'catalog';
+            }
         }
         
         viewingProduct = null;
@@ -2129,13 +2136,24 @@ function showProduct(productId, favoriteFlavor = null, favoriteStrength = null) 
     // Вызываем showPage ДО установки содержимого, чтобы не перезаписать его
     showPage('product', true);
     
-    // Убеждаемся, что кнопка "Ассортимент" подсвечена при просмотре товара
+    // Определяем, откуда открыт товар - из избранного или из каталога
+    const isFromFavorites = currentPage === 'favorites' || (favoriteFlavor !== null && favoriteFlavor !== undefined) || (favoriteStrength !== null && favoriteStrength !== undefined);
+    
+    // Подсвечиваем правильную кнопку в зависимости от того, откуда открыт товар
     setTimeout(() => {
         document.querySelectorAll('.nav-item').forEach(btn => {
             btn.classList.remove('active');
             const onclick = btn.getAttribute('onclick');
-            if (onclick && onclick.includes("'catalog'")) {
-                btn.classList.add('active');
+            if (isFromFavorites) {
+                // Если товар открыт из избранного, подсвечиваем кнопку "Избранное"
+                if (onclick && onclick.includes("'favorites'")) {
+                    btn.classList.add('active');
+                }
+            } else {
+                // Если товар открыт из каталога, подсвечиваем кнопку "Ассортимент"
+                if (onclick && onclick.includes("'catalog'")) {
+                    btn.classList.add('active');
+                }
             }
         });
     }, 10);
@@ -2482,10 +2500,12 @@ function renderProductContent(container, product, favoriteFlavor, favoriteStreng
                                     </div>
                                     ${isSelected ? '<div style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 24px; height: 24px; background: #007AFF; border-radius: 50%; display: flex; align-items: center; justify-content: center; z-index: 10; box-shadow: 0 2px 4px rgba(0,0,0,0.2);"><span style="color: white; font-size: 14px; font-weight: bold; line-height: 1;">✓</span></div>' : ''}
                                 </div>
-                                <div style="font-size: 12px; color: ${isSelected ? '#007AFF' : (!isFlavorInStock ? '#999' : '#000')}; font-weight: ${isSelected ? '600' : '400'}; text-align: center; width: 100%;">
-                                    ${flavor.length > 15 ? flavor.substring(0, 15) + '...' : flavor}
+                                <div style="font-size: 12px; color: ${isSelected ? '#007AFF' : (!isFlavorInStock ? '#999' : '#000')}; font-weight: ${isSelected ? '600' : '400'}; text-align: center; width: 100%; min-height: 32px; display: flex; align-items: center; justify-content: center; line-height: 1.2;">
+                                    <span>${flavor.length > 15 ? flavor.substring(0, 15) + '...' : flavor}</span>
                                 </div>
-                                ${stockMessage}
+                                <div style="min-height: 16px; display: flex; align-items: center; justify-content: center; margin-top: 2px;">
+                                    ${stockMessage}
+                                </div>
                             </div>
                         `;
                         }).join('')}
@@ -2699,6 +2719,16 @@ function selectStrength(strength) {
         event.target.style.borderColor = '#007AFF';
     }
     
+    // Сохраняем состояние товара в localStorage для восстановления при возврате из другой вкладки
+    if (currentPage === 'product' && viewingProduct) {
+        localStorage.setItem('lastViewedProduct', JSON.stringify({
+            id: viewingProduct.id,
+            selectedFlavor: viewingProduct.selectedFlavor,
+            selectedStrength: viewingProduct.selectedStrength,
+            selectedFlavorIndex: viewingProduct.selectedFlavorIndex
+        }));
+    }
+    
     // Обновляем состояние кнопки избранного в зависимости от текущего выбранного вкуса и крепости
     const product = products.find(p => p.id === viewingProduct.id);
     if (product) {
@@ -2747,37 +2777,45 @@ function selectFlavor(flavor, index) {
         viewingProduct.selectedFlavor = flavor;
     }
     
-    // Обновляем изображение товара на странице, если есть изображение для этого вкуса
-    if (product && product.flavorImages && product.flavorImages[flavor]) {
-        const imageContainer = document.getElementById('product-image-container');
-        if (imageContainer) {
-            const flavorImageUrl = product.flavorImages[flavor];
-            // Всегда создаем новый img элемент для гарантированного обновления
-            // Используем уникальный timestamp для каждого обновления
-            const timestamp = Date.now() + Math.random();
-            const newSrc = flavorImageUrl + '?t=' + timestamp;
-            
-            // Полностью очищаем контейнер
-            imageContainer.innerHTML = '';
-            
-            const newImg = document.createElement('img');
-            newImg.src = newSrc;
-            newImg.alt = product.name;
-            newImg.style.cssText = 'width: 100%; height: 100%; object-fit: cover; border-radius: 12px;';
-            newImg.onerror = function() {
-                imageContainer.innerHTML = getPackageIcon('#999999');
+    // ВАЖНО: Всегда перерисовываем всю карточку товара при выборе вкуса
+    // Это гарантирует, что фото и информация загружаются даже для недоступных вкусов
+    const container = document.getElementById('page-content');
+    if (container && currentPage === 'product') {
+        // Перерисовываем всю карточку товара с новым выбранным вкусом
+        renderProductContent(container, product, null, null);
+    } else {
+        // Если контейнер не найден, пытаемся обновить только изображение
+        if (product && product.flavorImages && product.flavorImages[flavor]) {
+            const imageContainer = document.getElementById('product-image-container');
+            if (imageContainer) {
+                const flavorImageUrl = product.flavorImages[flavor];
+                // Всегда создаем новый img элемент для гарантированного обновления
+                // Используем уникальный timestamp для каждого обновления
+                const timestamp = Date.now() + Math.random();
+                const newSrc = flavorImageUrl + '?t=' + timestamp;
+                
+                // Полностью очищаем контейнер
+                imageContainer.innerHTML = '';
+                
+                const newImg = document.createElement('img');
+                newImg.src = newSrc;
+                newImg.alt = product.name;
+                newImg.style.cssText = 'width: 100%; height: 100%; object-fit: cover; border-radius: 12px;';
+                newImg.onerror = function() {
+                    imageContainer.innerHTML = getPackageIcon('#999999');
+                    imageContainer.style.fontSize = '0';
+                    imageContainer.style.display = 'flex';
+                    imageContainer.style.alignItems = 'center';
+                    imageContainer.style.justifyContent = 'center';
+                };
+                newImg.onload = function() {
+                    // Убеждаемся, что изображение загрузилось
+                    imageContainer.style.fontSize = '0';
+                };
+                
+                imageContainer.appendChild(newImg);
                 imageContainer.style.fontSize = '0';
-                imageContainer.style.display = 'flex';
-                imageContainer.style.alignItems = 'center';
-                imageContainer.style.justifyContent = 'center';
-            };
-            newImg.onload = function() {
-                // Убеждаемся, что изображение загрузилось
-                imageContainer.style.fontSize = '0';
-            };
-            
-            imageContainer.appendChild(newImg);
-            imageContainer.style.fontSize = '0';
+            }
         }
     }
     
@@ -2804,6 +2842,16 @@ function selectFlavor(flavor, index) {
     const productNameDiv = pageContent?.querySelector('#product-name-display');
     if (productNameDiv && product) {
         productNameDiv.textContent = flavor ? `${product.name}, ${flavor}` : product.name;
+    }
+    
+    // Сохраняем состояние товара в localStorage для восстановления при возврате из другой вкладки
+    if (currentPage === 'product' && viewingProduct) {
+        localStorage.setItem('lastViewedProduct', JSON.stringify({
+            id: viewingProduct.id,
+            selectedFlavor: viewingProduct.selectedFlavor,
+            selectedStrength: viewingProduct.selectedStrength,
+            selectedFlavorIndex: viewingProduct.selectedFlavorIndex
+        }));
     }
     
     // Обновляем только визуальное состояние выбранного вкуса, не пересоздаем весь контейнер
