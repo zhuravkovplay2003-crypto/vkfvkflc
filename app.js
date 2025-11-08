@@ -2554,7 +2554,8 @@ function renderProductContent(container, product, favoriteFlavor, favoriteStreng
                                 : getPackageIcon(!isFlavorInStock ? '#999999' : '#999999');
                             
                             // Всегда вызываем selectFlavor, даже если вкус не в наличии
-                            const onClickAction = `selectFlavor('${flavor.replace(/'/g, "\\'")}', ${originalIndex})`;
+                            // ВАЖНО: Для недоступных вкусов тоже обновляем карточку, а не открываем модальное окно
+                            const onClickAction = `event.stopPropagation(); selectFlavor('${flavor.replace(/'/g, "\\'")}', ${originalIndex});`;
                             
                             // Определяем сообщение о наличии для вкуса
                             let stockMessage = '';
@@ -2568,7 +2569,7 @@ function renderProductContent(container, product, favoriteFlavor, favoriteStreng
                             
                             return `
                             <div onclick="${onClickAction}" id="flavor-${originalIndex}" 
-                                style="width: 80px; min-width: 80px; max-width: 80px; text-align: center; cursor: pointer; flex-shrink: 0; display: flex; flex-direction: column; align-items: center; outline: none; user-select: none; -webkit-user-select: none; -webkit-tap-highlight-color: transparent;">
+                                style="width: 80px; min-width: 80px; max-width: 80px; text-align: center; cursor: pointer; flex-shrink: 0; display: flex; flex-direction: column; align-items: center; outline: none; user-select: none; -webkit-user-select: none; -webkit-tap-highlight-color: transparent; pointer-events: auto;">
                                 <div style="width: 80px; height: 80px; border-radius: 50%; background: ${!isFlavorInStock ? '#e0e0e0' : '#f0f0f0'}; 
                                     display: flex; align-items: center; justify-content: center; 
                                     border: ${isSelected ? '3px solid #007AFF' : (!isFlavorInStock ? '2px solid #999' : '2px solid #e5e5e5')}; 
