@@ -1405,7 +1405,8 @@ function showPage(page, skipHistory = false, resetCatalog = false) {
     }
     
     // Если переходим на каталог с другой вкладки, проверяем сохраненный товар
-    if (page === 'catalog') {
+    // НО только если мы действительно переходим с другой вкладки, а не при первой загрузке
+    if (page === 'catalog' && currentPage && currentPage !== 'catalog' && currentPage !== '') {
         const savedProduct = localStorage.getItem('lastViewedProduct');
         if (savedProduct) {
             try {
@@ -2162,11 +2163,34 @@ function showProduct(productId, favoriteFlavor = null, favoriteStrength = null) 
             viewingProduct.selectedStrength = product.strengths[0];
         }
     } else {
-        // Если не из избранного, сбрасываем состояние и используем дефолтные значения
-        // Это важно при открытии товара из каталога - всегда начинаем с первого вкуса
+        // Если не из избранного, выбираем первый вкус который есть в наличии
+        // Это важно при открытии товара из каталога - показываем доступный вкус
         if (product.flavors && product.flavors.length > 0) {
-            viewingProduct.selectedFlavorIndex = 0;
-            viewingProduct.selectedFlavor = product.flavors[0];
+            // Находим первый вкус который есть в наличии
+            let firstAvailableFlavorIndex = -1;
+            let firstAvailableFlavor = null;
+            
+            for (let i = 0; i < product.flavors.length; i++) {
+                const flavor = product.flavors[i];
+                const isInStock = deliveryType === 'selfPickup' && selectedPickupLocation
+                    ? isFlavorInStockAtLocation(product, flavor, selectedPickupLocation)
+                    : (product.inStock !== false && (product.quantity === undefined || product.quantity > 0));
+                
+                if (isInStock) {
+                    firstAvailableFlavorIndex = i;
+                    firstAvailableFlavor = flavor;
+                    break;
+                }
+            }
+            
+            // Если нашли доступный вкус, используем его, иначе используем первый
+            if (firstAvailableFlavorIndex >= 0 && firstAvailableFlavor) {
+                viewingProduct.selectedFlavorIndex = firstAvailableFlavorIndex;
+                viewingProduct.selectedFlavor = firstAvailableFlavor;
+            } else {
+                viewingProduct.selectedFlavorIndex = 0;
+                viewingProduct.selectedFlavor = product.flavors[0];
+            }
         }
         if (product.strengths && product.strengths.length > 0) {
             viewingProduct.selectedStrength = product.strengths[0];
@@ -2345,6 +2369,7 @@ function renderProductContent(container, product, favoriteFlavor, favoriteStreng
             });
             
             // Убеждаемся что selectedFlavorIndex правильный после сортировки
+            // Если выбранный вкус не в наличии, выбираем первый доступный
             let currentSelectedIndex = viewingProduct.selectedFlavorIndex;
             if (viewingProduct.selectedFlavor) {
                 currentSelectedIndex = allFlavors.indexOf(viewingProduct.selectedFlavor);
@@ -2352,8 +2377,32 @@ function renderProductContent(container, product, favoriteFlavor, favoriteStreng
             if (currentSelectedIndex < 0 || currentSelectedIndex >= allFlavors.length) {
                 currentSelectedIndex = 0;
             }
-            viewingProduct.selectedFlavorIndex = currentSelectedIndex;
-            const currentSelectedFlavor = viewingProduct.selectedFlavor || allFlavors[currentSelectedIndex];
+            
+            // Проверяем, есть ли выбранный вкус в наличии
+            const selectedFlavor = allFlavors[currentSelectedIndex];
+            const isSelectedInStock = deliveryType === 'selfPickup' && selectedPickupLocation
+                ? isFlavorInStockAtLocation(product, selectedFlavor, selectedPickupLocation)
+                : (product.inStock !== false && (product.quantity === undefined || product.quantity > 0));
+            
+            // Если выбранный вкус не в наличии, выбираем первый доступный
+            if (!isSelectedInStock) {
+                for (let i = 0; i < allFlavors.length; i++) {
+                    const flavor = allFlavors[i];
+                    const isInStock = deliveryType === 'selfPickup' && selectedPickupLocation
+                        ? isFlavorInStockAtLocation(product, flavor, selectedPickupLocation)
+                        : (product.inStock !== false && (product.quantity === undefined || product.quantity > 0));
+                    if (isInStock) {
+                        currentSelectedIndex = i;
+                        break;
+                    }
+                }
+            }
+            
+            // Обновляем viewingProduct с правильным индексом и вкусом
+            const finalSelectedFlavor = allFlavors[currentSelectedIndex];
+            viewingProduct.selectedFlavorIndex = product.flavors.indexOf(finalSelectedFlavor);
+            viewingProduct.selectedFlavor = finalSelectedFlavor;
+            const currentSelectedFlavor = finalSelectedFlavor;
             
             flavorOptions = `
                 <div style="margin: 20px 0;">
@@ -3177,12 +3226,15 @@ function showFlavorModal() {
         
         // Прокручиваем к выбранному вкусу после открытия модального окна
         setTimeout(() => {
-            // Находим выбранный вкус в модальном окне
+            // Используем актуальный выбранный вкус из viewingProduct
+            const currentSelectedFlavor = viewingProduct.selectedFlavor || selectedFlavor;
+            // Находим выбранный вкус в модальном окне по имени
             const selectedFlavorCard = Array.from(grid.children).find((card) => {
                 const flavorText = card.querySelector('div[style*="font-size: 13px"]');
                 if (flavorText) {
                     const flavorName = flavorText.textContent.trim();
-                    return flavorName === selectedFlavor || flavorName === viewingProduct.flavors[selectedFlavorIndex];
+                    // Проверяем по имени вкуса
+                    return flavorName === currentSelectedFlavor || flavorName === selectedFlavor;
                 }
                 return false;
             });
@@ -3195,7 +3247,7 @@ function showFlavorModal() {
                     inline: 'nearest'
                 });
             }
-        }, 200);
+        }, 300);
     });
     
     // Восстанавливаем прокрутку при закрытии
@@ -6171,10 +6223,20 @@ function updateCartItemsDisplay() {
         // Принудительно очищаем контейнер перед перерисовкой для гарантии полного обновления
         const container = document.getElementById('page-content');
         if (container) {
+            // Сохраняем позицию скролла
+            const scrollPos = container.scrollTop;
             container.innerHTML = '';
+            showCart();
+            // Восстанавливаем позицию скролла после небольшой задержки
+            setTimeout(() => {
+                if (container) {
+                    container.scrollTop = scrollPos;
+                }
+            }, 100);
+        } else {
+            showCart();
         }
-        showCart();
-    }, 50);
+    }, 100);
 }
 
 // Обновление итоговой суммы корзины без полной перерисовки
