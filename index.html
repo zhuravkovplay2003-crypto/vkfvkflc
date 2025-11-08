@@ -564,6 +564,19 @@
             font-weight: 700;
         }
         
+        /* Скрываем скроллбар для вкусов */
+        .flavors-scroll-container::-webkit-scrollbar {
+            display: none;
+            width: 0;
+            height: 0;
+            background: transparent;
+        }
+        
+        .flavors-scroll-container {
+            scrollbar-width: none;
+            -ms-overflow-style: none;
+        }
+        
         /* Нижняя навигация */
         .bottom-nav {
             position: fixed !important;
@@ -763,7 +776,7 @@
                background: linear-gradient(135deg, rgba(255,255,255,0.25) 0%, rgba(255,255,255,0.15) 100%);
                padding: 6px 12px; border-radius: 20px; border: 1px solid rgba(255,255,255,0.3);
                backdrop-filter: blur(10px); box-shadow: 0 2px 8px rgba(0,0,0,0.1); cursor: pointer;
-               max-width: 200px; min-width: 120px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1;"
+               max-width: 300px; min-width: 150px; flex: 1; display: flex; align-items: center; justify-content: center;"
                onclick="if(currentPage === 'catalog') { selectPickupLocation(); }">
                Выберите точку
            </div>
