@@ -941,8 +941,8 @@ bot.command('start', async (ctx) => {
         '• Получать эксклюзивные предложения\n\n' +
         '🚀 Нажмите кнопку ниже, чтобы открыть каталог!';
     
-    // URL мини-приложения
-    const WEB_APP_URL = process.env.WEB_APP_URL || 'https://bucolic-gingersnap-deaad3.netlify.app';
+    // URL мини-приложения (всегда используем правильный URL)
+    const WEB_APP_URL = 'https://bucolic-gingersnap-deaad3.netlify.app';
     
     // Логируем какой URL используется для отладки
     console.log('Using WEB_APP_URL:', WEB_APP_URL);
