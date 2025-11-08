@@ -1459,6 +1459,35 @@ function showPage(page, skipHistory = false, resetCatalog = false) {
                 navRightContent.style.display = 'flex';
                 navRightContent.onclick = () => selectPickupLocation();
             }
+        } else if (page === 'product') {
+            // Для страницы товара показываем адрес с SVG иконкой
+            if (selectedPickupLocation) {
+                // Форматируем адрес для лучшего отображения
+                let displayLocation = selectedPickupLocation;
+                // Если адрес слишком длинный, обрезаем но стараемся сохранить важную часть
+                if (displayLocation.length > 20) {
+                    // Пытаемся найти запятую и обрезать после неё
+                    const commaIndex = displayLocation.indexOf(',');
+                    if (commaIndex > 0 && commaIndex < 15) {
+                        displayLocation = displayLocation.substring(0, commaIndex + 1) + '...';
+                    } else {
+                        displayLocation = displayLocation.substring(0, 17) + '...';
+                    }
+                }
+                navRightContent.innerHTML = `<span style="display: inline-flex; align-items: center; gap: 6px; justify-content: center; width: 100%;"><span style="width: 16px; height: 16px; display: flex; align-items: center; justify-content: center; flex-shrink: 0;">${getLocationIcon('#ffffff').replace('width="24" height="24"', 'width="16" height="16"')}</span><span style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-align: center; flex: 1; min-width: 0;">${displayLocation}</span></span>`;
+                navRightContent.style.cursor = 'pointer';
+                navRightContent.style.textAlign = 'center';
+                navRightContent.style.justifyContent = 'center';
+                navRightContent.style.display = 'flex';
+                navRightContent.onclick = () => selectPickupLocation();
+            } else {
+                navRightContent.innerHTML = `<span style="display: inline-flex; align-items: center; gap: 6px; justify-content: center; width: 100%;"><span style="width: 16px; height: 16px; display: flex; align-items: center; justify-content: center; flex-shrink: 0;">${getLocationIcon('#ffffff').replace('width="24" height="24"', 'width="16" height="16"')}</span><span style="text-align: center;">Выберите точку</span></span>`;
+                navRightContent.style.cursor = 'pointer';
+                navRightContent.style.textAlign = 'center';
+                navRightContent.style.justifyContent = 'center';
+                navRightContent.style.display = 'flex';
+                navRightContent.onclick = () => selectPickupLocation();
+            }
         } else {
             // Для других страниц показываем vapeshop с улучшенным стилем
             navRightContent.innerHTML = '<span style="font-weight: 700; letter-spacing: 1px;">VAPESHOP</span>';
@@ -1747,27 +1776,29 @@ function displayProducts(productsToShow = null) {
     }
     
     // Фильтр по городу (если выбрана точка самовывоза)
-    if (selectedPickupLocation && deliveryType === 'selfPickup') {
-        const selectedCity = getCityFromLocation(selectedPickupLocation);
-        if (selectedCity) {
-            filtered = filtered.filter(product => {
-                // Проверяем, есть ли товар хотя бы на одной точке в выбранном городе
-                if (!product.stockByLocation || Object.keys(product.stockByLocation).length === 0) {
-                    // Если нет информации о точках, показываем товар
-                    return true;
-                }
-                // Проверяем наличие на точках в выбранном городе
-                return Object.keys(product.stockByLocation).some(location => {
-                    const locationCity = getCityFromLocation(location);
-                    if (locationCity === selectedCity) {
-                        const quantity = product.stockByLocation[location];
-                        return quantity !== undefined && quantity > 0;
-                    }
-                    return false;
-                });
-            });
-        }
-    }
+    // УБИРАЕМ фильтрацию - показываем все товары, даже если их нет в наличии
+    // Товары без наличия будут показаны серым цветом с пометкой "Нет в наличии"
+    // if (selectedPickupLocation && deliveryType === 'selfPickup') {
+    //     const selectedCity = getCityFromLocation(selectedPickupLocation);
+    //     if (selectedCity) {
+    //         filtered = filtered.filter(product => {
+    //             // Проверяем, есть ли товар хотя бы на одной точке в выбранном городе
+    //             if (!product.stockByLocation || Object.keys(product.stockByLocation).length === 0) {
+    //                 // Если нет информации о точках, показываем товар
+    //                 return true;
+    //             }
+    //             // Проверяем наличие на точках в выбранном городе
+    //             return Object.keys(product.stockByLocation).some(location => {
+    //                 const locationCity = getCityFromLocation(location);
+    //                 if (locationCity === selectedCity) {
+    //                     const quantity = product.stockByLocation[location];
+    //                     return quantity !== undefined && quantity > 0;
+    //                 }
+    //                 return false;
+    //             });
+    //         });
+    //     }
+    // }
     
     // Сортировка по наличию - сначала товары в наличии, потом не в наличии
     filtered = [...filtered].sort((a, b) => {
@@ -1816,19 +1847,29 @@ function displayProducts(productsToShow = null) {
         card.style.userSelect = 'none';
         card.style.webkitUserSelect = 'none';
         card.style.webkitTapHighlightColor = 'transparent';
+        card.style.willChange = 'transform';
+        card.style.backfaceVisibility = 'hidden';
+        card.style.webkitBackfaceVisibility = 'hidden';
+        card.style.transform = 'translateZ(0)'; // Создаем новый stacking context для предотвращения артефактов
         
         // Эффект поднятия при нажатии
         const handlePress = function(e) {
-            card.style.transform = 'translateY(-4px) scale(0.98)';
+            // Останавливаем распространение события, чтобы не влиять на другие карточки
+            e.stopPropagation();
+            card.style.transform = 'translateY(-2px) translateZ(0)';
             card.style.transition = 'transform 0.15s ease';
+            card.style.boxShadow = '0 4px 12px rgba(0,0,0,0.1)';
             if (tg && tg.HapticFeedback) {
                 tg.HapticFeedback.impactOccurred('light');
             }
         };
         
         const handleRelease = function(e) {
-            card.style.transform = 'translateY(0) scale(1)';
-            card.style.transition = 'transform 0.2s ease';
+            // Останавливаем распространение события
+            e.stopPropagation();
+            card.style.transform = 'translateY(0) translateZ(0)';
+            card.style.transition = 'transform 0.2s ease, box-shadow 0.2s ease';
+            card.style.boxShadow = '0 2px 8px rgba(0,0,0,0.05)';
         };
         
         // Обработчики для touch и mouse
@@ -2009,6 +2050,10 @@ function showProduct(productId, favoriteFlavor = null, favoriteStrength = null) 
         console.error('Container not found');
         return;
     }
+    
+    // Убеждаемся что контейнер видим и готов к отображению
+    container.style.display = 'block';
+    container.style.visibility = 'visible';
     
     // Начальное состояние для анимации
     container.style.opacity = '0';
@@ -4425,6 +4470,10 @@ function selectCityForDelivery() {
             localStorage.setItem('selectedCity', selectedCity);
             closeModal();
             showCart();
+            // Обновляем отображение товаров в корзине после смены города
+            setTimeout(() => {
+                updateCartItemsDisplay();
+            }, 100);
             
             if (tg && tg.HapticFeedback) {
                 tg.HapticFeedback.notificationOccurred('success');
@@ -4501,6 +4550,10 @@ function setDeliveryType(type) {
     // Используем requestAnimationFrame для плавной перерисовки
     requestAnimationFrame(() => {
         showCart();
+        // Обновляем отображение товаров в корзине после смены типа доставки
+        setTimeout(() => {
+            updateCartItemsDisplay();
+        }, 100);
     });
     
     if (tg && tg.HapticFeedback) {
@@ -5859,7 +5912,7 @@ function updateCartItemsDisplay() {
     
     // Обновляем каждый товар в корзине
     cart.forEach((item, idx) => {
-        const product = products.find(p => p.id === item.productId);
+        const product = products.find(p => p.id === item.productId || p.id === item.id);
         if (!product) return;
         
         // Проверяем наличие товара на выбранной точке
@@ -5870,6 +5923,9 @@ function updateCartItemsDisplay() {
             } else {
                 isItemInStock = isProductInStockAtLocation(product, selectedPickupLocation);
             }
+        } else if (deliveryType === 'delivery') {
+            // Для доставки проверяем общее наличие
+            isItemInStock = product.inStock !== false && (product.quantity === undefined || product.quantity > 0);
         } else {
             isItemInStock = product.inStock !== false && (product.quantity === undefined || product.quantity > 0);
         }
@@ -5916,6 +5972,9 @@ function updateCartItemsDisplay() {
                         infoContainer.appendChild(messageDiv);
                     }
                 }
+            } else {
+                // Обновляем существующее сообщение
+                stockMessage.textContent = 'На данной точке этого товара нет';
             }
         }
     });
@@ -6377,14 +6436,8 @@ function checkout() {
         showToast(`Заказ оформлен!\nПеремещен в раздел "Мои заказы"\nНомер: #${finalOrderId.slice(-6)}`, 'success', 4000);
         
         // Обновляем отображение корзины (покажем пустую корзину)
-        if (currentPage === 'cart') {
-            showCart();
-        }
-        
-        // Обновляем отображение заказов, если пользователь на странице заказов
-        if (currentPage === 'orders') {
-            showOrders();
-        }
+        // Всегда показываем корзину после оформления заказа, даже если пользователь был на другой странице
+        showCart();
         
         // Тактильная обратная связь
         if (tg && tg.HapticFeedback) {
