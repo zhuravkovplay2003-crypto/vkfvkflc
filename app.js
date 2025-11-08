@@ -35,6 +35,7 @@ let selectedCity = ''; // Выбранный город для доставки
 let viewedProducts = []; // Недавно просмотренные товары
 let darkMode = false; // Тема приложения (темная/светлая)
 let pageHistory = []; // История навигации по страницам
+let tabHistory = {}; // История навигации для каждой вкладки отдельно {tabName: [pages]}
 let isAddingToCart = false; // Флаг блокировки для предотвращения дублирования при быстром нажатии
 let referrals = []; // Список рефералов
 let referralsData = { total: 0, active: 0 }; // Статистика рефералов
@@ -1348,7 +1349,52 @@ function showPage(page, skipHistory = false, resetCatalog = false) {
         }));
     }
     
-    // Добавляем текущую страницу в историю (если не пропущено)
+    // Определяем текущую вкладку (основную страницу)
+    const getMainTab = (pageName) => {
+        if (pageName === 'catalog' || pageName === 'product') return 'catalog';
+        if (pageName === 'cart') return 'cart';
+        if (pageName === 'profile' || pageName === 'orders' || pageName === 'vapeCoins' || pageName === 'referrals' || pageName === 'settings' || pageName === 'help') return 'profile';
+        if (pageName === 'favorites') return 'favorites';
+        if (pageName === 'promotions') return 'promotions';
+        return pageName;
+    };
+    
+    const currentTab = getMainTab(currentPage);
+    const newTab = getMainTab(page);
+    
+    // Если переходим на другую вкладку или внутри одной вкладки, добавляем в историю вкладки
+    if (!skipHistory && currentPage && currentPage !== page && currentPage !== 'product') {
+        if (currentTab === newTab) {
+            // Если переходим внутри одной вкладки (например, из catalog в product или из profile в orders)
+            if (!tabHistory[currentTab]) {
+                tabHistory[currentTab] = [];
+            }
+            // Добавляем текущую страницу в историю вкладки (максимум 2)
+            if (tabHistory[currentTab].length === 0 || tabHistory[currentTab][tabHistory[currentTab].length - 1] !== currentPage) {
+                tabHistory[currentTab].push(currentPage);
+                // Оставляем только последние 2 страницы
+                if (tabHistory[currentTab].length > 2) {
+                    tabHistory[currentTab] = tabHistory[currentTab].slice(-2);
+                }
+            }
+        } else {
+            // Если переходим на другую вкладку, добавляем предыдущую страницу в историю новой вкладки
+            // Например, из ассортимента в корзину - в истории корзины будет ассортимент
+            if (!tabHistory[newTab]) {
+                tabHistory[newTab] = [];
+            }
+            // Добавляем текущую страницу в историю новой вкладки (максимум 2)
+            if (tabHistory[newTab].length === 0 || tabHistory[newTab][tabHistory[newTab].length - 1] !== currentPage) {
+                tabHistory[newTab].push(currentPage);
+                // Оставляем только последние 2 страницы
+                if (tabHistory[newTab].length > 2) {
+                    tabHistory[newTab] = tabHistory[newTab].slice(-2);
+                }
+            }
+        }
+    }
+    
+    // Добавляем текущую страницу в общую историю (если не пропущено)
     // Не добавляем каталог в историю при первой загрузке (когда currentPage еще не установлен или это начальная страница)
     if (!skipHistory && currentPage && currentPage !== page && currentPage !== 'product') {
         // Добавляем текущую страницу в историю только если она не последняя в истории
@@ -1395,7 +1441,10 @@ function showPage(page, skipHistory = false, resetCatalog = false) {
                     }
                     
                     // Показываем товар с восстановленными параметрами
-                    showProduct(productData.id, viewingProduct.selectedFlavor || null, viewingProduct.selectedStrength || null);
+                    // Убеждаемся что все параметры правильно установлены перед показом
+                    setTimeout(() => {
+                        showProduct(productData.id, viewingProduct.selectedFlavor || null, viewingProduct.selectedStrength || null);
+                    }, 50);
                     localStorage.removeItem('lastViewedProduct'); // Очищаем после восстановления
                     // Подсвечиваем кнопку "Ассортимент" при восстановлении товара
                     document.querySelectorAll('.nav-item').forEach(btn => {
@@ -1744,21 +1793,32 @@ function showPage(page, skipHistory = false, resetCatalog = false) {
 
 // Назад
 function goBack() {
-    // Увеличиваем счетчик нажатий
-    backButtonPressCount++;
+    // Определяем текущую вкладку
+    const getMainTab = (pageName) => {
+        if (pageName === 'catalog' || pageName === 'product') return 'catalog';
+        if (pageName === 'cart') return 'cart';
+        if (pageName === 'profile' || pageName === 'orders' || pageName === 'vapeCoins' || pageName === 'referrals' || pageName === 'settings' || pageName === 'help') return 'profile';
+        if (pageName === 'favorites') return 'favorites';
+        if (pageName === 'promotions') return 'promotions';
+        return pageName;
+    };
     
-    // Если нажали больше 3 раз, закрываем приложение
-    if (backButtonPressCount > 3) {
-        if (tg && tg.close) {
-            tg.close();
-        }
-        return;
-    }
+    const currentTab = getMainTab(currentPage);
     
     // Сбрасываем счетчик при успешной навигации
     if (viewingProduct) {
-        // Если открыт товар, возвращаемся на предыдущую страницу из истории
-        const previousPage = pageHistory.length > 0 ? pageHistory.pop() : 'catalog';
+        // Если открыт товар, возвращаемся на предыдущую страницу из истории вкладки
+        if (!tabHistory[currentTab]) {
+            tabHistory[currentTab] = [];
+        }
+        
+        let previousPage = 'catalog';
+        if (tabHistory[currentTab].length > 0) {
+            previousPage = tabHistory[currentTab].pop();
+        } else if (currentTab === 'catalog') {
+            previousPage = 'catalog';
+        }
+        
         viewingProduct = null;
         localStorage.removeItem('lastViewedProduct'); // Очищаем сохраненный товар
         
@@ -1782,15 +1842,20 @@ function goBack() {
         }
         backButtonPressCount = 0; // Сбрасываем счетчик при успешной навигации
     } else {
-        // Если есть история навигации, возвращаемся на предыдущую страницу
-        if (pageHistory.length > 0) {
-            const previousPage = pageHistory.pop();
+        // Если есть история навигации для текущей вкладки, возвращаемся на предыдущую страницу
+        if (!tabHistory[currentTab]) {
+            tabHistory[currentTab] = [];
+        }
+        
+        if (tabHistory[currentTab].length > 0) {
+            const previousPage = tabHistory[currentTab].pop();
             showPage(previousPage, true); // skipHistory = true, чтобы не добавлять в историю
             backButtonPressCount = 0; // Сбрасываем счетчик при успешной навигации
         } else {
-            // Если истории нет, возвращаемся на каталог
-            showPage('catalog', true);
-            backButtonPressCount = 0; // Сбрасываем счетчик при успешной навигации
+            // Если истории нет для текущей вкладки, закрываем приложение
+            if (tg && tg.close) {
+                tg.close();
+            }
         }
     }
 }
@@ -2157,7 +2222,10 @@ function showProduct(productId, favoriteFlavor = null, favoriteStrength = null) 
     container.style.background = '#ffffff';
     
     // Сразу устанавливаем содержимое, чтобы не было пустого экрана
-    renderProductContent(container, product, favoriteFlavor, favoriteStrength);
+    // Передаем правильные параметры - если favoriteFlavor/favoriteStrength не переданы, используем сохраненные из viewingProduct
+    const flavorToRender = favoriteFlavor || viewingProduct.selectedFlavor || null;
+    const strengthToRender = favoriteStrength || viewingProduct.selectedStrength || null;
+    renderProductContent(container, product, flavorToRender, strengthToRender);
 }
 
 // Функция для рендеринга содержимого карточки товара
