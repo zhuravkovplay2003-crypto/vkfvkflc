@@ -2207,7 +2207,7 @@ function renderProductContent(container, product, favoriteFlavor, favoriteStreng
                             Все
                         </button>
                     </div>
-                    <div style="display: flex; justify-content: flex-start; gap: 12px; overflow-x: auto; padding-bottom: 8px; -webkit-overflow-scrolling: touch; scrollbar-width: none; -ms-overflow-style: none; position: relative;">
+                    <div class="flavors-scroll-container" style="display: flex; justify-content: flex-start; gap: 12px; overflow-x: auto; padding-bottom: 8px; -webkit-overflow-scrolling: touch; scrollbar-width: none; -ms-overflow-style: none; position: relative; flex-wrap: nowrap; width: 100%;">
                         <style>
                             div[style*="overflow-x: auto"]::-webkit-scrollbar {
                                 display: none;
@@ -2257,7 +2257,7 @@ function renderProductContent(container, product, favoriteFlavor, favoriteStreng
                             
                             return `
                             <div onclick="${onClickAction}" id="flavor-${originalIndex}" 
-                                style="width: 80px; text-align: center; cursor: pointer; flex-shrink: 0; display: flex; flex-direction: column; align-items: center; outline: none; user-select: none; -webkit-user-select: none; -webkit-tap-highlight-color: transparent;">
+                                style="width: 80px; min-width: 80px; max-width: 80px; text-align: center; cursor: pointer; flex-shrink: 0; display: flex; flex-direction: column; align-items: center; outline: none; user-select: none; -webkit-user-select: none; -webkit-tap-highlight-color: transparent;">
                                 <div style="width: 80px; height: 80px; border-radius: 50%; background: ${!isFlavorInStock ? '#e0e0e0' : '#f0f0f0'}; 
                                     display: flex; align-items: center; justify-content: center; 
                                     border: ${isSelected ? '3px solid #007AFF' : (!isFlavorInStock ? '2px solid #999' : '2px solid #e5e5e5')}; 
@@ -2825,7 +2825,7 @@ function showFlavorModal() {
     modalContent.appendChild(header);
     
     const grid = document.createElement('div');
-    grid.style.cssText = 'display: flex; flex-direction: column; gap: 12px; max-height: 60vh; overflow-y: auto; scrollbar-width: none; -ms-overflow-style: none;';
+    grid.style.cssText = 'display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; max-height: 60vh; overflow-y: auto; scrollbar-width: none; -ms-overflow-style: none;';
     grid.className = 'flavors-modal-container';
     
     // Сохраняем выбранный вкус если есть
@@ -2855,10 +2855,10 @@ function showFlavorModal() {
         const flavorCard = document.createElement('div');
         const borderColor = isInitiallySelected ? '#007AFF' : (!isFlavorInStock ? '#999' : '#e5e5e5');
         const bgColor = isInitiallySelected ? '#007AFF' : (!isFlavorInStock ? '#f5f5f5' : '#ffffff');
-        flavorCard.style.cssText = 'padding: 16px; border: 2px solid ' + borderColor + '; border-radius: 12px; background: ' + bgColor + '; cursor: pointer; text-align: center; touch-action: manipulation; user-select: none; -webkit-user-select: none; position: relative; overflow: hidden; display: flex; flex-direction: column; align-items: center; ' + (!isFlavorInStock ? 'opacity: 0.7;' : '');
+        flavorCard.style.cssText = 'padding: 12px; border: 2px solid ' + borderColor + '; border-radius: 12px; background: ' + bgColor + '; cursor: pointer; text-align: center; touch-action: manipulation; user-select: none; -webkit-user-select: none; position: relative; overflow: hidden; display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 120px; ' + (!isFlavorInStock ? 'opacity: 0.7;' : '');
         
         const iconDiv = document.createElement('div');
-        iconDiv.style.cssText = 'width: 60px; height: 60px; border-radius: 50%; background: ' + (!isFlavorInStock ? '#e0e0e0' : '#f0f0f0') + '; margin: 0 auto 8px; display: flex; align-items: center; justify-content: center; position: relative; overflow: hidden;';
+        iconDiv.style.cssText = 'width: 70px; height: 70px; border-radius: 50%; background: ' + (!isFlavorInStock ? '#e0e0e0' : '#f0f0f0') + '; margin: 0 auto 8px; display: flex; align-items: center; justify-content: center; position: relative; overflow: hidden; flex-shrink: 0;';
         
         // Определяем изображение для вкуса
         const flavorImage = (viewingProduct.flavorImages && viewingProduct.flavorImages[flavor]) 
@@ -2882,7 +2882,7 @@ function showFlavorModal() {
         
         const textDiv = document.createElement('div');
         const textColor = isInitiallySelected ? '#ffffff' : (!isFlavorInStock ? '#999' : '#000');
-        textDiv.style.cssText = 'font-size: 14px; font-weight: 500; color: ' + textColor + '; min-height: 20px; display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; position: relative; z-index: 100; visibility: visible; opacity: 1; background: transparent; pointer-events: none; padding: 4px 0; max-width: 100%;';
+        textDiv.style.cssText = 'font-size: 13px; font-weight: 500; color: ' + textColor + '; min-height: 18px; display: block; white-space: normal; word-wrap: break-word; text-align: center; position: relative; z-index: 100; visibility: visible; opacity: 1; background: transparent; pointer-events: none; padding: 2px 0; width: 100%; line-height: 1.3;';
         textDiv.textContent = flavor;
         textDiv.title = flavor; // Показываем полный текст при наведении
         
