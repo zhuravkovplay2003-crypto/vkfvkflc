@@ -942,7 +942,7 @@ bot.command('start', async (ctx) => {
         '🚀 Нажмите кнопку ниже, чтобы открыть каталог!';
     
     // URL мини-приложения (всегда используем правильный URL)
-    const WEB_APP_URL = 'https://reliable-cat-1fbc91.netlify.app';
+    const WEB_APP_URL = 'https://elegant-bavarois-ef6fd1.netlify.app';
     
     // Логируем какой URL используется для отладки
     console.log('Using WEB_APP_URL:', WEB_APP_URL);
