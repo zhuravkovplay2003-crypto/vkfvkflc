@@ -444,10 +444,8 @@ function updatePickupLocationDisplay() {
         const navRightContent = document.getElementById('nav-right-content');
         if (navRightContent) {
             if (selectedPickupLocation) {
-                const shortLocation = selectedPickupLocation.length > 18 
-                    ? selectedPickupLocation.substring(0, 15) + '...' 
-                    : selectedPickupLocation;
-                navRightContent.innerHTML = `<span style="display: inline-flex; align-items: center; gap: 6px;"><span style="width: 16px; height: 16px; display: flex; align-items: center; justify-content: center; flex-shrink: 0;">${getLocationIcon('#ffffff').replace('width="24" height="24"', 'width="16" height="16"')}</span><span style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${shortLocation}</span></span>`;
+                // Не обрезаем адрес, показываем полностью с переносом если нужно
+                navRightContent.innerHTML = `<span style="display: inline-flex; align-items: center; gap: 6px; width: 100%; justify-content: center;"><span style="width: 16px; height: 16px; display: flex; align-items: center; justify-content: center; flex-shrink: 0;">${getLocationIcon('#ffffff').replace('width="24" height="24"', 'width="16" height="16"')}</span><span style="white-space: nowrap; overflow: visible; text-align: center; flex: 1; min-width: 0;">${selectedPickupLocation}</span></span>`;
                 navRightContent.style.cursor = 'pointer';
                 navRightContent.onclick = () => selectPickupLocation();
             } else {
@@ -1462,19 +1460,8 @@ function showPage(page, skipHistory = false, resetCatalog = false) {
         } else if (page === 'product') {
             // Для страницы товара показываем адрес с SVG иконкой
             if (selectedPickupLocation) {
-                // Форматируем адрес для лучшего отображения
-                let displayLocation = selectedPickupLocation;
-                // Если адрес слишком длинный, обрезаем но стараемся сохранить важную часть
-                if (displayLocation.length > 20) {
-                    // Пытаемся найти запятую и обрезать после неё
-                    const commaIndex = displayLocation.indexOf(',');
-                    if (commaIndex > 0 && commaIndex < 15) {
-                        displayLocation = displayLocation.substring(0, commaIndex + 1) + '...';
-                    } else {
-                        displayLocation = displayLocation.substring(0, 17) + '...';
-                    }
-                }
-                navRightContent.innerHTML = `<span style="display: inline-flex; align-items: center; gap: 6px; justify-content: center; width: 100%;"><span style="width: 16px; height: 16px; display: flex; align-items: center; justify-content: center; flex-shrink: 0;">${getLocationIcon('#ffffff').replace('width="24" height="24"', 'width="16" height="16"')}</span><span style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-align: center; flex: 1; min-width: 0;">${displayLocation}</span></span>`;
+                // Показываем адрес полностью без обрезки
+                navRightContent.innerHTML = `<span style="display: inline-flex; align-items: center; gap: 6px; justify-content: center; width: 100%;"><span style="width: 16px; height: 16px; display: flex; align-items: center; justify-content: center; flex-shrink: 0;">${getLocationIcon('#ffffff').replace('width="24" height="24"', 'width="16" height="16"')}</span><span style="text-align: center; flex: 1; min-width: 0; white-space: nowrap; overflow: visible;">${selectedPickupLocation}</span></span>`;
                 navRightContent.style.cursor = 'pointer';
                 navRightContent.style.textAlign = 'center';
                 navRightContent.style.justifyContent = 'center';
@@ -2216,7 +2203,15 @@ function renderProductContent(container, product, favoriteFlavor, favoriteStreng
                             Все
                         </button>
                     </div>
-                    <div style="display: flex; justify-content: flex-start; gap: 12px; overflow-x: auto; padding-bottom: 8px; -webkit-overflow-scrolling: touch;">
+                    <div style="display: flex; justify-content: flex-start; gap: 12px; overflow-x: auto; padding-bottom: 8px; -webkit-overflow-scrolling: touch; scrollbar-width: none; -ms-overflow-style: none; position: relative;">
+                        <style>
+                            div[style*="overflow-x: auto"]::-webkit-scrollbar {
+                                display: none;
+                                width: 0;
+                                height: 0;
+                                background: transparent;
+                            }
+                        </style>
                         ${allFlavors.map((flavor, idx) => {
                             // Используем оригинальный индекс из product.flavors для правильной работы
                             const originalIndex = product.flavors.indexOf(flavor);
@@ -3707,7 +3702,24 @@ function selectPickupLocation() {
                 // Если точка изменилась, сбрасываем время
                 if (previousLocation !== selectedPickupLocation) {
                     deliveryTime = null;
+                    deliveryExactTime = null;
+                    selectedDeliveryDay = null;
                     localStorage.removeItem('deliveryTime');
+                    localStorage.removeItem('deliveryExactTime');
+                    localStorage.removeItem('selectedDeliveryDay');
+                    
+                    // Обновляем отображение времени в корзине если мы на странице корзины
+                    if (currentPage === 'cart') {
+                        const timeDisplay = document.getElementById('selected-delivery-time-display');
+                        if (timeDisplay) {
+                            timeDisplay.textContent = 'Выбрать время';
+                        }
+                    }
+                    
+                    // Если мы на странице товара, обновляем карточку товара
+                    if (currentPage === 'product' && viewingProduct) {
+                        renderProductContent(document.getElementById('page-content'), viewingProduct, null, null);
+                    }
                 }
                 
                 // Обновляем отображение точки в шапке
@@ -3755,6 +3767,14 @@ function selectPickupLocation() {
                 setTimeout(() => {
                     modal.remove();
                     document.body.style.overflow = '';
+                    
+                    // Если мы на странице товара, обновляем карточку товара после закрытия модального окна
+                    if (currentPage === 'product' && viewingProduct) {
+                        const container = document.getElementById('page-content');
+                        if (container) {
+                            renderProductContent(container, viewingProduct, null, null);
+                        }
+                    }
                 }, 300);
                 
                 if (tg && tg.HapticFeedback) {
@@ -5571,7 +5591,7 @@ function showCart() {
                                 font-size: 18px; font-weight: 700; color: #666; transition: all 0.2s;" 
                                 onmouseover="this.style.background='#e0e0e0'; this.style.transform='scale(1.1)'"
                                 onmouseout="this.style.background='#f8f8f8'; this.style.transform='scale(1)'">-</button>
-                            <span style="font-weight: 700; min-width: 40px; text-align: center; font-size: 18px; color: #000;">
+                            <span id="cart-item-quantity-${idx}" style="font-weight: 700; min-width: 40px; text-align: center; font-size: 18px; color: #000;">
                                 ${item.quantity}
                             </span>
                             <button onclick="changeQuantity(${idx}, 1)" style="width: 32px; height: 32px; 
@@ -5718,13 +5738,26 @@ function changeQuantity(index, change) {
     const container = document.getElementById('page-content');
     const scrollPosition = container ? container.scrollTop : 0;
     
-    showCart();
+    // Обновляем только количество и итоги, не перерисовывая всю корзину
+    // Это сохраняет состояние изображений (серые для отсутствующих товаров)
+    const quantityElement = document.getElementById(`cart-item-quantity-${index}`);
+    if (quantityElement) {
+        quantityElement.textContent = cart[index].quantity;
+    }
     
-    // Восстанавливаем позицию скролла после обновления
-    if (container && scrollPosition > 0) {
-        setTimeout(() => {
-            container.scrollTop = scrollPosition;
-        }, 50);
+    // Обновляем итоги
+    updateCartTotals();
+    
+    // Если товар удален, перерисовываем корзину
+    if (cart[index] === undefined) {
+        showCart();
+    } else {
+        // Восстанавливаем позицию скролла
+        if (container && scrollPosition > 0) {
+            setTimeout(() => {
+                container.scrollTop = scrollPosition;
+            }, 10);
+        }
     }
     
     if (tg && tg.HapticFeedback) {
