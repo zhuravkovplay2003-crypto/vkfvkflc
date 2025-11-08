@@ -872,6 +872,69 @@
         </div>
     </div>
 
+    <script>
+        // Проверка устройства сразу при загрузке страницы (до загрузки app.js)
+        (function() {
+            function checkDevice() {
+                // Проверяем, запущено ли в Telegram WebApp (всегда мобильное)
+                const isTelegramWebApp = typeof window.Telegram !== 'undefined' && window.Telegram.WebApp;
+                
+                if (isTelegramWebApp) {
+                    return true; // Мобильное
+                }
+                
+                // Проверяем через user agent
+                const userAgent = navigator.userAgent || navigator.vendor || window.opera;
+                
+                // Проверяем user agent на мобильные устройства
+                const mobileRegex = /android|webos|iphone|ipad|ipod|blackberry|iemobile|opera mini|mobile/i;
+                const isMobileUA = mobileRegex.test(userAgent);
+                
+                // Проверяем на десктопные платформы (Windows, Mac, Linux)
+                const desktopRegex = /windows|win32|win64|macintosh|mac os x|linux/i;
+                const isDesktopUA = desktopRegex.test(userAgent);
+                
+                // Если это явно десктопный user agent И не мобильный - это десктоп
+                if (isDesktopUA && !isMobileUA) {
+                    return false; // Десктоп
+                }
+                
+                // Если это мобильный user agent - мобильное
+                if (isMobileUA) {
+                    return true;
+                }
+                
+                // Если большой экран (> 1024px) - вероятно десктоп
+                if (window.innerWidth > 1024) {
+                    return false;
+                }
+                
+                // Иначе считаем мобильным только если маленький экран И есть touch
+                const isSmallScreen = window.innerWidth <= 768;
+                const hasTouch = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
+                return isSmallScreen && hasTouch;
+            }
+            
+            // Проверяем устройство сразу
+            if (!checkDevice()) {
+                // Показываем окно сразу, не дожидаясь загрузки app.js
+                document.addEventListener('DOMContentLoaded', function() {
+                    const overlay = document.getElementById('mobile-only-overlay');
+                    if (overlay) {
+                        overlay.classList.add('show');
+                    }
+                });
+                
+                // Также проверяем после небольшой задержки на случай, если DOM еще не готов
+                setTimeout(function() {
+                    const overlay = document.getElementById('mobile-only-overlay');
+                    if (overlay) {
+                        overlay.classList.add('show');
+                    }
+                }, 100);
+            }
+        })();
+    </script>
     <script src="app.js"></script>
 </body>
 </html>
