@@ -1286,23 +1286,32 @@ function showPage(page, skipHistory = false, resetCatalog = false) {
     // Сбрасываем стили контейнера страницы и отменяем все анимации
     const pageContent = document.getElementById('page-content');
     if (pageContent) {
-        // Отменяем все анимации и переходы немедленно
-        pageContent.style.transition = 'none';
-        pageContent.style.opacity = '1';
-        pageContent.style.transform = '';
-        pageContent.style.scale = '';
-        pageContent.style.width = '';
-        pageContent.style.height = '';
-        pageContent.style.left = '';
-        pageContent.style.top = '';
-        pageContent.style.right = '';
-        pageContent.style.bottom = '';
-        pageContent.style.display = '';
-        pageContent.style.gridTemplateColumns = '';
-        pageContent.style.gap = '';
-        
-        // Принудительно перерисовываем, чтобы применить изменения
-        void pageContent.offsetHeight;
+        // Для страницы товара не очищаем содержимое - оно будет установлено в showProduct
+        if (page !== 'product') {
+            // Отменяем все анимации и переходы немедленно
+            pageContent.style.transition = 'none';
+            pageContent.style.opacity = '1';
+            pageContent.style.transform = '';
+            pageContent.style.scale = '';
+            pageContent.style.width = '';
+            pageContent.style.height = '';
+            pageContent.style.left = '';
+            pageContent.style.top = '';
+            pageContent.style.right = '';
+            pageContent.style.bottom = '';
+            pageContent.style.display = '';
+            pageContent.style.gridTemplateColumns = '';
+            pageContent.style.gap = '';
+            
+            // Принудительно перерисовываем, чтобы применить изменения
+            void pageContent.offsetHeight;
+        } else {
+            // Для страницы товара только сбрасываем некоторые стили, но не очищаем содержимое
+            pageContent.style.transition = 'none';
+            pageContent.style.display = '';
+            pageContent.style.gridTemplateColumns = '';
+            pageContent.style.gap = '';
+        }
     }
     
     // Обработка двойного клика на вкладку "Ассортимент"
@@ -1993,8 +2002,13 @@ function showProduct(productId, favoriteFlavor = null, favoriteStrength = null) 
         }
         localStorage.setItem('viewedProducts', JSON.stringify(viewedProducts));
     }
+    
+    // Получаем контейнер после showPage
     const container = document.getElementById('page-content');
-    if (!container) return;
+    if (!container) {
+        console.error('Container not found');
+        return;
+    }
     
     // Начальное состояние для анимации
     container.style.opacity = '0';
@@ -2285,6 +2299,9 @@ function showProduct(productId, favoriteFlavor = null, favoriteStrength = null) 
                 }
                 
                 if (!isInStock) {
+                    // Если товар открыт из избранного с конкретным вкусом и информация о наличии уже показана в flavorOptions, не дублируем
+                    const showLocationInfo = !isFromFavorites || !favoriteFlavor;
+                    
                     return `
                         <div style="margin-top: 20px;">
                             <button disabled style="width: 100%; padding: 16px; 
@@ -2292,12 +2309,12 @@ function showProduct(productId, favoriteFlavor = null, favoriteStrength = null) 
                                 font-size: 16px; font-weight: 600; cursor: not-allowed; opacity: 0.6;">
                                 Нет в наличии
                             </button>
-                            ${locationsWithStock.length > 0 ? `
+                            ${showLocationInfo && locationsWithStock.length > 0 ? `
                                 <div style="margin-top: 12px; padding: 12px; background: #f5f5f5; border-radius: 12px; font-size: 13px; color: #666; line-height: 1.5;">
                                     <div style="font-weight: 600; margin-bottom: 4px; color: #333;">Есть в наличии на:</div>
                                     <div>${locationsWithStock.join(', ')}</div>
                                 </div>
-                            ` : '<div style="margin-top: 12px; padding: 12px; background: #fff3f3; border-radius: 12px; font-size: 13px; color: #f44336; line-height: 1.5; text-align: center; font-weight: 600;">Товара нет ни на одной точке</div>'}
+                            ` : (showLocationInfo && locationsWithStock.length === 0 ? '<div style="margin-top: 12px; padding: 12px; background: #fff3f3; border-radius: 12px; font-size: 13px; color: #f44336; line-height: 1.5; text-align: center; font-weight: 600;">Товара нет ни на одной точке</div>' : '')}
                         </div>
                         `;
                 } else {
@@ -2319,8 +2336,14 @@ function showProduct(productId, favoriteFlavor = null, favoriteStrength = null) 
                             </button>
                         `;
                     } else {
+                        // Если товар открыт из избранного и информация о наличии уже показана в flavorOptions, не дублируем
+                        const isFromFavorites = favoriteFlavor !== null || favoriteStrength !== null;
                         const selectedCity = selectedPickupLocation ? getCityFromLocation(selectedPickupLocation) : null;
                         const flavorLocations = getLocationsWithFlavorStockByCity(product, selectedFlavorForButton, selectedCity);
+                        
+                        // Показываем информацию о наличии только если она еще не была показана в flavorOptions
+                        const showLocationInfo = !isFromFavorites || !favoriteFlavor;
+                        
                         return `
                             <div style="margin-top: 20px;">
                                 <button disabled style="width: 100%; padding: 16px; 
@@ -2328,12 +2351,12 @@ function showProduct(productId, favoriteFlavor = null, favoriteStrength = null) 
                                     font-size: 16px; font-weight: 600; cursor: not-allowed; opacity: 0.6;">
                                     Нет в наличии
                                 </button>
-                                ${flavorLocations.length > 0 ? `
+                                ${showLocationInfo && flavorLocations.length > 0 ? `
                                     <div style="margin-top: 12px; padding: 12px; background: #f5f5f5; border-radius: 12px; font-size: 13px; color: #666; line-height: 1.5;">
                                         <div style="font-weight: 600; margin-bottom: 4px; color: #333;">Есть в наличии на:</div>
                                         <div>${flavorLocations.join(', ')}</div>
                                     </div>
-                                ` : '<div style="margin-top: 12px; padding: 12px; background: #fff3f3; border-radius: 12px; font-size: 13px; color: #f44336; line-height: 1.5; text-align: center; font-weight: 600;">Товара нет ни на одной точке</div>'}
+                                ` : (showLocationInfo && flavorLocations.length === 0 ? '<div style="margin-top: 12px; padding: 12px; background: #fff3f3; border-radius: 12px; font-size: 13px; color: #f44336; line-height: 1.5; text-align: center; font-weight: 600;">Товара нет ни на одной точке</div>' : '')}
                             </div>
                         `;
                     }
