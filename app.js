@@ -2162,24 +2162,14 @@ function showProduct(productId, favoriteFlavor = null, favoriteStrength = null) 
             viewingProduct.selectedStrength = product.strengths[0];
         }
     } else {
-        // Если не из избранного, используем сохраненные или дефолтные значения
+        // Если не из избранного, сбрасываем состояние и используем дефолтные значения
+        // Это важно при открытии товара из каталога - всегда начинаем с первого вкуса
         if (product.flavors && product.flavors.length > 0) {
-            // Если уже есть сохраненный вкус и индекс, используем их
-            if (viewingProduct.selectedFlavor && product.flavors.includes(viewingProduct.selectedFlavor)) {
-                viewingProduct.selectedFlavorIndex = product.flavors.indexOf(viewingProduct.selectedFlavor);
-            } else if (viewingProduct.selectedFlavorIndex !== undefined && viewingProduct.selectedFlavorIndex >= 0 && viewingProduct.selectedFlavorIndex < product.flavors.length) {
-                // Используем сохраненный индекс
-                viewingProduct.selectedFlavor = product.flavors[viewingProduct.selectedFlavorIndex];
-            } else {
-                // Используем дефолтные значения
-                viewingProduct.selectedFlavorIndex = 0;
-                viewingProduct.selectedFlavor = product.flavors[0];
-            }
+            viewingProduct.selectedFlavorIndex = 0;
+            viewingProduct.selectedFlavor = product.flavors[0];
         }
         if (product.strengths && product.strengths.length > 0) {
-            if (!viewingProduct.selectedStrength || !product.strengths.includes(viewingProduct.selectedStrength)) {
-                viewingProduct.selectedStrength = product.strengths[0];
-            }
+            viewingProduct.selectedStrength = product.strengths[0];
         }
     }
     
@@ -2203,7 +2193,10 @@ function showProduct(productId, favoriteFlavor = null, favoriteStrength = null) 
                 console.error('Container not found after timeout');
                 return;
             }
-            renderProductContent(container, product, favoriteFlavor, favoriteStrength);
+            // Передаем правильные параметры - если favoriteFlavor/favoriteStrength не переданы, используем сохраненные из viewingProduct
+            const flavorToRender = favoriteFlavor || viewingProduct.selectedFlavor || null;
+            const strengthToRender = favoriteStrength || viewingProduct.selectedStrength || null;
+            renderProductContent(container, product, flavorToRender, strengthToRender);
         }, 50);
         return;
     }
@@ -2222,9 +2215,9 @@ function showProduct(productId, favoriteFlavor = null, favoriteStrength = null) 
     container.style.background = '#ffffff';
     
     // Сразу устанавливаем содержимое, чтобы не было пустого экрана
-    // Передаем правильные параметры - если favoriteFlavor/favoriteStrength не переданы, используем сохраненные из viewingProduct
-    const flavorToRender = favoriteFlavor || viewingProduct.selectedFlavor || null;
-    const strengthToRender = favoriteStrength || viewingProduct.selectedStrength || null;
+    // Если favoriteFlavor/favoriteStrength переданы явно (не null), используем их, иначе используем установленные в viewingProduct
+    const flavorToRender = (favoriteFlavor !== null && favoriteFlavor !== undefined) ? favoriteFlavor : (viewingProduct.selectedFlavor || null);
+    const strengthToRender = (favoriteStrength !== null && favoriteStrength !== undefined) ? favoriteStrength : (viewingProduct.selectedStrength || null);
     renderProductContent(container, product, flavorToRender, strengthToRender);
 }
 
@@ -2236,7 +2229,8 @@ function renderProductContent(container, product, favoriteFlavor, favoriteStreng
     }
     
     // Проверяем, открыт ли товар из избранного (если переданы favoriteFlavor или favoriteStrength)
-    const isFromFavorites = favoriteFlavor !== null || favoriteStrength !== null;
+    // Но если favoriteFlavor/favoriteStrength переданы как null явно, это не избранное
+    const isFromFavorites = (favoriteFlavor !== null && favoriteFlavor !== undefined) || (favoriteStrength !== null && favoriteStrength !== undefined);
     
     let strengthOptions = '';
     if (product.strengths) {
@@ -3867,11 +3861,6 @@ function selectPickupLocation() {
                 selectedPickupLocation = fullLocation;
                 localStorage.setItem('selectedPickupLocation', selectedPickupLocation);
                 
-                // Обновляем корзину если мы на странице корзины
-                if (currentPage === 'cart') {
-                    updateCartItemsDisplay();
-                }
-                
                 // Если точка изменилась, сбрасываем время
                 if (previousLocation !== selectedPickupLocation) {
                     deliveryTime = null;
@@ -3905,11 +3894,11 @@ function selectPickupLocation() {
                 }
                 
                 // Если мы на странице корзины, полностью перерисовываем корзину
+                // Используем setTimeout чтобы убедиться что selectedPickupLocation обновился
                 if (currentPage === 'cart') {
-                    // Полностью перерисовываем корзину чтобы обновить все состояния
                     setTimeout(() => {
-                            showCart();
-                    }, 100);
+                        updateCartItemsDisplay();
+                    }, 50);
                 }
                 
                 // Плавно закрываем модальное окно
