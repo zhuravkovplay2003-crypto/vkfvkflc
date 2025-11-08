@@ -2790,24 +2790,47 @@ function selectFlavor(flavor, index) {
     // Это гарантирует, что фото и информация загружаются даже для недоступных вкусов
     const container = document.getElementById('page-content');
     if (container && currentPage === 'product') {
-        // Сохраняем позицию скролла перед перерисовкой для плавности
-        const scrollPosition = container.scrollTop;
+        // Сохраняем позиции скролла перед перерисовкой для плавности
+        const verticalScrollPosition = container.scrollTop;
+        
+        // Сохраняем позицию горизонтального скролла контейнера вкусов
+        const flavorSection = document.querySelector('[onclick="showFlavorModal()"]')?.closest('div[style*="margin: 20px 0"]');
+        let horizontalScrollPosition = 0;
+        if (flavorSection) {
+            const flavorsContainer = flavorSection.querySelector('.flavors-scroll-container') || 
+                                     flavorSection.querySelector('div[style*="overflow-x: auto"]');
+            if (flavorsContainer) {
+                horizontalScrollPosition = flavorsContainer.scrollLeft || 0;
+            }
+        }
         
         // Перерисовываем всю карточку товара с новым выбранным вкусом
         renderProductContent(container, product, null, null);
         
-        // Восстанавливаем позицию скролла сразу после перерисовки
+        // Восстанавливаем позиции скролла сразу после перерисовки
         requestAnimationFrame(() => {
-            container.scrollTop = scrollPosition;
+            container.scrollTop = verticalScrollPosition;
+            
+            // Восстанавливаем горизонтальный скролл контейнера вкусов
+            const newFlavorSection = document.querySelector('[onclick="showFlavorModal()"]')?.closest('div[style*="margin: 20px 0"]');
+            if (newFlavorSection) {
+                const newFlavorsContainer = newFlavorSection.querySelector('.flavors-scroll-container') || 
+                                            newFlavorSection.querySelector('div[style*="overflow-x: auto"]');
+                if (newFlavorsContainer) {
+                    newFlavorsContainer.scrollLeft = horizontalScrollPosition;
+                }
+            }
         });
         
         // Обновляем визуальное состояние выбранного вкуса после перерисовки
         setTimeout(() => {
-            const flavorSection = document.querySelector('[onclick="showFlavorModal()"]')?.closest('div[style*="margin: 20px 0"]');
-            if (flavorSection) {
-                const flavorsContainer = flavorSection.querySelector('.flavors-scroll-container') || 
-                                         flavorSection.querySelector('div[style*="overflow-x: auto"]');
+            const flavorSectionAfter = document.querySelector('[onclick="showFlavorModal()"]')?.closest('div[style*="margin: 20px 0"]');
+            if (flavorSectionAfter) {
+                const flavorsContainer = flavorSectionAfter.querySelector('.flavors-scroll-container') || 
+                                         flavorSectionAfter.querySelector('div[style*="overflow-x: auto"]');
                 if (flavorsContainer) {
+                    // Восстанавливаем горизонтальный скролл еще раз для надежности
+                    flavorsContainer.scrollLeft = horizontalScrollPosition;
                     // Плавно убираем выделение со всех
                     flavorsContainer.querySelectorAll('[id^="flavor-"]').forEach(flavorEl => {
                         const circleDiv = flavorEl.querySelector('div[style*="border-radius: 50%"]');
@@ -2868,6 +2891,11 @@ function selectFlavor(flavor, index) {
                             textDiv.style.fontWeight = '600';
                         }
                     }
+                    
+                    // Восстанавливаем горизонтальный скролл еще раз после обновления визуального состояния
+                    requestAnimationFrame(() => {
+                        flavorsContainer.scrollLeft = horizontalScrollPosition;
+                    });
                 }
             }
         }, 100);
@@ -3323,16 +3351,8 @@ function showFlavorModal() {
                 document.body.style.overflow = '';
                 modal.remove();
                 
-                // Плавно скроллим к выбранному вкусу в списке на странице товара
-                requestAnimationFrame(() => {
-                    const flavorSection = document.querySelector('[onclick="showFlavorModal()"]')?.closest('div[style*="margin: 20px 0"]');
-                    if (flavorSection) {
-                        const flavorElement = document.getElementById(`flavor-${originalIndex}`);
-                        if (flavorElement) {
-                            flavorElement.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' });
-                        }
-                    }
-                });
+                // НЕ скроллим автоматически к выбранному вкусу - это вызывает прыжки
+                // Пользователь сам может прокрутить к нужному вкусу
             }, 200);
             
             if (tg && tg.HapticFeedback) {
