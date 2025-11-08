@@ -2593,24 +2593,41 @@ function selectFlavor(flavor, index) {
                     // Убираем выделение со всех вкусов
                     flavorsContainer.querySelectorAll('[id^="flavor-"]').forEach(flavorEl => {
                         const circleDiv = flavorEl.querySelector('div[style*="border-radius: 50%"]');
-                        const checkmarkDiv = circleDiv?.querySelector('div[style*="background: #007AFF"]');
+                        // Ищем галочку разными способами
+                        const checkmarkDiv = circleDiv?.querySelector('div[style*="background: #007AFF"]') || 
+                                           circleDiv?.querySelector('div[style*="background:#007AFF"]') ||
+                                           circleDiv?.querySelector('div[style*="z-index: 10"]') ||
+                                           circleDiv?.querySelector('div:has(span)');
                         const textDiv = flavorEl.querySelector('div[style*="font-size: 12px"]');
                         
                         if (circleDiv) {
-                            // Убираем синюю рамку
-                            circleDiv.style.border = '2px solid #e5e5e5';
-                            circleDiv.style.boxShadow = '0 1px 3px rgba(0,0,0,0.1)';
-                        }
-                        
-                        // Удаляем галочку
-                        if (checkmarkDiv) {
-                            checkmarkDiv.remove();
+                            // Убираем синюю рамку - проверяем текущее состояние
+                            const currentBorder = circleDiv.style.border || window.getComputedStyle(circleDiv).border;
+                            if (currentBorder.includes('3px') || currentBorder.includes('#007AFF')) {
+                                circleDiv.style.border = '2px solid #e5e5e5';
+                                circleDiv.style.boxShadow = '0 1px 3px rgba(0,0,0,0.1)';
+                            }
+                            
+                            // Удаляем все возможные варианты галочки
+                            const allCheckmarks = circleDiv.querySelectorAll('div');
+                            allCheckmarks.forEach(div => {
+                                const divStyle = div.style.cssText || window.getComputedStyle(div).cssText;
+                                if (divStyle.includes('background: #007AFF') || 
+                                    divStyle.includes('background:#007AFF') ||
+                                    divStyle.includes('z-index: 10') ||
+                                    div.querySelector('span')?.textContent === '✓') {
+                                    div.remove();
+                                }
+                            });
                         }
                         
                         // Убираем синий цвет текста
                         if (textDiv) {
-                            textDiv.style.color = '#000';
-                            textDiv.style.fontWeight = '400';
+                            const currentColor = textDiv.style.color || window.getComputedStyle(textDiv).color;
+                            if (currentColor.includes('rgb(0, 122, 255)') || currentColor.includes('#007AFF')) {
+                                textDiv.style.color = '#000';
+                                textDiv.style.fontWeight = '400';
+                            }
                         }
                     });
                     
@@ -3625,7 +3642,7 @@ function selectPickupLocation() {
         
         const modalContent = document.createElement('div');
         modalContent.className = 'location-modal-content';
-        modalContent.style.cssText = 'background: white; padding: 24px; border-radius: 16px; max-width: 95%; width: 100%; max-width: 500px; max-height: 85vh; overflow-y: auto; position: relative; transform: scale(0.95); opacity: 0; transition: transform 0.3s ease, opacity 0.3s ease;';
+        modalContent.style.cssText = 'background: white; padding: 20px; border-radius: 14px; width: 90%; max-width: 380px; max-height: 75vh; overflow-y: auto; position: relative; transform: scale(0.95); opacity: 0; transition: transform 0.3s ease, opacity 0.3s ease;';
         
         // Заголовок с кнопкой назад
         const header = document.createElement('div');
@@ -7935,43 +7952,43 @@ function showFavorites() {
         return;
     }
     
-    // НЕ сортируем избранное - сохраняем исходный порядок чтобы карточки не менялись местами
-    // favoriteItems = favoriteItems.sort((a, b) => {
-    //     const aProductId = typeof a === 'number' || typeof a === 'string' ? a : a.productId;
-    //     const bProductId = typeof b === 'number' || typeof b === 'string' ? b : b.productId;
-    //     const aProduct = products.find(p => p.id == aProductId);
-    //     const bProduct = products.find(p => p.id == bProductId);
-    //     
-    //     if (!aProduct || !bProduct) return 0;
-    //     
-    //     const aFlavor = typeof a === 'object' ? a.flavor : null;
-    //     const bFlavor = typeof b === 'object' ? b.flavor : null;
-    //     
-    //     let aInStock = true;
-    //     let bInStock = true;
-    //     
-    //     if (deliveryType === 'selfPickup' && selectedPickupLocation) {
-    //         if (aFlavor) {
-    //             aInStock = isFlavorInStockAtLocation(aProduct, aFlavor, selectedPickupLocation);
-    //         } else {
-    //             aInStock = isProductInStockAtLocation(aProduct, selectedPickupLocation);
-    //         }
-    //         if (bFlavor) {
-    //             bInStock = isFlavorInStockAtLocation(bProduct, bFlavor, selectedPickupLocation);
-    //         } else {
-    //             bInStock = isProductInStockAtLocation(bProduct, selectedPickupLocation);
-    //         }
-    //     } else {
-    //         aInStock = aProduct.inStock !== false && (aProduct.quantity === undefined || aProduct.quantity > 0);
-    //         bInStock = bProduct.inStock !== false && (bProduct.quantity === undefined || bProduct.quantity > 0);
-    //     }
-    //     
-    //     // Сначала товары в наличии (true идет перед false)
-    //     if (aInStock !== bInStock) {
-    //         return bInStock ? 1 : -1;
-    //     }
-    //     return 0;
-    // });
+    // Сортируем избранное - сначала товары в наличии, потом не в наличии
+    favoriteItems = favoriteItems.sort((a, b) => {
+        const aProductId = typeof a === 'number' || typeof a === 'string' ? a : a.productId;
+        const bProductId = typeof b === 'number' || typeof b === 'string' ? b : b.productId;
+        const aProduct = products.find(p => p.id == aProductId);
+        const bProduct = products.find(p => p.id == bProductId);
+        
+        if (!aProduct || !bProduct) return 0;
+        
+        const aFlavor = typeof a === 'object' ? a.flavor : null;
+        const bFlavor = typeof b === 'object' ? b.flavor : null;
+        
+        let aInStock = true;
+        let bInStock = true;
+        
+        if (deliveryType === 'selfPickup' && selectedPickupLocation) {
+            if (aFlavor) {
+                aInStock = isFlavorInStockAtLocation(aProduct, aFlavor, selectedPickupLocation);
+            } else {
+                aInStock = isProductInStockAtLocation(aProduct, selectedPickupLocation);
+            }
+            if (bFlavor) {
+                bInStock = isFlavorInStockAtLocation(bProduct, bFlavor, selectedPickupLocation);
+            } else {
+                bInStock = isProductInStockAtLocation(bProduct, selectedPickupLocation);
+            }
+        } else {
+            aInStock = aProduct.inStock !== false && (aProduct.quantity === undefined || aProduct.quantity > 0);
+            bInStock = bProduct.inStock !== false && (bProduct.quantity === undefined || bProduct.quantity > 0);
+        }
+        
+        // Сначала товары в наличии (true идет перед false)
+        if (aInStock !== bInStock) {
+            return bInStock ? 1 : -1;
+        }
+        return 0;
+    });
     
     // Создаем контейнер с сеткой 2 колонки
     container.innerHTML = `
