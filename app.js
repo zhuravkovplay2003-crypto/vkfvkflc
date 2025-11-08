@@ -2513,10 +2513,22 @@ function renderProductContent(container, product, favoriteFlavor, favoriteStreng
     container.style.display = 'block';
     container.style.visibility = 'visible';
     
+    // Проверяем наличие товара для определения стилей
+    let isProductInStock = false;
+    if (selectedFlavor) {
+        isProductInStock = deliveryType === 'selfPickup' && selectedPickupLocation
+            ? isFlavorInStockAtLocation(product, selectedFlavor, selectedPickupLocation)
+            : (product.inStock !== false && (product.quantity === undefined || product.quantity > 0));
+    } else {
+        isProductInStock = deliveryType === 'selfPickup' && selectedPickupLocation
+            ? isProductInStockAtLocation(product, selectedPickupLocation)
+            : (product.inStock !== false && (product.quantity === undefined || product.quantity > 0));
+    }
+    
     container.innerHTML = `
         <div style="margin-bottom: 20px;">
             <div id="product-image-container" style="width: 100%; height: 350px; background: #ffffff; border-radius: 12px; 
-                display: flex; align-items: center; justify-content: center; font-size: ${productImageUrl ? '0' : '100px'}; margin-bottom: 20px; overflow: hidden; padding: 20px; border: 1px solid #e5e5e5;">
+                display: flex; align-items: center; justify-content: center; font-size: ${productImageUrl ? '0' : '100px'}; margin-bottom: 20px; overflow: hidden; padding: 20px; border: 1px solid #e5e5e5; ${!isProductInStock ? 'opacity: 0.5; filter: grayscale(100%);' : ''}">
                 ${productImageContent}
             </div>
             <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px;">
@@ -3967,6 +3979,11 @@ function selectPickupLocation() {
                     // Если мы на странице товара, обновляем карточку товара
                     if (currentPage === 'product' && viewingProduct) {
                         renderProductContent(document.getElementById('page-content'), viewingProduct, null, null);
+                    }
+                    
+                    // Если мы на странице корзины, обновляем корзину
+                    if (currentPage === 'cart') {
+                        updateCartItemsDisplay();
                     }
                 }
                 
