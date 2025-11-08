@@ -2800,9 +2800,11 @@ function selectFlavor(flavor, index) {
         viewingProduct.selectedFlavor = flavor;
     }
     
-    // Обновляем только изображение и визуальное состояние БЕЗ полной перерисовки
+    // ВАЖНО: Убеждаемся что мы остаемся на странице товара
+    // НЕ вызываем showPage или другие функции которые могут перенаправить
     const container = document.getElementById('page-content');
     if (container && currentPage === 'product') {
+        // Убеждаемся что мы на странице товара, не переходим никуда
         // Обновляем изображение товара
         const imageContainer = document.getElementById('product-image-container');
         if (imageContainer && product) {
@@ -2855,28 +2857,70 @@ function selectFlavor(flavor, index) {
             productNameDiv.textContent = displayName;
         }
         
-        // Обновляем информацию о наличии товара
-        const stockMessageDiv = document.querySelector('[id*="stock-message"]') || 
-                                 document.querySelector('div[style*="Нет в наличии"]')?.parentElement;
-        if (!stockMessageDiv) {
-            // Ищем контейнер где должна быть информация о наличии
-            const buttonContainer = document.querySelector('[onclick*="addToCart"]')?.parentElement;
-            if (buttonContainer) {
-                const isProductInStock = deliveryType === 'selfPickup' && selectedPickupLocation
-                    ? (flavor ? isFlavorInStockAtLocation(product, flavor, selectedPickupLocation) : isProductInStockAtLocation(product, selectedPickupLocation))
-                    : (product.inStock !== false && (product.quantity === undefined || product.quantity > 0));
-                
-                // Удаляем старое сообщение о наличии если есть
-                const oldMessage = buttonContainer.querySelector('[style*="Нет в наличии"]');
-                if (oldMessage) oldMessage.remove();
-                
-                // Добавляем новое сообщение если товар не в наличии
-                if (!isProductInStock) {
-                    const stockMessage = document.createElement('div');
-                    stockMessage.style.cssText = 'margin-top: 12px; padding: 12px; background: #fff3f3; border-radius: 8px; font-size: 14px; color: #f44336; font-weight: 600; text-align: center; border: 2px solid #ffcdd2;';
-                    stockMessage.textContent = 'Нет в наличии';
-                    buttonContainer.insertBefore(stockMessage, buttonContainer.querySelector('[onclick*="addToCart"]'));
+        // Обновляем кнопку "В корзину" и информацию о наличии товара
+        const addToCartButton = document.querySelector('button[onclick*="addToCart"]');
+        const disabledButton = document.querySelector('button[disabled][style*="Нет в наличии"]');
+        const buttonContainer = (addToCartButton || disabledButton)?.parentElement;
+        
+        if (buttonContainer) {
+            const isProductInStock = deliveryType === 'selfPickup' && selectedPickupLocation
+                ? (flavor ? isFlavorInStockAtLocation(product, flavor, selectedPickupLocation) : isProductInStockAtLocation(product, selectedPickupLocation))
+                : (product.inStock !== false && (product.quantity === undefined || product.quantity > 0));
+            
+            // Получаем информацию о точках где есть товар
+            let locationsWithStock = [];
+            if (!isProductInStock && flavor) {
+                const selectedCity = selectedPickupLocation ? getCityFromLocation(selectedPickupLocation) : null;
+                locationsWithStock = getLocationsWithFlavorStockByCity(product, flavor, selectedCity);
+            } else if (!isProductInStock) {
+                locationsWithStock = getLocationsWithStock(product);
+                const selectedCity = selectedPickupLocation ? getCityFromLocation(selectedPickupLocation) : null;
+                if (selectedCity) {
+                    locationsWithStock = locationsWithStock.filter(location => {
+                        if (selectedCity === 'Минск') {
+                            return location.includes('Минск');
+                        } else if (selectedCity === 'Могилёв' || selectedCity === 'Могилев') {
+                            return location.includes('Могилёв') || location.includes('Могилев');
+                        }
+                        return true;
+                    });
                 }
+            }
+            
+            // Удаляем старую кнопку и сообщения
+            if (addToCartButton) addToCartButton.remove();
+            if (disabledButton) disabledButton.remove();
+            const oldMessage = buttonContainer.querySelector('div[style*="Нет в наличии"]');
+            if (oldMessage) oldMessage.remove();
+            const oldLocationInfo = buttonContainer.querySelector('div[style*="Есть в наличии на:"]');
+            if (oldLocationInfo) oldLocationInfo.parentElement.remove();
+            
+            // Создаем новую кнопку или сообщение
+            if (!isProductInStock) {
+                const disabledBtn = document.createElement('button');
+                disabledBtn.disabled = true;
+                disabledBtn.style.cssText = 'width: 100%; padding: 16px; background: #cccccc; color: white; border: none; border-radius: 12px; font-size: 16px; font-weight: 600; cursor: not-allowed; opacity: 0.6; margin-top: 20px;';
+                disabledBtn.textContent = 'Нет в наличии';
+                buttonContainer.appendChild(disabledBtn);
+                
+                // Добавляем информацию о точках где есть товар
+                if (locationsWithStock.length > 0) {
+                    const locationInfo = document.createElement('div');
+                    locationInfo.style.cssText = 'margin-top: 12px; padding: 12px; background: #f5f5f5; border-radius: 12px; font-size: 13px; color: #666; line-height: 1.5;';
+                    locationInfo.innerHTML = `<div style="font-weight: 600; margin-bottom: 4px; color: #333;">Есть в наличии на:</div><div>${locationsWithStock.join(', ')}</div>`;
+                    buttonContainer.appendChild(locationInfo);
+                } else if (locationsWithStock.length === 0) {
+                    const noStockMessage = document.createElement('div');
+                    noStockMessage.style.cssText = 'margin-top: 12px; padding: 12px; background: #fff3f3; border-radius: 12px; font-size: 13px; color: #f44336; line-height: 1.5; text-align: center; font-weight: 600;';
+                    noStockMessage.textContent = 'Товара нет ни на одной точке';
+                    buttonContainer.appendChild(noStockMessage);
+                }
+            } else {
+                const activeBtn = document.createElement('button');
+                activeBtn.setAttribute('onclick', `addToCart(${product.id})`);
+                activeBtn.style.cssText = 'width: 100%; padding: 16px; background: #007AFF; color: white; border: none; border-radius: 12px; font-size: 16px; font-weight: 600; cursor: pointer; margin-top: 20px;';
+                activeBtn.textContent = 'В корзину';
+                buttonContainer.appendChild(activeBtn);
             }
         }
         
