@@ -1338,7 +1338,8 @@ function showPage(page, skipHistory = false, resetCatalog = false) {
     }
     
     // Сохраняем состояние просмотра товара, если мы на странице товара и переходим на другую вкладку
-    if (currentPage === 'product' && viewingProduct && page !== 'product' && page !== 'catalog') {
+    // НЕ сохраняем при переходе из каталога в каталог (когда выбираем вкус и возвращаемся)
+    if (currentPage === 'product' && viewingProduct && page !== 'product' && page !== 'catalog' && !(currentPage === 'catalog' && page === 'catalog')) {
         // Сохраняем товар в localStorage для восстановления при возврате
         // Включая переход в корзину - нужно восстановить товар после возврата из корзины
         localStorage.setItem('lastViewedProduct', JSON.stringify({
@@ -1406,7 +1407,7 @@ function showPage(page, skipHistory = false, resetCatalog = false) {
     
     // Если переходим на каталог с другой вкладки, проверяем сохраненный товар
     // НО только если мы действительно переходим с другой вкладки, а не при первой загрузке
-    if (page === 'catalog' && currentPage && currentPage !== 'catalog' && currentPage !== '') {
+    if (page === 'catalog' && currentPage && currentPage !== 'catalog' && currentPage !== '' && currentPage !== 'product') {
         const savedProduct = localStorage.getItem('lastViewedProduct');
         if (savedProduct) {
             try {
@@ -2534,10 +2535,12 @@ function renderProductContent(container, product, favoriteFlavor, favoriteStreng
     container.style.visibility = 'visible';
     
     // Проверяем наличие товара для определения стилей
+    // ВАЖНО: Проверяем наличие ПОСЛЕ того как selectedFlavor установлен в viewingProduct
     let isProductInStock = false;
-    if (selectedFlavor) {
+    const currentSelectedFlavor = viewingProduct.selectedFlavor || selectedFlavor;
+    if (currentSelectedFlavor) {
         isProductInStock = deliveryType === 'selfPickup' && selectedPickupLocation
-            ? isFlavorInStockAtLocation(product, selectedFlavor, selectedPickupLocation)
+            ? isFlavorInStockAtLocation(product, currentSelectedFlavor, selectedPickupLocation)
             : (product.inStock !== false && (product.quantity === undefined || product.quantity > 0));
     } else {
         isProductInStock = deliveryType === 'selfPickup' && selectedPickupLocation
@@ -2783,6 +2786,60 @@ function selectFlavor(flavor, index) {
     if (container && currentPage === 'product') {
         // Перерисовываем всю карточку товара с новым выбранным вкусом
         renderProductContent(container, product, null, null);
+        
+        // Обновляем визуальное состояние выбранного вкуса после перерисовки
+        setTimeout(() => {
+            const flavorSection = document.querySelector('[onclick="showFlavorModal()"]')?.closest('div[style*="margin: 20px 0"]');
+            if (flavorSection) {
+                const flavorsContainer = flavorSection.querySelector('.flavors-scroll-container') || 
+                                         flavorSection.querySelector('div[style*="overflow-x: auto"]');
+                if (flavorsContainer) {
+                    // Убираем выделение со всех
+                    flavorsContainer.querySelectorAll('[id^="flavor-"]').forEach(flavorEl => {
+                        const circleDiv = flavorEl.querySelector('div[style*="border-radius: 50%"]');
+                        const textDiv = flavorEl.querySelector('div[style*="font-size: 12px"]');
+                        if (circleDiv) {
+                            circleDiv.style.border = '2px solid #e5e5e5';
+                            circleDiv.style.boxShadow = '0 1px 3px rgba(0,0,0,0.1)';
+                            // Удаляем галочку
+                            const checkmark = circleDiv.querySelector('div[style*="background: #007AFF"]');
+                            if (checkmark) checkmark.remove();
+                        }
+                        if (textDiv) {
+                            const currentColor = window.getComputedStyle(textDiv).color;
+                            if (!currentColor.includes('rgb(0, 122, 255)') && !currentColor.includes('#007AFF')) {
+                                textDiv.style.color = '';
+                            } else {
+                                textDiv.style.color = '#000';
+                            }
+                            textDiv.style.fontWeight = '400';
+                        }
+                    });
+                    
+                    // Добавляем выделение к выбранному
+                    const selectedFlavorEl = document.getElementById(`flavor-${viewingProduct.selectedFlavorIndex}`);
+                    if (selectedFlavorEl) {
+                        const circleDiv = selectedFlavorEl.querySelector('div[style*="border-radius: 50%"]');
+                        const textDiv = selectedFlavorEl.querySelector('div[style*="font-size: 12px"]');
+                        if (circleDiv) {
+                            circleDiv.style.border = '3px solid #007AFF';
+                            circleDiv.style.boxShadow = '0 2px 8px rgba(0,122,255,0.3)';
+                            // Добавляем галочку
+                            if (!circleDiv.querySelector('div[style*="background: #007AFF"]')) {
+                                const checkmark = document.createElement('div');
+                                checkmark.style.cssText = 'position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 24px; height: 24px; background: #007AFF; border-radius: 50%; display: flex; align-items: center; justify-content: center; z-index: 10; box-shadow: 0 2px 4px rgba(0,0,0,0.2);';
+                                checkmark.innerHTML = '<span style="color: white; font-size: 14px; font-weight: bold; line-height: 1;">✓</span>';
+                                circleDiv.appendChild(checkmark);
+                            }
+                        }
+                        if (textDiv) {
+                            textDiv.style.color = '#007AFF';
+                            textDiv.style.fontWeight = '600';
+                        }
+                    }
+                }
+            }
+        }, 100);
     } else {
         // Если контейнер не найден, пытаемся обновить только изображение
         if (product && product.flavorImages && product.flavorImages[flavor]) {
@@ -3193,6 +3250,26 @@ function showFlavorModal() {
             // Сохраняем выбранный индекс (оригинальный индекс в массиве)
             viewingProduct.selectedFlavorIndex = originalIndex;
             viewingProduct.selectedFlavor = flavor;
+            
+            // Обновляем визуальное состояние в модальном окне - выделяем выбранный вкус
+            grid.querySelectorAll('div[style*="border-radius: 12px"]').forEach(card => {
+                const cardBorder = card.style.border || window.getComputedStyle(card).border;
+                if (cardBorder.includes('#007AFF')) {
+                    card.style.border = '2px solid #e5e5e5';
+                    card.style.background = '#ffffff';
+                    const textDiv = card.querySelector('div[style*="font-size: 13px"]');
+                    if (textDiv) {
+                        textDiv.style.color = '#000';
+                    }
+                }
+            });
+            // Выделяем выбранный вкус
+            flavorCard.style.border = '2px solid #007AFF';
+            flavorCard.style.background = '#007AFF';
+            const selectedTextDiv = flavorCard.querySelector('div[style*="font-size: 13px"]');
+            if (selectedTextDiv) {
+                selectedTextDiv.style.color = '#ffffff';
+            }
             
             // Применяем выбранный вкус и закрываем окно
             selectFlavor(flavor, originalIndex);
