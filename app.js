@@ -2617,6 +2617,9 @@ function renderProductContent(container, product, favoriteFlavor, favoriteStreng
     
     // ВАЖНО: Сохраняем позицию скролла перед перерисовкой, чтобы не было сброса в начало
     const scrollPosition = container.scrollTop || 0;
+    const scrollHeight = container.scrollHeight || 0;
+    // Сохраняем относительную позицию скролла (в процентах) для более точного восстановления
+    const scrollRatio = scrollHeight > 0 ? scrollPosition / scrollHeight : 0;
     
     // Проверяем наличие товара для определения стилей
     // ВАЖНО: Проверяем наличие ПОСЛЕ того как selectedFlavor установлен в viewingProduct
@@ -2779,12 +2782,33 @@ function renderProductContent(container, product, favoriteFlavor, favoriteStreng
             container.style.transition = 'opacity 0.4s ease, transform 0.4s ease';
             container.style.opacity = '1';
             container.style.transform = 'translateY(0)';
+            
             // Восстанавливаем позицию скролла после перерисовки
-            container.scrollTop = scrollPosition;
-            // Дополнительная попытка восстановления через небольшую задержку для надежности
-            setTimeout(() => {
+            // Используем несколько методов для надежности
+            const newScrollHeight = container.scrollHeight || 0;
+            if (newScrollHeight > 0 && scrollRatio > 0) {
+                // Восстанавливаем по относительной позиции (более надежно)
+                container.scrollTop = newScrollHeight * scrollRatio;
+            } else if (scrollPosition > 0) {
+                // Если не удалось по относительной позиции, используем абсолютную
                 container.scrollTop = scrollPosition;
+            }
+            
+            // Дополнительные попытки восстановления для надежности
+            setTimeout(() => {
+                if (newScrollHeight > 0 && scrollRatio > 0) {
+                    container.scrollTop = newScrollHeight * scrollRatio;
+                } else if (scrollPosition > 0) {
+                    container.scrollTop = scrollPosition;
+                }
             }, 50);
+            setTimeout(() => {
+                if (newScrollHeight > 0 && scrollRatio > 0) {
+                    container.scrollTop = newScrollHeight * scrollRatio;
+                } else if (scrollPosition > 0) {
+                    container.scrollTop = scrollPosition;
+                }
+            }, 150);
         });
     });
     
@@ -4483,6 +4507,14 @@ function selectPickupLocation() {
                 
                 // Обновляем отображение точки в шапке
                 updatePickupLocationDisplay();
+                
+                // Обновляем отображение точки в корзине если мы на странице корзины
+                if (currentPage === 'cart') {
+                    const locationDisplay = document.getElementById('selected-pickup-location-display');
+                    if (locationDisplay) {
+                        locationDisplay.textContent = selectedPickupLocation;
+                    }
+                }
                 
                 // Всегда обновляем отображение товаров на странице каталога
                 // Это важно, особенно при первом выборе точки после подтверждения возраста
@@ -6830,6 +6862,12 @@ function updateCartItemsDisplay() {
                 quantityBlock.style.pointerEvents = !isItemInStock ? 'none' : 'auto';
             }
         });
+        
+        // Обновляем отображение точки самовывоза в корзине
+        const locationDisplay = document.getElementById('selected-pickup-location-display');
+        if (locationDisplay) {
+            locationDisplay.textContent = selectedPickupLocation;
+        }
         
         // Восстанавливаем позицию скролла
         requestAnimationFrame(() => {
