@@ -526,79 +526,9 @@ function isTomorrow(dateString) {
     return dateString === tomorrowStr;
 }
 
-// Проверка мобильного устройства
-function isMobileDevice() {
-    // Проверяем, запущено ли в Telegram WebApp (всегда мобильное)
-    const isTelegramWebApp = typeof window.Telegram !== 'undefined' && window.Telegram.WebApp;
-    
-    // Если это Telegram WebApp, считаем мобильным
-    if (isTelegramWebApp) {
-        return true;
-    }
-    
-    // Проверяем через user agent
-    const userAgent = navigator.userAgent || navigator.vendor || window.opera;
-    
-    // Проверяем user agent на мобильные устройства (более строгая проверка)
-    const mobileRegex = /android|webos|iphone|ipad|ipod|blackberry|iemobile|opera mini|mobile/i;
-    const isMobileUA = mobileRegex.test(userAgent);
-    
-    // Проверяем размер экрана (мобильные обычно меньше 768px)
-    const isSmallScreen = window.innerWidth <= 768;
-    
-    // Проверяем наличие touch событий (но не полагаемся только на это, т.к. некоторые ноутбуки имеют touch)
-    const hasTouch = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
-    
-    // Проверяем на десктопные платформы (Windows, Mac, Linux)
-    const desktopRegex = /windows|win32|win64|macintosh|mac os x|linux/i;
-    const isDesktopUA = desktopRegex.test(userAgent);
-    
-    // Если это явно десктопный user agent, не считаем мобильным
-    if (isDesktopUA && !isMobileUA) {
-        return false;
-    }
-    
-    // Если это мобильный user agent, считаем мобильным
-    if (isMobileUA) {
-        return true;
-    }
-    
-    // Если маленький экран И есть touch - вероятно мобильное
-    // Но если большой экран (> 1024px) - точно не мобильное
-    if (window.innerWidth > 1024) {
-        return false;
-    }
-    
-    return isSmallScreen && hasTouch;
-}
-
-// Показ модального окна для десктопов
-function showMobileOnlyMessage() {
-    const overlay = document.getElementById('mobile-only-overlay');
-    if (overlay) {
-        overlay.classList.add('show');
-    }
-}
-
 // Инициализация
 function init() {
     console.log('Init function called');
-    console.log('User Agent:', navigator.userAgent);
-    console.log('Screen width:', window.innerWidth);
-    console.log('Has touch:', 'ontouchstart' in window || navigator.maxTouchPoints > 0);
-    
-    // Проверяем, мобильное ли устройство
-    const isMobile = isMobileDevice();
-    console.log('Is mobile device:', isMobile);
-    
-    if (!isMobile) {
-        console.log('Обнаружено десктопное устройство, показываем предупреждение');
-        // Небольшая задержка для гарантии, что DOM готов
-        setTimeout(() => {
-            showMobileOnlyMessage();
-        }, 100);
-        return; // Не продолжаем инициализацию для десктопов
-    }
     
     if (tg) {
         tg.expand();
