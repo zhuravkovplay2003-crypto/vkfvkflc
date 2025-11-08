@@ -2616,8 +2616,11 @@ function renderProductContent(container, product, favoriteFlavor, favoriteStreng
     container.style.visibility = 'visible';
     
     // ВАЖНО: Сохраняем позицию скролла перед перерисовкой, чтобы не было сброса в начало
+    // Сохраняем как позицию контейнера, так и позицию окна (для случаев когда скроллит вся страница)
     const scrollPosition = container.scrollTop || 0;
     const scrollHeight = container.scrollHeight || 0;
+    const windowScrollY = window.scrollY || window.pageYOffset || 0;
+    const documentScrollTop = document.documentElement.scrollTop || 0;
     // Сохраняем относительную позицию скролла (в процентах) для более точного восстановления
     const scrollRatio = scrollHeight > 0 ? scrollPosition / scrollHeight : 0;
     
@@ -2794,6 +2797,13 @@ function renderProductContent(container, product, favoriteFlavor, favoriteStreng
                 container.scrollTop = scrollPosition;
             }
             
+            // Восстанавливаем позицию окна (если скроллит вся страница)
+            if (windowScrollY > 0) {
+                window.scrollTo(0, windowScrollY);
+            } else if (documentScrollTop > 0) {
+                document.documentElement.scrollTop = documentScrollTop;
+            }
+            
             // Дополнительные попытки восстановления для надежности
             setTimeout(() => {
                 if (newScrollHeight > 0 && scrollRatio > 0) {
@@ -2801,12 +2811,22 @@ function renderProductContent(container, product, favoriteFlavor, favoriteStreng
                 } else if (scrollPosition > 0) {
                     container.scrollTop = scrollPosition;
                 }
+                if (windowScrollY > 0) {
+                    window.scrollTo(0, windowScrollY);
+                } else if (documentScrollTop > 0) {
+                    document.documentElement.scrollTop = documentScrollTop;
+                }
             }, 50);
             setTimeout(() => {
                 if (newScrollHeight > 0 && scrollRatio > 0) {
                     container.scrollTop = newScrollHeight * scrollRatio;
                 } else if (scrollPosition > 0) {
                     container.scrollTop = scrollPosition;
+                }
+                if (windowScrollY > 0) {
+                    window.scrollTo(0, windowScrollY);
+                } else if (documentScrollTop > 0) {
+                    document.documentElement.scrollTop = documentScrollTop;
                 }
             }, 150);
         });
@@ -2951,7 +2971,13 @@ function selectFlavor(flavor, index) {
         // Если вкус недоступен, перерисовываем всю карточку для гарантии отображения всей информации
         // ВАЖНО: Сохраняем позицию скролла перед перерисовкой и восстанавливаем после
         if (!isProductInStock) {
+            // Сохраняем позиции скролла (контейнера и окна)
             const scrollPosition = container.scrollTop || 0;
+            const scrollHeight = container.scrollHeight || 0;
+            const windowScrollY = window.scrollY || window.pageYOffset || 0;
+            const documentScrollTop = document.documentElement.scrollTop || 0;
+            const scrollRatio = scrollHeight > 0 ? scrollPosition / scrollHeight : 0;
+            
             // Используем requestAnimationFrame для плавного обновления без дерганья
             requestAnimationFrame(() => {
                 // Временно отключаем переходы для предотвращения дерганья
@@ -2963,13 +2989,41 @@ function selectFlavor(flavor, index) {
                 // Восстанавливаем переходы и позицию скролла
                 requestAnimationFrame(() => {
                     container.style.transition = originalTransition;
-                    container.scrollTop = scrollPosition;
+                    const newScrollHeight = container.scrollHeight || 0;
+                    if (newScrollHeight > 0 && scrollRatio > 0) {
+                        container.scrollTop = newScrollHeight * scrollRatio;
+                    } else if (scrollPosition > 0) {
+                        container.scrollTop = scrollPosition;
+                    }
+                    if (windowScrollY > 0) {
+                        window.scrollTo(0, windowScrollY);
+                    } else if (documentScrollTop > 0) {
+                        document.documentElement.scrollTop = documentScrollTop;
+                    }
                     // Дополнительные попытки восстановления для надежности
                     setTimeout(() => {
-                        container.scrollTop = scrollPosition;
+                        if (newScrollHeight > 0 && scrollRatio > 0) {
+                            container.scrollTop = newScrollHeight * scrollRatio;
+                        } else if (scrollPosition > 0) {
+                            container.scrollTop = scrollPosition;
+                        }
+                        if (windowScrollY > 0) {
+                            window.scrollTo(0, windowScrollY);
+                        } else if (documentScrollTop > 0) {
+                            document.documentElement.scrollTop = documentScrollTop;
+                        }
                     }, 50);
                     setTimeout(() => {
-                        container.scrollTop = scrollPosition;
+                        if (newScrollHeight > 0 && scrollRatio > 0) {
+                            container.scrollTop = newScrollHeight * scrollRatio;
+                        } else if (scrollPosition > 0) {
+                            container.scrollTop = scrollPosition;
+                        }
+                        if (windowScrollY > 0) {
+                            window.scrollTo(0, windowScrollY);
+                        } else if (documentScrollTop > 0) {
+                            document.documentElement.scrollTop = documentScrollTop;
+                        }
                     }, 150);
                 });
             });
@@ -6055,6 +6109,9 @@ function showCart() {
     }
     
     // Рассчитываем итоги
+    // ВАЖНО: Суммируем количество товаров (не cart.length, а сумму всех item.quantity)
+    const totalItemsCount = cart.reduce((sum, item) => sum + (item.quantity || 1), 0);
+    
     const totalMoney = cart.reduce((sum, item) => {
         if (item.paymentMethod === 'coins') return sum;
         return sum + (item.price * item.quantity);
@@ -6443,7 +6500,7 @@ function showCart() {
         <div style="background: linear-gradient(135deg, #ffffff 0%, #f8f9fa 100%); padding: 24px; border-radius: 16px; margin-top: 16px; 
             border: 2px solid #e5e5e5; box-shadow: 0 4px 12px rgba(0,0,0,0.08);">
             <div style="display: flex; justify-content: space-between; margin-bottom: 16px; padding-bottom: 12px; border-bottom: 2px solid #e5e5e5;">
-                <span style="color: #666; font-size: 14px;">Товары (${cart.length} шт.)</span>
+                <span style="color: #666; font-size: 14px;">Товары (${totalItemsCount} шт.)</span>
                 <span style="font-weight: 600; font-size: 16px;">
                     ${totalMoney > 0 ? `${totalMoney.toFixed(2)} BYN` : ''}
                     ${totalCoins > 0 ? `${totalCoins.toFixed(1)} коинов` : ''}
