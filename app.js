@@ -2578,100 +2578,68 @@ function selectFlavor(flavor, index) {
         productNameDiv.textContent = flavor ? `${product.name}, ${flavor}` : product.name;
     }
     
-    // Обновляем UI на странице товара - пересоздаем блок вкусов
+    // Обновляем только визуальное состояние выбранного вкуса, не пересоздаем весь контейнер
     const flavorSection = document.querySelector('[onclick="showFlavorModal()"]')?.closest('div[style*="margin: 20px 0"]');
     if (flavorSection && viewingProduct) {
         const product = products.find(p => p.id === viewingProduct.id);
         if (product && product.flavors && product.flavors.length > 0) {
-            // Убеждаемся что selectedFlavorIndex правильный
-            let currentSelectedIndex = viewingProduct.selectedFlavorIndex;
-            if (currentSelectedIndex === undefined || currentSelectedIndex < 0 || currentSelectedIndex >= product.flavors.length) {
-                if (viewingProduct.selectedFlavor) {
-                    currentSelectedIndex = product.flavors.indexOf(viewingProduct.selectedFlavor);
-                }
-                if (currentSelectedIndex < 0 || currentSelectedIndex >= product.flavors.length) {
-                    currentSelectedIndex = 0;
-                }
-                viewingProduct.selectedFlavorIndex = currentSelectedIndex;
-            }
-            const selectedFlavor = viewingProduct.selectedFlavor || product.flavors[currentSelectedIndex];
+            // Ищем контейнер вкусов - только скроллбар, не всю секцию
+            const flavorsContainer = flavorSection.querySelector('.flavors-scroll-container') || 
+                                     flavorSection.querySelector('div[style*="overflow-x: auto"]');
             
-            let allFlavors = [...product.flavors];
-            
-            // Сортируем вкусы - сначала в наличии, потом не в наличии
-            allFlavors = allFlavors.sort((a, b) => {
-                const aInStock = deliveryType === 'selfPickup' && selectedPickupLocation
-                    ? isFlavorInStockAtLocation(product, a, selectedPickupLocation)
-                    : (product.inStock !== false && (product.quantity === undefined || product.quantity > 0));
-                const bInStock = deliveryType === 'selfPickup' && selectedPickupLocation
-                    ? isFlavorInStockAtLocation(product, b, selectedPickupLocation)
-                    : (product.inStock !== false && (product.quantity === undefined || product.quantity > 0));
-                
-                // Сначала вкусы в наличии (true идет перед false)
-                if (aInStock !== bInStock) {
-                    return bInStock ? 1 : -1;
-                }
-                return 0;
-            });
-            
-            // Ищем контейнер вкусов - может быть в разных местах
-            const flavorsContainer = flavorSection.querySelector('div[style*="display: flex"]') || 
-                                     flavorSection.querySelector('div[style*="overflow-x: auto"]') ||
-                                     flavorSection.querySelector('div[style*="gap: 12px"]');
             if (flavorsContainer) {
-                // Используем requestAnimationFrame для гарантированного обновления
+                // Обновляем только визуальное состояние - убираем выделение со всех, добавляем к выбранному
                 requestAnimationFrame(() => {
-                    flavorsContainer.innerHTML = allFlavors.map((flavorItem) => {
-                        const originalIndex = product.flavors.indexOf(flavorItem);
-                        // Используем строгое сравнение - проверяем что и индекс и вкус совпадают
-                        const isSelected = (originalIndex === viewingProduct.selectedFlavorIndex) && (flavorItem === viewingProduct.selectedFlavor);
+                    // Убираем выделение со всех вкусов
+                    flavorsContainer.querySelectorAll('[id^="flavor-"]').forEach(flavorEl => {
+                        const circleDiv = flavorEl.querySelector('div[style*="border-radius: 50%"]');
+                        const checkmarkDiv = circleDiv?.querySelector('div[style*="background: #007AFF"]');
+                        const textDiv = flavorEl.querySelector('div[style*="font-size: 12px"]');
+                        
+                        if (circleDiv) {
+                            // Убираем синюю рамку
+                            circleDiv.style.border = '2px solid #e5e5e5';
+                            circleDiv.style.boxShadow = '0 1px 3px rgba(0,0,0,0.1)';
+                        }
+                        
+                        // Удаляем галочку
+                        if (checkmarkDiv) {
+                            checkmarkDiv.remove();
+                        }
+                        
+                        // Убираем синий цвет текста
+                        if (textDiv) {
+                            textDiv.style.color = '#000';
+                            textDiv.style.fontWeight = '400';
+                        }
+                    });
                     
-                    // Проверяем наличие вкуса на выбранной точке
-                    const isFlavorInStock = deliveryType === 'selfPickup' && selectedPickupLocation
-                        ? isFlavorInStockAtLocation(product, flavorItem, selectedPickupLocation)
-                        : (product.inStock !== false && (product.quantity === undefined || product.quantity > 0));
-                    
-                    const flavorImage = (product.flavorImages && product.flavorImages[flavorItem]) 
-                        ? product.flavorImages[flavorItem] 
-                        : (product.imageUrl || null);
-                    const flavorImgId = `flavor-img-${originalIndex}-${Date.now()}`;
-                    const flavorImageContent = flavorImage
-                        ? `<img id="${flavorImgId}" src="${flavorImage}" alt="${flavorItem}" style="width: 100%; height: 100%; object-fit: cover; border-radius: 50%; display: block; ${!isFlavorInStock ? 'opacity: 0.5; filter: grayscale(100%);' : ''}" onerror="handleImageError('${flavorImgId}')">`
-                        : getPackageIcon('#999999');
-                    
-                    // Всегда вызываем selectFlavor, даже если вкус не в наличии
-                    const onClickAction = `selectFlavor('${flavorItem.replace(/'/g, "\\'")}', ${originalIndex})`;
-                    
-                            return `
-                            <div onclick="${onClickAction}" id="flavor-${originalIndex}" 
-                                style="min-width: 80px; text-align: center; cursor: pointer; flex-shrink: 0;">
-                            <div style="width: 80px; height: 80px; border-radius: 50%; background: ${!isFlavorInStock ? '#e0e0e0' : '#f0f0f0'}; 
-                                display: flex; align-items: center; justify-content: center; 
-                                border: ${isSelected ? '3px solid #007AFF' : (!isFlavorInStock ? '2px solid #999' : '2px solid #e5e5e5')}; 
-                                margin-bottom: 8px; overflow: visible; position: relative; box-shadow: ${isSelected ? '0 2px 8px rgba(0,122,255,0.3)' : '0 1px 3px rgba(0,0,0,0.1)'}; ${!isFlavorInStock ? 'opacity: 0.6; filter: grayscale(100%);' : ''}">
-                                <div style="width: 100%; height: 100%; border-radius: 50%; overflow: hidden; position: relative;">
-                                    ${flavorImageContent}
-                                </div>
-                                ${isSelected ? '<div style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 24px; height: 24px; background: #007AFF; border-radius: 50%; display: flex; align-items: center; justify-content: center; z-index: 10; box-shadow: 0 2px 4px rgba(0,0,0,0.2);"><span style="color: white; font-size: 14px; font-weight: bold; line-height: 1;">✓</span></div>' : ''}
-                            </div>
-                            <div style="font-size: 12px; color: ${isSelected ? '#007AFF' : (!isFlavorInStock ? '#999' : '#000')}; font-weight: ${isSelected ? '600' : '400'};">
-                                ${flavorItem.length > 15 ? flavorItem.substring(0, 15) + '...' : flavorItem}
-                            </div>
-                            ${(() => {
-                                if (!isFlavorInStock) {
-                                    const selectedCity = selectedPickupLocation ? getCityFromLocation(selectedPickupLocation) : null;
-                                    const flavorLocations = getLocationsWithFlavorStockByCity(product, flavorItem, selectedCity);
-                                    if (flavorLocations.length === 0) {
-                                        return '<div style="font-size: 10px; color: #f44336; text-align: center; width: 100%; margin-top: 2px;">Нет ни на одной точке</div>';
-                                    } else {
-                                        return '<div style="font-size: 10px; color: #999; text-align: center; width: 100%; margin-top: 2px;">Нет в наличии</div>';
-                                    }
-                                }
-                                return '';
-                            })()}
-                        </div>
-                    `;
-                    }).join('');
+                    // Добавляем выделение к выбранному вкусу
+                    const selectedFlavorEl = document.getElementById(`flavor-${viewingProduct.selectedFlavorIndex}`);
+                    if (selectedFlavorEl) {
+                        const circleDiv = selectedFlavorEl.querySelector('div[style*="border-radius: 50%"]');
+                        const textDiv = selectedFlavorEl.querySelector('div[style*="font-size: 12px"]');
+                        
+                        if (circleDiv) {
+                            // Добавляем синюю рамку
+                            circleDiv.style.border = '3px solid #007AFF';
+                            circleDiv.style.boxShadow = '0 2px 8px rgba(0,122,255,0.3)';
+                            
+                            // Добавляем галочку если её нет
+                            if (!circleDiv.querySelector('div[style*="background: #007AFF"]')) {
+                                const checkmark = document.createElement('div');
+                                checkmark.style.cssText = 'position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 24px; height: 24px; background: #007AFF; border-radius: 50%; display: flex; align-items: center; justify-content: center; z-index: 10; box-shadow: 0 2px 4px rgba(0,0,0,0.2);';
+                                checkmark.innerHTML = '<span style="color: white; font-size: 14px; font-weight: bold; line-height: 1;">✓</span>';
+                                circleDiv.appendChild(checkmark);
+                            }
+                        }
+                        
+                        // Делаем текст синим
+                        if (textDiv) {
+                            textDiv.style.color = '#007AFF';
+                            textDiv.style.fontWeight = '600';
+                        }
+                    }
                 });
             }
         }
@@ -3509,7 +3477,7 @@ function selectPickupLocation() {
         const item = document.createElement('div');
         const borderColor = isSelected ? '#007AFF' : '#e5e5e5';
         const bgColor = isSelected ? '#f0f8ff' : '#ffffff';
-        item.style.cssText = 'padding: 16px; border: 2px solid ' + borderColor + '; border-radius: 12px; background: ' + bgColor + '; cursor: pointer; display: flex; align-items: center; gap: 12px; touch-action: manipulation;';
+        item.style.cssText = 'padding: 16px; border: 2px solid ' + borderColor + '; border-radius: 12px; background: ' + bgColor + '; cursor: pointer; display: flex; align-items: center; gap: 12px; touch-action: manipulation; word-wrap: break-word; overflow-wrap: break-word;';
         
         // Кружок слева
         const circle = document.createElement('div');
@@ -3526,7 +3494,7 @@ function selectPickupLocation() {
         const textDiv = document.createElement('div');
         const textWeight = isSelected ? '600' : '500';
         const textColor = isSelected ? '#007AFF' : '#000';
-        textDiv.style.cssText = 'font-size: 16px; font-weight: ' + textWeight + '; color: ' + textColor + '; flex: 1;';
+        textDiv.style.cssText = 'font-size: 16px; font-weight: ' + textWeight + '; color: ' + textColor + '; flex: 1; word-wrap: break-word; overflow-wrap: break-word; white-space: normal; min-width: 0;';
         textDiv.textContent = text;
         
         item.appendChild(circle);
@@ -3657,7 +3625,7 @@ function selectPickupLocation() {
         
         const modalContent = document.createElement('div');
         modalContent.className = 'location-modal-content';
-        modalContent.style.cssText = 'background: white; padding: 24px; border-radius: 16px; max-width: 90%; width: 100%; max-width: 400px; max-height: 80vh; overflow-y: auto; position: relative; transform: scale(0.95); opacity: 0; transition: transform 0.3s ease, opacity 0.3s ease;';
+        modalContent.style.cssText = 'background: white; padding: 24px; border-radius: 16px; max-width: 95%; width: 100%; max-width: 500px; max-height: 85vh; overflow-y: auto; position: relative; transform: scale(0.95); opacity: 0; transition: transform 0.3s ease, opacity 0.3s ease;';
         
         // Заголовок с кнопкой назад
         const header = document.createElement('div');
@@ -3681,7 +3649,7 @@ function selectPickupLocation() {
         
         const headerText = document.createElement('div');
         headerText.style.cssText = 'flex: 1;';
-        headerText.innerHTML = '<div style="font-size: 20px; font-weight: 700; margin-bottom: 8px;">📍 ' + cityName + '</div><div style="font-size: 14px; color: #666;">Выберите точку самовывоза</div>';
+        headerText.innerHTML = '<div style="font-size: 22px; font-weight: 700; margin-bottom: 6px;">📍 ' + cityName + '</div><div style="font-size: 14px; color: #666;">Выберите точку самовывоза</div>';
         
         header.appendChild(backBtn);
         header.appendChild(headerText);
@@ -3873,7 +3841,7 @@ function selectLocation() {
         const item = document.createElement('div');
         const borderColor = isSelected ? '#007AFF' : '#e5e5e5';
         const bgColor = isSelected ? '#f0f8ff' : '#ffffff';
-        item.style.cssText = 'padding: 16px; border: 2px solid ' + borderColor + '; border-radius: 12px; background: ' + bgColor + '; cursor: pointer; display: flex; align-items: center; gap: 12px; touch-action: manipulation;';
+        item.style.cssText = 'padding: 16px; border: 2px solid ' + borderColor + '; border-radius: 12px; background: ' + bgColor + '; cursor: pointer; display: flex; align-items: center; gap: 12px; touch-action: manipulation; word-wrap: break-word; overflow-wrap: break-word;';
         
         // Кружок слева
         const circle = document.createElement('div');
@@ -3890,7 +3858,7 @@ function selectLocation() {
         const textDiv = document.createElement('div');
         const textWeight = isSelected ? '600' : '500';
         const textColor = isSelected ? '#007AFF' : '#000';
-        textDiv.style.cssText = 'font-size: 16px; font-weight: ' + textWeight + '; color: ' + textColor + '; flex: 1;';
+        textDiv.style.cssText = 'font-size: 16px; font-weight: ' + textWeight + '; color: ' + textColor + '; flex: 1; word-wrap: break-word; overflow-wrap: break-word; white-space: normal; min-width: 0;';
         textDiv.textContent = text;
         
         item.appendChild(circle);
