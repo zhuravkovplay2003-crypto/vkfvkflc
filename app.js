@@ -4,8 +4,8 @@ const tg = window.Telegram && window.Telegram.WebApp ? window.Telegram.WebApp : 
 // ID администраторов
 const ADMIN_IDS = [8248768964];
 
-// Username бота для реферальных ссылок (формат: без @, например: "tessstertt_bot")
-const BOT_USERNAME = 'tessstertt_bot';
+// Username бота для реферальных ссылок (формат: без @, например: "VapeBelShop_bot")
+const BOT_USERNAME = 'VapeBelShop_bot';
 
 // Состояние приложения
 let cart = [];
@@ -2074,10 +2074,8 @@ function showProduct(productId, favoriteFlavor = null, favoriteStrength = null) 
                                 ? `<img id="${flavorImgId}" src="${processedFlavorUrl}" alt="${flavor}" style="width: 100%; height: 100%; object-fit: cover; border-radius: 50%; display: block; margin: 0 auto; ${!isFlavorInStock ? 'opacity: 0.5; filter: grayscale(100%);' : ''}" onerror="handleImageError('${flavorImgId}')" loading="lazy" crossorigin="anonymous">`
                                 : getPackageIcon(!isFlavorInStock ? '#999999' : '#999999');
                             
-                            // Если вкус не в наличии, делаем его кликабельным для перехода на карточку
-                            const onClickAction = !isFlavorInStock && flavorLocations.length > 0
-                                ? `showProduct(${product.id}, '${flavor.replace(/'/g, "\\'")}', null);`
-                                : `selectFlavor('${flavor.replace(/'/g, "\\'")}', ${originalIndex})`;
+                            // Всегда вызываем selectFlavor, даже если вкус не в наличии
+                            const onClickAction = `selectFlavor('${flavor.replace(/'/g, "\\'")}', ${originalIndex})`;
                             
                             return `
                             <div onclick="${onClickAction}" id="flavor-${originalIndex}" 
@@ -2200,13 +2198,42 @@ function showProduct(productId, favoriteFlavor = null, favoriteStrength = null) 
                         </div>
                         `;
                 } else {
-                    return `
-                        <button onclick="addToCart(${product.id})" style="width: 100%; padding: 16px; 
-                            background: #007AFF; color: white; border: none; border-radius: 12px; 
-                            font-size: 16px; font-weight: 600; cursor: pointer; margin-top: 20px;">
-                            В корзину
-                        </button>
-                    `;
+                    // Проверяем наличие выбранного вкуса перед показом кнопки
+                    const selectedFlavorForButton = viewingProduct.selectedFlavor;
+                    let canAddToCart = true;
+                    if (selectedFlavorForButton) {
+                        canAddToCart = deliveryType === 'selfPickup' && selectedPickupLocation
+                            ? isFlavorInStockAtLocation(product, selectedFlavorForButton, selectedPickupLocation)
+                            : (product.inStock !== false && (product.quantity === undefined || product.quantity > 0));
+                    }
+                    
+                    if (canAddToCart) {
+                        return `
+                            <button onclick="addToCart(${product.id})" style="width: 100%; padding: 16px; 
+                                background: #007AFF; color: white; border: none; border-radius: 12px; 
+                                font-size: 16px; font-weight: 600; cursor: pointer; margin-top: 20px;">
+                                В корзину
+                            </button>
+                        `;
+                    } else {
+                        const selectedCity = getCityFromLocation(selectedPickupLocation || currentLocation);
+                        const flavorLocations = getLocationsWithFlavorStockByCity(product, selectedFlavorForButton, selectedCity);
+                        return `
+                            <div style="margin-top: 20px;">
+                                <button disabled style="width: 100%; padding: 16px; 
+                                    background: #cccccc; color: white; border: none; border-radius: 12px; 
+                                    font-size: 16px; font-weight: 600; cursor: not-allowed; opacity: 0.6;">
+                                    Нет в наличии
+                                </button>
+                                ${flavorLocations.length > 0 ? `
+                                    <div style="margin-top: 12px; padding: 12px; background: #f5f5f5; border-radius: 12px; font-size: 13px; color: #666; line-height: 1.5;">
+                                        <div style="font-weight: 600; margin-bottom: 4px; color: #333;">Есть в наличии на:</div>
+                                        <div>${flavorLocations.join(', ')}</div>
+                                    </div>
+                                ` : ''}
+                            </div>
+                        `;
+                    }
                 }
             })()}
         </div>
@@ -2368,12 +2395,8 @@ function selectFlavor(flavor, index) {
                         ? `<img id="${flavorImgId}" src="${flavorImage}" alt="${flavorItem}" style="width: 100%; height: 100%; object-fit: cover; border-radius: 50%; display: block; ${!isFlavorInStock ? 'opacity: 0.5; filter: grayscale(100%);' : ''}" onerror="handleImageError('${flavorImgId}')">`
                         : getPackageIcon('#999999');
                     
-                    // Если вкус не в наличии, делаем его кликабельным для перехода на карточку
-                    const selectedCity = getCityFromLocation(selectedPickupLocation || currentLocation);
-                    const flavorLocations = !isFlavorInStock ? getLocationsWithFlavorStockByCity(product, flavorItem, selectedCity) : [];
-                    const onClickAction = !isFlavorInStock && flavorLocations.length > 0
-                        ? `showProduct(${product.id}, '${flavorItem.replace(/'/g, "\\'")}', null);`
-                        : `selectFlavor('${flavorItem.replace(/'/g, "\\'")}', ${originalIndex})`;
+                    // Всегда вызываем selectFlavor, даже если вкус не в наличии
+                    const onClickAction = `selectFlavor('${flavorItem.replace(/'/g, "\\'")}', ${originalIndex})`;
                     
                             return `
                             <div onclick="${onClickAction}" id="flavor-${originalIndex}" 
@@ -2394,6 +2417,71 @@ function selectFlavor(flavor, index) {
                         </div>
                     `;
                 }).join('');
+            }
+        }
+    }
+    
+    // Обновляем кнопку "В корзину" в зависимости от наличия выбранного вкуса
+    if (pageContent && viewingProduct) {
+        const product = products.find(p => p.id === viewingProduct.id);
+        if (product) {
+            const selectedFlavor = viewingProduct.selectedFlavor;
+            let isInStock = false;
+            let locationsWithStock = [];
+            
+            if (selectedFlavor) {
+                isInStock = deliveryType === 'selfPickup' && selectedPickupLocation
+                    ? isFlavorInStockAtLocation(product, selectedFlavor, selectedPickupLocation)
+                    : (product.inStock !== false && (product.quantity === undefined || product.quantity > 0));
+                
+                if (!isInStock) {
+                    const selectedCity = getCityFromLocation(selectedPickupLocation || currentLocation);
+                    locationsWithStock = getLocationsWithFlavorStockByCity(product, selectedFlavor, selectedCity);
+                }
+            } else {
+                isInStock = deliveryType === 'selfPickup' && selectedPickupLocation
+                    ? isProductInStockAtLocation(product, selectedPickupLocation)
+                    : (product.inStock !== false && (product.quantity === undefined || product.quantity > 0));
+                
+                if (!isInStock) {
+                    locationsWithStock = getLocationsWithStock(product);
+                }
+            }
+            
+            // Ищем кнопку "В корзину" или disabled кнопку
+            const addToCartButton = pageContent.querySelector('button[onclick*="addToCart"]');
+            const disabledButton = pageContent.querySelector('button[disabled]');
+            const buttonContainer = addToCartButton?.parentElement || disabledButton?.parentElement;
+            
+            if (buttonContainer) {
+                if (!isInStock) {
+                    // Заменяем кнопку на disabled
+                    const locationsHtml = locationsWithStock.length > 0 ? `
+                        <div style="margin-top: 12px; padding: 12px; background: #f5f5f5; border-radius: 12px; font-size: 13px; color: #666; line-height: 1.5;">
+                            <div style="font-weight: 600; margin-bottom: 4px; color: #333;">Есть в наличии на:</div>
+                            <div>${locationsWithStock.join(', ')}</div>
+                        </div>
+                    ` : '';
+                    buttonContainer.innerHTML = `
+                        <button disabled style="width: 100%; padding: 16px; 
+                            background: #cccccc; color: white; border: none; border-radius: 12px; 
+                            font-size: 16px; font-weight: 600; cursor: not-allowed; opacity: 0.6;">
+                            Нет в наличии
+                        </button>
+                        ${locationsHtml}
+                    `;
+                } else {
+                    // Восстанавливаем кнопку если товар в наличии
+                    if (disabledButton || !addToCartButton) {
+                        buttonContainer.innerHTML = `
+                            <button onclick="addToCart(${product.id})" style="width: 100%; padding: 16px; 
+                                background: #007AFF; color: white; border: none; border-radius: 12px; 
+                                font-size: 16px; font-weight: 600; cursor: pointer; margin-top: 20px;">
+                                В корзину
+                            </button>
+                        `;
+                    }
+                }
             }
         }
     }
@@ -2549,20 +2637,6 @@ function showFlavorModal() {
             e.preventDefault();
             e.stopPropagation();
             e.stopImmediatePropagation();
-            
-            // Если вкус не в наличии и есть адреса где он есть, открываем карточку товара
-            if (!isFlavorInStock && flavorLocations.length > 0) {
-                document.body.style.overflow = '';
-                modal.remove();
-                showProduct(viewingProduct.id, flavor, null);
-                if (tg && tg.HapticFeedback) {
-                    tg.HapticFeedback.notificationOccurred('success');
-                }
-                setTimeout(() => {
-                    isProcessing = false;
-                }, 500);
-                return false;
-            }
             
             // Сохраняем выбранный индекс (оригинальный индекс в массиве)
             viewingProduct.selectedFlavorIndex = originalIndex;
@@ -2801,18 +2875,6 @@ function addToCart(productId, strength = null, flavor = null) {
     const product = products.find(p => p.id === productId);
     if (!product) return;
     
-    // Проверяем наличие товара на выбранной точке самовывоза
-    const isInStock = deliveryType === 'selfPickup' && selectedPickupLocation
-        ? isProductInStockAtLocation(product, selectedPickupLocation)
-        : (product.inStock !== false && (product.quantity === undefined || product.quantity > 0));
-    if (!isInStock) {
-        showToast('Товар временно недоступен', 'error', 3000);
-        return;
-    }
-    
-    // Устанавливаем флаг блокировки
-    isAddingToCart = true;
-    
     // Используем выбранные пользователем значения из viewingProduct, если они есть
     let selectedStrength = strength;
     let selectedFlavor = flavor;
@@ -2826,6 +2888,31 @@ function addToCart(productId, strength = null, flavor = null) {
             selectedFlavor = viewingProduct.selectedFlavor;
         }
     }
+    
+    // Проверяем наличие товара или конкретного вкуса на выбранной точке самовывоза
+    let isInStock = false;
+    if (selectedFlavor) {
+        // Проверяем наличие конкретного вкуса
+        isInStock = deliveryType === 'selfPickup' && selectedPickupLocation
+            ? isFlavorInStockAtLocation(product, selectedFlavor, selectedPickupLocation)
+            : (product.inStock !== false && (product.quantity === undefined || product.quantity > 0));
+    } else {
+        // Проверяем общее наличие товара
+        isInStock = deliveryType === 'selfPickup' && selectedPickupLocation
+            ? isProductInStockAtLocation(product, selectedPickupLocation)
+            : (product.inStock !== false && (product.quantity === undefined || product.quantity > 0));
+    }
+    
+    if (!isInStock) {
+        const message = selectedFlavor 
+            ? `Вкус "${selectedFlavor}" временно недоступен` 
+            : 'Товар временно недоступен';
+        showToast(message, 'error', 3000);
+        return;
+    }
+    
+    // Устанавливаем флаг блокировки
+    isAddingToCart = true;
     
     // Если все еще нет выбранных значений, используем первые из массивов
     if (!selectedStrength && product.strengths && product.strengths.length > 0) {
@@ -9547,10 +9634,10 @@ window.getReferralLink = function() {
     const user = tg && tg.initDataUnsafe ? tg.initDataUnsafe.user : null;
     const userId = user?.id || 'user';
     
-    // Формируем ссылку в формате: https://t.me/BOT_USERNAME/app?startapp=REF_CODE
+    // Формируем ссылку в формате: https://t.me/BOT_USERNAME/belvapeshop?startapp=REF_CODE
     // Это откроет модальное окно с мини-приложением, как в примере
-    const botUsername = BOT_USERNAME || 'vapeappbot'; // Используем константу или fallback
-    return `https://t.me/${botUsername}/app?startapp=USER_${userId}`;
+    const botUsername = BOT_USERNAME || 'VapeBelShop_bot'; // Используем константу или fallback
+    return `https://t.me/${botUsername}/belvapeshop?startapp=USER_${userId}`;
 }
 
 // Копировать реферальную ссылку
@@ -10806,9 +10893,9 @@ window.shareProduct = function(productId) {
     if (!product) return;
     
     // Формируем ссылку на товар в формате Telegram Mini App
-    // Формат: https://t.me/BOT_USERNAME/app?startapp=PRODUCT_123
-    const botUsername = BOT_USERNAME || 'tessstertt_bot';
-    const productUrl = `https://t.me/${botUsername}/app?startapp=PRODUCT_${productId}`;
+    // Формат: https://t.me/BOT_USERNAME/belvapeshop?startapp=PRODUCT_123
+    const botUsername = BOT_USERNAME || 'VapeBelShop_bot';
+    const productUrl = `https://t.me/${botUsername}/belvapeshop?startapp=PRODUCT_${productId}`;
     
     // Формируем текст для пересылки
     const shareText = `Смотри, какой товар я нашел: ${product.name} - ${product.price.toFixed(2)} BYN\n\n${productUrl}`;
@@ -10867,21 +10954,34 @@ function addToCartFromFavorites(productId, flavor = null, strength = null) {
         return;
     }
     
-    const isInStock = product.inStock !== false && (product.quantity === undefined || product.quantity > 0);
-    if (!isInStock) {
-        showToast('Товара нет в наличии', 'error', 2000);
-        return;
-    }
-    
     // Преобразуем строки в null если они пустые
     const flavorValue = (flavor && flavor !== '' && flavor !== 'null') ? flavor : null;
     const strengthValue = (strength && strength !== '' && strength !== 'null') ? strength : null;
     
-    // Вызываем обычную функцию addToCart
-    addToCart(productId, strengthValue, flavorValue);
+    // Проверяем наличие товара или конкретного вкуса на выбранной точке самовывоза
+    let isInStock = false;
+    if (flavorValue) {
+        // Проверяем наличие конкретного вкуса
+        isInStock = deliveryType === 'selfPickup' && selectedPickupLocation
+            ? isFlavorInStockAtLocation(product, flavorValue, selectedPickupLocation)
+            : (product.inStock !== false && (product.quantity === undefined || product.quantity > 0));
+    } else {
+        // Проверяем общее наличие товара
+        isInStock = deliveryType === 'selfPickup' && selectedPickupLocation
+            ? isProductInStockAtLocation(product, selectedPickupLocation)
+            : (product.inStock !== false && (product.quantity === undefined || product.quantity > 0));
+    }
     
-    // Показываем уведомление
-    showToast('Товар добавлен в корзину', 'success', 2000);
+    if (!isInStock) {
+        const message = flavorValue 
+            ? `Вкус "${flavorValue}" временно недоступен` 
+            : 'Товара нет в наличии';
+        showToast(message, 'error', 2000);
+        return;
+    }
+    
+    // Вызываем обычную функцию addToCart (она сама проверит наличие еще раз)
+    addToCart(productId, strengthValue, flavorValue);
     
     // Тактильная обратная связь
     if (tg && tg.HapticFeedback) {
