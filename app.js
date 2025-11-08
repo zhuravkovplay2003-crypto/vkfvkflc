@@ -1760,16 +1760,29 @@ function displayProducts(productsToShow = null) {
         }
     }
     
-    // Сортировка
-    if (sortOrder) {
-        filtered = [...filtered].sort((a, b) => {
+    // Сортировка по наличию - сначала товары в наличии, потом не в наличии
+    filtered = [...filtered].sort((a, b) => {
+        const aInStock = deliveryType === 'selfPickup' && selectedPickupLocation
+            ? isProductInStockAtLocation(a, selectedPickupLocation)
+            : (a.inStock !== false && (a.quantity === undefined || a.quantity > 0));
+        const bInStock = deliveryType === 'selfPickup' && selectedPickupLocation
+            ? isProductInStockAtLocation(b, selectedPickupLocation)
+            : (b.inStock !== false && (b.quantity === undefined || b.quantity > 0));
+        
+        // Сначала товары в наличии (true идет перед false)
+        if (aInStock !== bInStock) {
+            return bInStock ? 1 : -1;
+        }
+        
+        // Если оба в наличии или оба не в наличии, применяем обычную сортировку
+        if (sortOrder) {
             if (sortOrder === 'name_asc') return a.name.localeCompare(b.name);
             if (sortOrder === 'name_desc') return b.name.localeCompare(a.name);
             if (sortOrder === 'price_asc') return a.price - b.price;
             if (sortOrder === 'price_desc') return b.price - a.price;
-            return 0;
-        });
-    }
+        }
+        return 0;
+    });
     
     filtered.forEach(product => {
         const card = document.createElement('div');
@@ -1893,18 +1906,15 @@ function displayProducts(productsToShow = null) {
 
 // Показать товар
 function showProduct(productId, favoriteFlavor = null, favoriteStrength = null) {
-    // Блокируем открытие товара если точка самовывоза не выбрана
-    if (!selectedPickupLocation) {
-        showToast('Сначала выберите точку самовывоза', 'error', 3000);
-        selectPickupLocation();
-        return;
-    }
-    
     const product = products.find(p => p.id === productId);
     if (!product) return;
     
-    // Убираем блокировку открытия товара - всегда позволяем открыть карточку
-    // Информация о наличии будет показана на самой карточке
+    // Если точка не выбрана, показываем сообщение, но все равно открываем карточку
+    if (!selectedPickupLocation) {
+        showToast('Сначала выберите точку самовывоза', 'error', 3000);
+        selectPickupLocation();
+        // Не возвращаемся, продолжаем открытие карточки
+    }
     
     // Сохраняем позицию скролла, если мы на странице избранного
     if (currentPage === 'favorites') {
@@ -2090,19 +2100,33 @@ function showProduct(productId, favoriteFlavor = null, favoriteStrength = null) 
             `;
         } else {
             // Показываем все вкусы для выбора
-            const allFlavors = [...product.flavors];
+            let allFlavors = [...product.flavors];
             
-            // Убеждаемся что selectedFlavorIndex правильный
+            // Сортируем вкусы - сначала в наличии, потом не в наличии
+            allFlavors = allFlavors.sort((a, b) => {
+                const aInStock = deliveryType === 'selfPickup' && selectedPickupLocation
+                    ? isFlavorInStockAtLocation(product, a, selectedPickupLocation)
+                    : (product.inStock !== false && (product.quantity === undefined || product.quantity > 0));
+                const bInStock = deliveryType === 'selfPickup' && selectedPickupLocation
+                    ? isFlavorInStockAtLocation(product, b, selectedPickupLocation)
+                    : (product.inStock !== false && (product.quantity === undefined || product.quantity > 0));
+                
+                // Сначала вкусы в наличии (true идет перед false)
+                if (aInStock !== bInStock) {
+                    return bInStock ? 1 : -1;
+                }
+                return 0;
+            });
+            
+            // Убеждаемся что selectedFlavorIndex правильный после сортировки
             let currentSelectedIndex = viewingProduct.selectedFlavorIndex;
-            if (currentSelectedIndex === undefined || currentSelectedIndex < 0 || currentSelectedIndex >= allFlavors.length) {
-                if (viewingProduct.selectedFlavor) {
-                    currentSelectedIndex = allFlavors.indexOf(viewingProduct.selectedFlavor);
-                }
-                if (currentSelectedIndex < 0 || currentSelectedIndex >= allFlavors.length) {
-                    currentSelectedIndex = 0;
-                }
-                viewingProduct.selectedFlavorIndex = currentSelectedIndex;
+            if (viewingProduct.selectedFlavor) {
+                currentSelectedIndex = allFlavors.indexOf(viewingProduct.selectedFlavor);
             }
+            if (currentSelectedIndex < 0 || currentSelectedIndex >= allFlavors.length) {
+                currentSelectedIndex = 0;
+            }
+            viewingProduct.selectedFlavorIndex = currentSelectedIndex;
             const currentSelectedFlavor = viewingProduct.selectedFlavor || allFlavors[currentSelectedIndex];
             
             flavorOptions = `
@@ -2116,6 +2140,7 @@ function showProduct(productId, favoriteFlavor = null, favoriteStrength = null) 
                     </div>
                     <div style="display: flex; justify-content: flex-start; gap: 12px; overflow-x: auto; padding-bottom: 8px; -webkit-overflow-scrolling: touch;">
                         ${allFlavors.map((flavor, idx) => {
+                            // Используем оригинальный индекс из product.flavors для правильной работы
                             const originalIndex = product.flavors.indexOf(flavor);
                             // Используем строгое сравнение - проверяем что и индекс и вкус совпадают
                             const isSelected = (originalIndex === currentSelectedIndex) && (flavor === currentSelectedFlavor);
@@ -2475,7 +2500,23 @@ function selectFlavor(flavor, index) {
             }
             const selectedFlavor = viewingProduct.selectedFlavor || product.flavors[currentSelectedIndex];
             
-            const allFlavors = [...product.flavors];
+            let allFlavors = [...product.flavors];
+            
+            // Сортируем вкусы - сначала в наличии, потом не в наличии
+            allFlavors = allFlavors.sort((a, b) => {
+                const aInStock = deliveryType === 'selfPickup' && selectedPickupLocation
+                    ? isFlavorInStockAtLocation(product, a, selectedPickupLocation)
+                    : (product.inStock !== false && (product.quantity === undefined || product.quantity > 0));
+                const bInStock = deliveryType === 'selfPickup' && selectedPickupLocation
+                    ? isFlavorInStockAtLocation(product, b, selectedPickupLocation)
+                    : (product.inStock !== false && (product.quantity === undefined || product.quantity > 0));
+                
+                // Сначала вкусы в наличии (true идет перед false)
+                if (aInStock !== bInStock) {
+                    return bInStock ? 1 : -1;
+                }
+                return 0;
+            });
             
             // Ищем контейнер вкусов - может быть в разных местах
             const flavorsContainer = flavorSection.querySelector('div[style*="display: flex"]') || 
@@ -7800,6 +7841,44 @@ function showFavorites() {
         }, 10);
         return;
     }
+    
+    // Сортируем избранное - сначала товары в наличии, потом не в наличии
+    favoriteItems = favoriteItems.sort((a, b) => {
+        const aProductId = typeof a === 'number' || typeof a === 'string' ? a : a.productId;
+        const bProductId = typeof b === 'number' || typeof b === 'string' ? b : b.productId;
+        const aProduct = products.find(p => p.id == aProductId);
+        const bProduct = products.find(p => p.id == bProductId);
+        
+        if (!aProduct || !bProduct) return 0;
+        
+        const aFlavor = typeof a === 'object' ? a.flavor : null;
+        const bFlavor = typeof b === 'object' ? b.flavor : null;
+        
+        let aInStock = true;
+        let bInStock = true;
+        
+        if (deliveryType === 'selfPickup' && selectedPickupLocation) {
+            if (aFlavor) {
+                aInStock = isFlavorInStockAtLocation(aProduct, aFlavor, selectedPickupLocation);
+            } else {
+                aInStock = isProductInStockAtLocation(aProduct, selectedPickupLocation);
+            }
+            if (bFlavor) {
+                bInStock = isFlavorInStockAtLocation(bProduct, bFlavor, selectedPickupLocation);
+            } else {
+                bInStock = isProductInStockAtLocation(bProduct, selectedPickupLocation);
+            }
+        } else {
+            aInStock = aProduct.inStock !== false && (aProduct.quantity === undefined || aProduct.quantity > 0);
+            bInStock = bProduct.inStock !== false && (bProduct.quantity === undefined || bProduct.quantity > 0);
+        }
+        
+        // Сначала товары в наличии (true идет перед false)
+        if (aInStock !== bInStock) {
+            return bInStock ? 1 : -1;
+        }
+        return 0;
+    });
     
     // Создаем контейнер с сеткой 2 колонки
     container.innerHTML = `
