@@ -1476,9 +1476,13 @@ function showPage(page, skipHistory = false, resetCatalog = false) {
                 navRightContent.onclick = () => selectPickupLocation();
             }
         } else {
-            // Для других страниц показываем vapeshop с улучшенным стилем
-            navRightContent.innerHTML = '<span style="font-weight: 700; letter-spacing: 1px;">VAPESHOP</span>';
+            // Для других страниц показываем vapeshop с фиксированным размером
+            navRightContent.innerHTML = '<span style="font-weight: 700; letter-spacing: 1px; font-size: 14px;">VAPESHOP</span>';
             navRightContent.style.cursor = 'default';
+            navRightContent.style.minWidth = '120px';
+            navRightContent.style.maxWidth = '120px';
+            navRightContent.style.width = '120px';
+            navRightContent.style.flex = '0 0 120px';
             navRightContent.onclick = null;
         }
     }
@@ -2821,7 +2825,8 @@ function showFlavorModal() {
     modalContent.appendChild(header);
     
     const grid = document.createElement('div');
-    grid.style.cssText = 'display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px;';
+    grid.style.cssText = 'display: flex; flex-direction: column; gap: 12px; max-height: 60vh; overflow-y: auto; scrollbar-width: none; -ms-overflow-style: none;';
+    grid.className = 'flavors-modal-container';
     
     // Сохраняем выбранный вкус если есть
     let selectedFlavorIndex = viewingProduct.selectedFlavorIndex !== undefined ? viewingProduct.selectedFlavorIndex : 0;
@@ -2850,7 +2855,7 @@ function showFlavorModal() {
         const flavorCard = document.createElement('div');
         const borderColor = isInitiallySelected ? '#007AFF' : (!isFlavorInStock ? '#999' : '#e5e5e5');
         const bgColor = isInitiallySelected ? '#007AFF' : (!isFlavorInStock ? '#f5f5f5' : '#ffffff');
-        flavorCard.style.cssText = 'padding: 16px; border: 2px solid ' + borderColor + '; border-radius: 12px; background: ' + bgColor + '; cursor: pointer; text-align: center; touch-action: manipulation; user-select: none; -webkit-user-select: none; position: relative; overflow: visible; ' + (!isFlavorInStock ? 'opacity: 0.7;' : '');
+        flavorCard.style.cssText = 'padding: 16px; border: 2px solid ' + borderColor + '; border-radius: 12px; background: ' + bgColor + '; cursor: pointer; text-align: center; touch-action: manipulation; user-select: none; -webkit-user-select: none; position: relative; overflow: hidden; display: flex; flex-direction: column; align-items: center; ' + (!isFlavorInStock ? 'opacity: 0.7;' : '');
         
         const iconDiv = document.createElement('div');
         iconDiv.style.cssText = 'width: 60px; height: 60px; border-radius: 50%; background: ' + (!isFlavorInStock ? '#e0e0e0' : '#f0f0f0') + '; margin: 0 auto 8px; display: flex; align-items: center; justify-content: center; position: relative; overflow: hidden;';
@@ -2877,8 +2882,9 @@ function showFlavorModal() {
         
         const textDiv = document.createElement('div');
         const textColor = isInitiallySelected ? '#ffffff' : (!isFlavorInStock ? '#999' : '#000');
-        textDiv.style.cssText = 'font-size: 14px; font-weight: 500; color: ' + textColor + '; min-height: 20px; display: block; white-space: normal; word-wrap: break-word; position: relative; z-index: 100; visibility: visible; opacity: 1; background: transparent; pointer-events: none; padding: 4px 0;';
+        textDiv.style.cssText = 'font-size: 14px; font-weight: 500; color: ' + textColor + '; min-height: 20px; display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; position: relative; z-index: 100; visibility: visible; opacity: 1; background: transparent; pointer-events: none; padding: 4px 0; max-width: 100%;';
         textDiv.textContent = flavor;
+        textDiv.title = flavor; // Показываем полный текст при наведении
         
         // Добавляем текст "Нет в наличии" если вкус не в наличии
         if (!isFlavorInStock) {
@@ -3731,31 +3737,12 @@ function selectPickupLocation() {
                     displayProducts();
                 }
                 
-                // Если мы на странице корзины, проверяем наличие товаров и обновляем отображение
+                // Если мы на странице корзины, полностью перерисовываем корзину
                 if (currentPage === 'cart') {
-                    const locDisplay = document.getElementById('selected-pickup-location-display');
-                    if (locDisplay) {
-                        locDisplay.textContent = selectedPickupLocation;
-                    }
-                    // Проверяем наличие товаров на новой точке
-                    const savedCart = localStorage.getItem('cart');
-                    if (savedCart) {
-                        try {
-                            const cartItems = JSON.parse(savedCart);
-                            const unavailableItems = cartItems.filter(item => {
-                                const product = products.find(p => p.id === item.id);
-                                if (!product) return false;
-                                return !isProductInStockAtLocation(product, selectedPickupLocation);
-                            });
-                            if (unavailableItems.length > 0) {
-                                showToast(`На выбранной точке нет в наличии: ${unavailableItems.map(i => i.name).join(', ')}`, 'error', 5000);
-                            }
-                            // Обновляем корзину для отображения актуального состояния
-                            updateCartItemsDisplay();
-                        } catch (e) {
-                            console.error('Error checking cart items:', e);
-                        }
-                    }
+                    // Полностью перерисовываем корзину чтобы обновить все состояния
+                    setTimeout(() => {
+                        showCart();
+                    }, 100);
                 }
                 
                 // Плавно закрываем модальное окно
@@ -7980,43 +7967,43 @@ function showFavorites() {
         return;
     }
     
-    // Сортируем избранное - сначала товары в наличии, потом не в наличии
-    favoriteItems = favoriteItems.sort((a, b) => {
-        const aProductId = typeof a === 'number' || typeof a === 'string' ? a : a.productId;
-        const bProductId = typeof b === 'number' || typeof b === 'string' ? b : b.productId;
-        const aProduct = products.find(p => p.id == aProductId);
-        const bProduct = products.find(p => p.id == bProductId);
-        
-        if (!aProduct || !bProduct) return 0;
-        
-        const aFlavor = typeof a === 'object' ? a.flavor : null;
-        const bFlavor = typeof b === 'object' ? b.flavor : null;
-        
-        let aInStock = true;
-        let bInStock = true;
-        
-        if (deliveryType === 'selfPickup' && selectedPickupLocation) {
-            if (aFlavor) {
-                aInStock = isFlavorInStockAtLocation(aProduct, aFlavor, selectedPickupLocation);
-            } else {
-                aInStock = isProductInStockAtLocation(aProduct, selectedPickupLocation);
-            }
-            if (bFlavor) {
-                bInStock = isFlavorInStockAtLocation(bProduct, bFlavor, selectedPickupLocation);
-            } else {
-                bInStock = isProductInStockAtLocation(bProduct, selectedPickupLocation);
-            }
-        } else {
-            aInStock = aProduct.inStock !== false && (aProduct.quantity === undefined || aProduct.quantity > 0);
-            bInStock = bProduct.inStock !== false && (bProduct.quantity === undefined || bProduct.quantity > 0);
-        }
-        
-        // Сначала товары в наличии (true идет перед false)
-        if (aInStock !== bInStock) {
-            return bInStock ? 1 : -1;
-        }
-        return 0;
-    });
+    // НЕ сортируем избранное - сохраняем исходный порядок чтобы карточки не менялись местами
+    // favoriteItems = favoriteItems.sort((a, b) => {
+    //     const aProductId = typeof a === 'number' || typeof a === 'string' ? a : a.productId;
+    //     const bProductId = typeof b === 'number' || typeof b === 'string' ? b : b.productId;
+    //     const aProduct = products.find(p => p.id == aProductId);
+    //     const bProduct = products.find(p => p.id == bProductId);
+    //     
+    //     if (!aProduct || !bProduct) return 0;
+    //     
+    //     const aFlavor = typeof a === 'object' ? a.flavor : null;
+    //     const bFlavor = typeof b === 'object' ? b.flavor : null;
+    //     
+    //     let aInStock = true;
+    //     let bInStock = true;
+    //     
+    //     if (deliveryType === 'selfPickup' && selectedPickupLocation) {
+    //         if (aFlavor) {
+    //             aInStock = isFlavorInStockAtLocation(aProduct, aFlavor, selectedPickupLocation);
+    //         } else {
+    //             aInStock = isProductInStockAtLocation(aProduct, selectedPickupLocation);
+    //         }
+    //         if (bFlavor) {
+    //             bInStock = isFlavorInStockAtLocation(bProduct, bFlavor, selectedPickupLocation);
+    //         } else {
+    //             bInStock = isProductInStockAtLocation(bProduct, selectedPickupLocation);
+    //         }
+    //     } else {
+    //         aInStock = aProduct.inStock !== false && (aProduct.quantity === undefined || aProduct.quantity > 0);
+    //         bInStock = bProduct.inStock !== false && (bProduct.quantity === undefined || bProduct.quantity > 0);
+    //     }
+    //     
+    //     // Сначала товары в наличии (true идет перед false)
+    //     if (aInStock !== bInStock) {
+    //         return bInStock ? 1 : -1;
+    //     }
+    //     return 0;
+    // });
     
     // Создаем контейнер с сеткой 2 колонки
     container.innerHTML = `
