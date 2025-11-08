@@ -109,6 +109,109 @@
             100% { transform: rotate(360deg); }
         }
 
+        /* Проверка мобильного устройства */
+        .mobile-only-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(248, 249, 250, 0.98);
+            backdrop-filter: blur(8px);
+            display: none;
+            align-items: center;
+            justify-content: center;
+            z-index: 999999;
+            pointer-events: auto;
+        }
+        
+        .mobile-only-overlay.show {
+            display: flex;
+            animation: fadeIn 0.3s ease;
+        }
+        
+        .mobile-only-modal {
+            background: #ffffff;
+            padding: 40px 30px;
+            border-radius: 20px;
+            text-align: center;
+            max-width: 400px;
+            width: 90%;
+            box-shadow: 0 8px 32px rgba(0,0,0,0.12);
+            border: 1px solid #e5e5e5;
+            position: relative;
+            z-index: 1000000;
+            pointer-events: auto;
+            animation: slideUp 0.4s ease;
+        }
+        
+        .mobile-only-icon {
+            width: 80px;
+            height: 80px;
+            background: linear-gradient(135deg, #E1BEE7 0%, #CE93D8 100%);
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin: 0 auto 24px;
+        }
+        
+        .mobile-only-icon svg {
+            width: 48px;
+            height: 48px;
+            fill: #9C27B0;
+        }
+        
+        .mobile-only-title {
+            font-size: 24px;
+            font-weight: 700;
+            color: #333333;
+            margin-bottom: 16px;
+        }
+        
+        .mobile-only-text {
+            font-size: 16px;
+            color: #666666;
+            line-height: 1.6;
+            margin-bottom: 8px;
+        }
+        
+        .mobile-only-hint {
+            font-size: 14px;
+            color: #999999;
+            line-height: 1.5;
+            margin-top: 16px;
+        }
+        
+        .mobile-only-footer {
+            display: flex;
+            align-items: center;
+            justify-content: flex-start;
+            gap: 8px;
+            margin-top: 24px;
+            padding-top: 20px;
+            border-top: 1px solid #e5e5e5;
+        }
+        
+        .mobile-only-footer-icon {
+            width: 20px;
+            height: 20px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        
+        .mobile-only-footer-icon svg {
+            width: 20px;
+            height: 20px;
+            fill: #666666;
+        }
+        
+        .mobile-only-footer-text {
+            font-size: 14px;
+            color: #666666;
+        }
+        
         /* Проверка возраста */
         .age-verification {
             position: fixed;
@@ -650,6 +753,28 @@
     </style>
 </head>
 <body>
+    <!-- Проверка мобильного устройства -->
+    <div id="mobile-only-overlay" class="mobile-only-overlay">
+        <div class="mobile-only-modal">
+            <div class="mobile-only-icon">
+                <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                    <path d="M17 1.01L7 1c-1.1 0-2 .9-2 2v18c0 1.1.9 2 2 2h10c1.1 0 2-.9 2-2V3c0-1.1-.9-1.99-2-1.99zM17 19H7V5h10v14z"/>
+                </svg>
+            </div>
+            <div class="mobile-only-title">Только для мобильных</div>
+            <div class="mobile-only-text">Пожалуйста, откройте приложение с вашего мобильного телефона для продолжения.</div>
+            <div class="mobile-only-hint">Это приложение оптимизировано для мобильных устройств и недоступно на компьютерах.</div>
+            <div class="mobile-only-footer">
+                <div class="mobile-only-footer-icon">
+                    <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                        <path d="M17 1.01L7 1c-1.1 0-2 .9-2 2v18c0 1.1.9 2 2 2h10c1.1 0 2-.9 2-2V3c0-1.1-.9-1.99-2-1.99zM17 19H7V5h10v14z"/>
+                    </svg>
+                </div>
+                <div class="mobile-only-footer-text">Используйте смартфон или планшет</div>
+            </div>
+        </div>
+    </div>
+    
     <!-- Splash экран -->
     <div id="splash-screen" class="splash-screen">
         <div class="splash-content">
