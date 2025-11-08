@@ -2765,16 +2765,22 @@ function selectFlavor(flavor, index) {
     // Сохраняем выбранный вкус
     const product = products.find(p => p.id === viewingProduct.id);
     if (product && product.flavors) {
-        // Убеждаемся что индекс правильный
+        // Убеждаемся что индекс правильный, но НЕ сбрасываем на 0 если вкус недоступен
         let correctIndex = index;
         if (correctIndex === undefined || correctIndex < 0 || correctIndex >= product.flavors.length) {
             correctIndex = product.flavors.indexOf(flavor);
         }
-        if (correctIndex < 0 || correctIndex >= product.flavors.length) {
-            correctIndex = 0;
+        // ВАЖНО: НЕ сбрасываем индекс на 0, даже если вкус недоступен - сохраняем выбранный вкус
+        if (correctIndex < 0) {
+            // Если вкус не найден в массиве, пытаемся найти по имени
+            correctIndex = product.flavors.indexOf(flavor);
+            if (correctIndex < 0) {
+                // Если все равно не найден, используем переданный индекс или 0
+                correctIndex = index !== undefined && index >= 0 ? index : 0;
+            }
         }
         viewingProduct.selectedFlavorIndex = correctIndex;
-    viewingProduct.selectedFlavor = flavor;
+        viewingProduct.selectedFlavor = flavor;
     } else {
         viewingProduct.selectedFlavorIndex = index !== undefined ? index : 0;
         viewingProduct.selectedFlavor = flavor;
@@ -2784,8 +2790,16 @@ function selectFlavor(flavor, index) {
     // Это гарантирует, что фото и информация загружаются даже для недоступных вкусов
     const container = document.getElementById('page-content');
     if (container && currentPage === 'product') {
+        // Сохраняем позицию скролла перед перерисовкой для плавности
+        const scrollPosition = container.scrollTop;
+        
         // Перерисовываем всю карточку товара с новым выбранным вкусом
         renderProductContent(container, product, null, null);
+        
+        // Восстанавливаем позицию скролла сразу после перерисовки
+        requestAnimationFrame(() => {
+            container.scrollTop = scrollPosition;
+        });
         
         // Обновляем визуальное состояние выбранного вкуса после перерисовки
         setTimeout(() => {
@@ -2794,45 +2808,62 @@ function selectFlavor(flavor, index) {
                 const flavorsContainer = flavorSection.querySelector('.flavors-scroll-container') || 
                                          flavorSection.querySelector('div[style*="overflow-x: auto"]');
                 if (flavorsContainer) {
-                    // Убираем выделение со всех
+                    // Плавно убираем выделение со всех
                     flavorsContainer.querySelectorAll('[id^="flavor-"]').forEach(flavorEl => {
                         const circleDiv = flavorEl.querySelector('div[style*="border-radius: 50%"]');
                         const textDiv = flavorEl.querySelector('div[style*="font-size: 12px"]');
                         if (circleDiv) {
-                            circleDiv.style.border = '2px solid #e5e5e5';
-                            circleDiv.style.boxShadow = '0 1px 3px rgba(0,0,0,0.1)';
-                            // Удаляем галочку
+                            // Плавный переход для границы
+                            circleDiv.style.transition = 'border 0.2s ease, box-shadow 0.2s ease';
+                            const currentBorder = window.getComputedStyle(circleDiv).border;
+                            if (currentBorder.includes('3px') || currentBorder.includes('#007AFF')) {
+                                circleDiv.style.border = '2px solid #e5e5e5';
+                                circleDiv.style.boxShadow = '0 1px 3px rgba(0,0,0,0.1)';
+                            }
+                            // Плавно удаляем галочку
                             const checkmark = circleDiv.querySelector('div[style*="background: #007AFF"]');
-                            if (checkmark) checkmark.remove();
+                            if (checkmark) {
+                                checkmark.style.transition = 'opacity 0.2s ease, transform 0.2s ease';
+                                checkmark.style.opacity = '0';
+                                checkmark.style.transform = 'translate(-50%, -50%) scale(0.8)';
+                                setTimeout(() => checkmark.remove(), 200);
+                            }
                         }
                         if (textDiv) {
+                            textDiv.style.transition = 'color 0.2s ease, font-weight 0.2s ease';
                             const currentColor = window.getComputedStyle(textDiv).color;
-                            if (!currentColor.includes('rgb(0, 122, 255)') && !currentColor.includes('#007AFF')) {
-                                textDiv.style.color = '';
-                            } else {
+                            if (currentColor.includes('rgb(0, 122, 255)') || currentColor.includes('#007AFF')) {
                                 textDiv.style.color = '#000';
                             }
                             textDiv.style.fontWeight = '400';
                         }
                     });
                     
-                    // Добавляем выделение к выбранному
+                    // Плавно добавляем выделение к выбранному (даже если недоступен)
                     const selectedFlavorEl = document.getElementById(`flavor-${viewingProduct.selectedFlavorIndex}`);
                     if (selectedFlavorEl) {
                         const circleDiv = selectedFlavorEl.querySelector('div[style*="border-radius: 50%"]');
                         const textDiv = selectedFlavorEl.querySelector('div[style*="font-size: 12px"]');
                         if (circleDiv) {
+                            // Плавный переход для границы
+                            circleDiv.style.transition = 'border 0.2s ease, box-shadow 0.2s ease';
                             circleDiv.style.border = '3px solid #007AFF';
                             circleDiv.style.boxShadow = '0 2px 8px rgba(0,122,255,0.3)';
-                            // Добавляем галочку
+                            // Плавно добавляем галочку
                             if (!circleDiv.querySelector('div[style*="background: #007AFF"]')) {
                                 const checkmark = document.createElement('div');
-                                checkmark.style.cssText = 'position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 24px; height: 24px; background: #007AFF; border-radius: 50%; display: flex; align-items: center; justify-content: center; z-index: 10; box-shadow: 0 2px 4px rgba(0,0,0,0.2);';
+                                checkmark.style.cssText = 'position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%) scale(0.8); width: 24px; height: 24px; background: #007AFF; border-radius: 50%; display: flex; align-items: center; justify-content: center; z-index: 10; box-shadow: 0 2px 4px rgba(0,0,0,0.2); opacity: 0; transition: opacity 0.2s ease, transform 0.2s ease;';
                                 checkmark.innerHTML = '<span style="color: white; font-size: 14px; font-weight: bold; line-height: 1;">✓</span>';
                                 circleDiv.appendChild(checkmark);
+                                // Плавное появление
+                                requestAnimationFrame(() => {
+                                    checkmark.style.opacity = '1';
+                                    checkmark.style.transform = 'translate(-50%, -50%) scale(1)';
+                                });
                             }
                         }
                         if (textDiv) {
+                            textDiv.style.transition = 'color 0.2s ease, font-weight 0.2s ease';
                             textDiv.style.color = '#007AFF';
                             textDiv.style.fontWeight = '600';
                         }
@@ -3251,41 +3282,58 @@ function showFlavorModal() {
             viewingProduct.selectedFlavorIndex = originalIndex;
             viewingProduct.selectedFlavor = flavor;
             
-            // Обновляем визуальное состояние в модальном окне - выделяем выбранный вкус
+            // Плавно обновляем визуальное состояние в модальном окне - выделяем выбранный вкус
             grid.querySelectorAll('div[style*="border-radius: 12px"]').forEach(card => {
                 const cardBorder = card.style.border || window.getComputedStyle(card).border;
                 if (cardBorder.includes('#007AFF')) {
+                    card.style.transition = 'border 0.2s ease, background 0.2s ease';
                     card.style.border = '2px solid #e5e5e5';
                     card.style.background = '#ffffff';
                     const textDiv = card.querySelector('div[style*="font-size: 13px"]');
                     if (textDiv) {
+                        textDiv.style.transition = 'color 0.2s ease';
                         textDiv.style.color = '#000';
                     }
                 }
             });
-            // Выделяем выбранный вкус
+            // Плавно выделяем выбранный вкус (даже если недоступен)
+            flavorCard.style.transition = 'border 0.2s ease, background 0.2s ease';
             flavorCard.style.border = '2px solid #007AFF';
             flavorCard.style.background = '#007AFF';
             const selectedTextDiv = flavorCard.querySelector('div[style*="font-size: 13px"]');
             if (selectedTextDiv) {
+                selectedTextDiv.style.transition = 'color 0.2s ease';
                 selectedTextDiv.style.color = '#ffffff';
             }
             
-            // Применяем выбранный вкус и закрываем окно
+            // Применяем выбранный вкус и закрываем окно с плавной анимацией
             selectFlavor(flavor, originalIndex);
-            document.body.style.overflow = '';
-            modal.remove();
             
-            // Скроллим к выбранному вкусу в списке на странице товара
+            // Плавно закрываем модальное окно
+            const modalContent = modal.querySelector('.modal-content');
+            if (modalContent) {
+                modal.style.transition = 'opacity 0.2s ease';
+                modal.style.opacity = '0';
+                modalContent.style.transition = 'transform 0.2s ease, opacity 0.2s ease';
+                modalContent.style.transform = 'scale(0.95)';
+                modalContent.style.opacity = '0';
+            }
+            
             setTimeout(() => {
-                const flavorSection = document.querySelector('[onclick="showFlavorModal()"]')?.closest('div[style*="margin: 20px 0"]');
-                if (flavorSection) {
-                    const flavorElement = document.getElementById(`flavor-${originalIndex}`);
-                    if (flavorElement) {
-                        flavorElement.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' });
+                document.body.style.overflow = '';
+                modal.remove();
+                
+                // Плавно скроллим к выбранному вкусу в списке на странице товара
+                requestAnimationFrame(() => {
+                    const flavorSection = document.querySelector('[onclick="showFlavorModal()"]')?.closest('div[style*="margin: 20px 0"]');
+                    if (flavorSection) {
+                        const flavorElement = document.getElementById(`flavor-${originalIndex}`);
+                        if (flavorElement) {
+                            flavorElement.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' });
+                        }
                     }
-                }
-            }, 100);
+                });
+            }, 200);
             
             if (tg && tg.HapticFeedback) {
                 tg.HapticFeedback.notificationOccurred('success');
