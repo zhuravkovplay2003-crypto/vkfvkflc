@@ -747,11 +747,13 @@
         <!-- Навигация -->
         <div class="main-nav">
             <div class="nav-title" id="page-title">Ассортимент</div>
-            <div style="font-size: 16px; font-weight: 800; color: #ffffff; letter-spacing: 2px; 
-                text-transform: uppercase; background: linear-gradient(135deg, rgba(255,255,255,0.25) 0%, rgba(255,255,255,0.15) 100%); 
-                padding: 6px 14px; border-radius: 20px; border: 1px solid rgba(255,255,255,0.3); 
-                backdrop-filter: blur(10px); box-shadow: 0 2px 8px rgba(0,0,0,0.1);">
-                vapeshop
+            <div id="nav-right-content" style="font-size: 14px; font-weight: 600; color: #ffffff; 
+                background: linear-gradient(135deg, rgba(255,255,255,0.25) 0%, rgba(255,255,255,0.15) 100%); 
+                padding: 6px 12px; border-radius: 20px; border: 1px solid rgba(255,255,255,0.3); 
+                backdrop-filter: blur(10px); box-shadow: 0 2px 8px rgba(0,0,0,0.1); cursor: pointer;
+                max-width: 150px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;"
+                onclick="if(currentPage === 'catalog') { selectPickupLocation(); }">
+                Выберите точку
             </div>
         </div>
         
@@ -834,37 +836,44 @@
     </div>
 
     <script>
-        // Проверка на мобильное устройство
-        function isMobileDevice() {
-            // Проверяем через Telegram WebApp API
-            if (window.Telegram && window.Telegram.WebApp) {
-                return true; // Если есть Telegram WebApp, значит это мобильное устройство
+        // Проверка на мобильное устройство - выполняется СРАЗУ, до загрузки контента
+        (function() {
+            function isMobileDevice() {
+                // Проверяем через Telegram WebApp API (самый надежный способ)
+                if (window.Telegram && window.Telegram.WebApp) {
+                    return true;
+                }
+                
+                // Проверяем через User Agent
+                const userAgent = navigator.userAgent || navigator.vendor || window.opera || '';
+                const mobileRegex = /android|webos|iphone|ipad|ipod|blackberry|iemobile|opera mini|mobile/i;
+                return mobileRegex.test(userAgent.toLowerCase());
             }
             
-            // Проверяем через User Agent
-            const userAgent = navigator.userAgent || navigator.vendor || window.opera;
-            const mobileRegex = /android|webos|iphone|ipad|ipod|blackberry|iemobile|opera mini/i;
-            return mobileRegex.test(userAgent.toLowerCase());
-        }
-        
-        // Проверяем размер экрана
-        function isMobileScreen() {
-            return window.innerWidth <= 768 || window.innerHeight <= 600;
-        }
-        
-        // Показываем сообщение для десктопа
-        function checkDevice() {
+            // Проверяем размер экрана
+            function isMobileScreen() {
+                return window.innerWidth <= 768 || window.innerHeight <= 600;
+            }
+            
+            // Проверяем СРАЗУ при загрузке скрипта
             const desktopMessage = document.getElementById('desktop-message');
             const mainContent = document.getElementById('main-content');
+            const splashScreen = document.querySelector('.splash-screen');
             
+            // Если это НЕ мобильное устройство И НЕ мобильный экран
             if (!isMobileDevice() && !isMobileScreen()) {
-                // Это десктоп - показываем сообщение
+                // Это десктоп - показываем сообщение СРАЗУ
                 if (desktopMessage) {
                     desktopMessage.classList.add('show');
                 }
                 if (mainContent) {
                     mainContent.style.display = 'none';
                 }
+                if (splashScreen) {
+                    splashScreen.style.display = 'none';
+                }
+                // Блокируем дальнейшую загрузку приложения
+                return;
             } else {
                 // Это мобильное устройство - скрываем сообщение
                 if (desktopMessage) {
@@ -874,13 +883,26 @@
                     mainContent.style.display = 'block';
                 }
             }
-        }
-        
-        // Проверяем при загрузке
-        window.addEventListener('DOMContentLoaded', checkDevice);
-        
-        // Проверяем при изменении размера окна
-        window.addEventListener('resize', checkDevice);
+            
+            // Также проверяем при изменении размера окна
+            window.addEventListener('resize', function() {
+                if (!isMobileDevice() && !isMobileScreen()) {
+                    if (desktopMessage) {
+                        desktopMessage.classList.add('show');
+                    }
+                    if (mainContent) {
+                        mainContent.style.display = 'none';
+                    }
+                } else {
+                    if (desktopMessage) {
+                        desktopMessage.classList.remove('show');
+                    }
+                    if (mainContent) {
+                        mainContent.style.display = 'block';
+                    }
+                }
+            });
+        })();
     </script>
     
     <script src="app.js"></script>
