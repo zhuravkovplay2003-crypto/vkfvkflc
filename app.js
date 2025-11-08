@@ -2615,6 +2615,9 @@ function renderProductContent(container, product, favoriteFlavor, favoriteStreng
     container.style.display = 'block';
     container.style.visibility = 'visible';
     
+    // ВАЖНО: Сохраняем позицию скролла перед перерисовкой, чтобы не было сброса в начало
+    const scrollPosition = container.scrollTop || 0;
+    
     // Проверяем наличие товара для определения стилей
     // ВАЖНО: Проверяем наличие ПОСЛЕ того как selectedFlavor установлен в viewingProduct
     let isProductInStock = false;
@@ -2776,6 +2779,12 @@ function renderProductContent(container, product, favoriteFlavor, favoriteStreng
             container.style.transition = 'opacity 0.4s ease, transform 0.4s ease';
             container.style.opacity = '1';
             container.style.transform = 'translateY(0)';
+            // Восстанавливаем позицию скролла после перерисовки
+            container.scrollTop = scrollPosition;
+            // Дополнительная попытка восстановления через небольшую задержку для надежности
+            setTimeout(() => {
+                container.scrollTop = scrollPosition;
+            }, 50);
         });
     });
     
@@ -2916,14 +2925,30 @@ function selectFlavor(flavor, index) {
             : (product.inStock !== false && (product.quantity === undefined || product.quantity > 0));
         
         // Если вкус недоступен, перерисовываем всю карточку для гарантии отображения всей информации
-        // ВАЖНО: Сохраняем позицию скролла перед перерисовкой
+        // ВАЖНО: Сохраняем позицию скролла перед перерисовкой и восстанавливаем после
         if (!isProductInStock) {
             const scrollPosition = container.scrollTop || 0;
-            renderProductContent(container, viewingProduct, null, null);
-            // Восстанавливаем позицию скролла после перерисовки
-            setTimeout(() => {
-                container.scrollTop = scrollPosition;
-            }, 50);
+            // Используем requestAnimationFrame для плавного обновления без дерганья
+            requestAnimationFrame(() => {
+                // Временно отключаем переходы для предотвращения дерганья
+                const originalTransition = container.style.transition;
+                container.style.transition = 'none';
+                
+                renderProductContent(container, viewingProduct, null, null);
+                
+                // Восстанавливаем переходы и позицию скролла
+                requestAnimationFrame(() => {
+                    container.style.transition = originalTransition;
+                    container.scrollTop = scrollPosition;
+                    // Дополнительные попытки восстановления для надежности
+                    setTimeout(() => {
+                        container.scrollTop = scrollPosition;
+                    }, 50);
+                    setTimeout(() => {
+                        container.scrollTop = scrollPosition;
+                    }, 150);
+                });
+            });
             return;
         }
         
@@ -4454,10 +4479,6 @@ function selectPickupLocation() {
                         renderProductContent(document.getElementById('page-content'), viewingProduct, null, null);
                     }
                     
-                    // Если мы на странице корзины, обновляем корзину
-                    if (currentPage === 'cart') {
-                        updateCartItemsDisplay();
-                    }
                 }
                 
                 // Обновляем отображение точки в шапке
@@ -4469,14 +4490,15 @@ function selectPickupLocation() {
                     displayProducts();
                 }
                 
-                // Если мы на странице корзины, полностью перерисовываем корзину
-                // Используем setTimeout чтобы убедиться что selectedPickupLocation обновился
+                // Если мы на странице корзины, обновляем корзину плавно
+                // Используем requestAnimationFrame для плавного обновления
                 if (currentPage === 'cart') {
                     // Сначала обновляем переменную из localStorage
                     selectedPickupLocation = fullLocation;
-                    setTimeout(() => {
+                    // Используем requestAnimationFrame для плавного обновления без дерганья
+                    requestAnimationFrame(() => {
                         updateCartItemsDisplay();
-                    }, 100);
+                    });
                 }
                 
                 // Плавно закрываем модальное окно
@@ -5970,9 +5992,15 @@ function showCart() {
     container.style.right = '';
     container.style.bottom = '';
     
-    // СБРАСЫВАЕМ ПРОКРУТКУ - прокручиваем в начало
-    window.scrollTo(0, 0);
-    container.scrollTop = 0;
+    // Сбрасываем прокрутку только при первом открытии корзины, не при обновлении
+    // Проверяем, была ли корзина уже открыта (есть ли содержимое в контейнере)
+    const wasCartOpen = container.innerHTML.trim() !== '' && container.querySelector('div[style*="border-radius: 16px"]');
+    if (!wasCartOpen) {
+        // Только при первом открытии корзины сбрасываем скролл
+        window.scrollTo(0, 0);
+        container.scrollTop = 0;
+    }
+    // При обновлении корзины сохраняем позицию скролла (уже сохранена выше в scrollPosition)
     
     // Начальное состояние для анимации
     container.style.opacity = '0';
@@ -6717,26 +6745,97 @@ function updateCartItemsDisplay() {
         deliveryType = savedDeliveryType;
     }
     
-    // Полностью перерисовываем корзину для правильного обновления всех элементов
-    // Используем setTimeout чтобы гарантировать что все переменные обновлены
-    setTimeout(() => {
-        // Принудительно очищаем контейнер перед перерисовкой для гарантии полного обновления
-        const container = document.getElementById('page-content');
-        if (container) {
-            // Сохраняем позицию скролла
-            const scrollPos = container.scrollTop;
-            container.innerHTML = '';
-            showCart();
-            // Восстанавливаем позицию скролла после небольшой задержки
-            setTimeout(() => {
-                if (container) {
-                    container.scrollTop = scrollPos;
+    const container = document.getElementById('page-content');
+    if (!container) return;
+    
+    // Сохраняем позицию скролла перед обновлением
+    const scrollPos = container.scrollTop || 0;
+    
+    // Обновляем только элементы товаров без полной перерисовки корзины
+    // Это предотвращает дерганье
+    requestAnimationFrame(() => {
+        cart.forEach((item, idx) => {
+            const product = products.find(p => p.id === item.productId);
+            if (!product) return;
+            
+            // Проверяем наличие товара на новом адресе
+            let isItemInStock = true;
+            if (deliveryType === 'selfPickup' && selectedPickupLocation) {
+                if (item.flavor) {
+                    isItemInStock = isFlavorInStockAtLocation(product, item.flavor, selectedPickupLocation);
+                } else {
+                    isItemInStock = isProductInStockAtLocation(product, selectedPickupLocation);
                 }
-            }, 100);
-        } else {
-            showCart();
-        }
-    }, 100);
+            } else {
+                isItemInStock = product.inStock !== false && (product.quantity === undefined || product.quantity > 0);
+            }
+            
+            // Обновляем стили карточки товара
+            const cartItem = container.querySelector(`div[id^="cart-item-image-${idx}"]`)?.closest('div[style*="border-radius: 16px"]');
+            if (cartItem) {
+                // Плавно обновляем стили без перерисовки
+                cartItem.style.transition = 'all 0.3s ease';
+                cartItem.style.background = !isItemInStock ? '#f5f5f5' : '#ffffff';
+                cartItem.style.borderColor = !isItemInStock ? '#d0d0d0' : '#e5e5e5';
+                cartItem.style.opacity = !isItemInStock ? '0.8' : '1';
+            }
+            
+            // Обновляем изображение товара
+            const imageContainer = container.querySelector(`#cart-item-image-${idx}`);
+            if (imageContainer) {
+                imageContainer.style.transition = 'opacity 0.3s ease, filter 0.3s ease';
+                imageContainer.style.opacity = !isItemInStock ? '0.5' : '1';
+                imageContainer.style.filter = !isItemInStock ? 'grayscale(100%)' : 'none';
+                
+                const img = imageContainer.querySelector('img');
+                if (img) {
+                    img.style.transition = 'opacity 0.3s ease, filter 0.3s ease';
+                    img.style.opacity = !isItemInStock ? '0.5' : '1';
+                    img.style.filter = !isItemInStock ? 'grayscale(100%)' : 'none';
+                }
+            }
+            
+            // Обновляем сообщение о наличии
+            const stockMessage = container.querySelector(`#cart-item-stock-message-${idx}`);
+            if (!isItemInStock) {
+                if (!stockMessage) {
+                    // Создаем сообщение если его нет
+                    const itemContainer = container.querySelector(`div[id^="cart-item-image-${idx}"]`)?.closest('div[style*="border-radius: 16px"]');
+                    if (itemContainer) {
+                        const infoDiv = itemContainer.querySelector('div[style*="flex: 1"]');
+                        if (infoDiv) {
+                            const messageDiv = document.createElement('div');
+                            messageDiv.id = `cart-item-stock-message-${idx}`;
+                            messageDiv.style.cssText = 'margin-top: 8px; padding: 10px 14px; background: #fff3f3; border-radius: 8px; font-size: 14px; color: #f44336; font-weight: 700; border: 2px solid #ffcdd2; text-align: center; transition: all 0.3s ease;';
+                            messageDiv.textContent = 'На данном адресе этого товара нет в наличии';
+                            infoDiv.appendChild(messageDiv);
+                        }
+                    }
+                }
+            } else {
+                // Удаляем сообщение если товар в наличии
+                if (stockMessage) {
+                    stockMessage.style.transition = 'opacity 0.3s ease';
+                    stockMessage.style.opacity = '0';
+                    setTimeout(() => stockMessage.remove(), 300);
+                }
+            }
+            
+            // Обновляем стили блока количества
+            const quantityBlock = container.querySelector(`div[id^="cart-item-quantity-${idx}"]`)?.closest('div[style*="background:"]');
+            if (quantityBlock) {
+                quantityBlock.style.transition = 'all 0.3s ease';
+                quantityBlock.style.background = !isItemInStock ? '#e8e8e8' : '#f8f9fa';
+                quantityBlock.style.opacity = !isItemInStock ? '0.6' : '1';
+                quantityBlock.style.pointerEvents = !isItemInStock ? 'none' : 'auto';
+            }
+        });
+        
+        // Восстанавливаем позицию скролла
+        requestAnimationFrame(() => {
+            container.scrollTop = scrollPos;
+        });
+    });
 }
 
 // Обновление итоговой суммы корзины без полной перерисовки
