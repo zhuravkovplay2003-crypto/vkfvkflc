@@ -74,6 +74,68 @@ const ADMIN_IDS = process.env.ADMIN_IDS ? process.env.ADMIN_IDS.split(',') : ['8
 // Инициализация бота
 const bot = new Telegraf(BOT_TOKEN);
 
+// Функция для создания кнопки Web App
+// Если WEB_APP_URL не указан, Telegram будет использовать URL из настроек бота (через BotFather)
+function createWebAppButton(text = '🛍 Открыть магазин') {
+    // Пытаемся получить URL из переменной окружения
+    // Если не указан - Telegram использует URL, настроенный в BotFather через /setmenubutton
+    const webAppUrl = process.env.WEB_APP_URL;
+    
+    // Если URL указан - используем его, иначе пустая строка (Telegram возьмет из настроек бота)
+    const url = webAppUrl || '';
+    
+    return {
+        text: text,
+        web_app: { url: url }
+    };
+}
+
+// Обработка команды /start
+bot.command('start', async (ctx) => {
+    const firstName = ctx.from.first_name || '';
+    
+    // Приветственное сообщение
+    const welcomeMessage = `Привет, ${firstName}!\n\n` +
+        `Добро пожаловать в наш Vape app!\n\n` +
+        `🎁 Что вы можете делать:\n` +
+        `• Заказать вейп продукцию\n` +
+        `• Накапливать и тратить VapeCoins за покупки\n` +
+        `• Повышать свою репутацию\n` +
+        `• Получать эксклюзивные предложения\n\n` +
+        `🚀 Нажмите кнопку ниже, чтобы открыть каталог!`;
+    
+    // Кнопка "Открыть магазин" с Web App
+    const keyboard = {
+        inline_keyboard: [[
+            createWebAppButton('🛍 Открыть магазин')
+        ]]
+    };
+    
+    await ctx.reply(welcomeMessage, { reply_markup: keyboard });
+});
+
+// Команда /shop
+bot.command('shop', async (ctx) => {
+    const keyboard = {
+        inline_keyboard: [[
+            createWebAppButton('🛍 Открыть магазин')
+        ]]
+    };
+    
+    await ctx.reply('Откройте магазин, чтобы просмотреть каталог товаров!', { reply_markup: keyboard });
+});
+
+// Обработка текстового сообщения "Магазин"
+bot.hears(['Магазин', 'магазин'], async (ctx) => {
+    const keyboard = {
+        inline_keyboard: [[
+            createWebAppButton('🛍 Открыть магазин')
+        ]]
+    };
+    
+    await ctx.reply('Откройте магазин, чтобы просмотреть каталог товаров!', { reply_markup: keyboard });
+});
+
 // Проверка, является ли пользователь администратором
 function isAdmin(userId) {
     return ADMIN_IDS.includes(userId.toString());
@@ -966,6 +1028,28 @@ app.post('/webhook', (req, res) => {
     res.sendStatus(200);
 });
 
+// Настройка команд бота
+async function setupBotMenu() {
+    try {
+        // Настройка команд бота
+        await bot.telegram.setMyCommands([
+            { command: 'start', description: 'Запустить бота' },
+            { command: 'shop', description: 'Открыть магазин' },
+            { command: 'help', description: 'Помощь' }
+        ]);
+        
+        console.log('✅ Команды бота настроены');
+        console.log('📱 Для настройки постоянной кнопки "Магазин" используйте BotFather:');
+        console.log('   1. Откройте @BotFather в Telegram');
+        console.log('   2. Отправьте /setmenubutton');
+        console.log('   3. Выберите вашего бота');
+        console.log('   4. Введите текст: Магазин');
+        console.log('   5. Введите URL вашего Web App (или оставьте пустым, если настроено в BotFather)');
+    } catch (error) {
+        console.error('❌ Ошибка настройки меню бота:', error);
+    }
+}
+
 // Запуск бота
 const isProduction = process.env.NODE_ENV === 'production' || process.env.RENDER_EXTERNAL_URL;
 const webhookUrl = process.env.RENDER_EXTERNAL_URL ? `${process.env.RENDER_EXTERNAL_URL}/webhook` : null;
@@ -981,6 +1065,8 @@ if (isProduction && webhookUrl) {
         })
         .then(() => {
             console.log('🤖 Telegram bot webhook set:', webhookUrl);
+            // Настраиваем меню бота после установки webhook
+            setupBotMenu();
         })
         .catch(err => {
             console.error('❌ Error setting webhook:', err);
@@ -1004,6 +1090,8 @@ if (isProduction && webhookUrl) {
         })
         .then(() => {
             console.log('🤖 Telegram bot started (polling mode)');
+            // Настраиваем меню бота после запуска
+            setupBotMenu();
         })
         .catch(err => {
             console.error('❌ Error starting bot:', err);
