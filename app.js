@@ -2631,13 +2631,8 @@ function renderProductContent(container, product, favoriteFlavor, favoriteStreng
     
     container.innerHTML = `
         <div style="margin-bottom: 20px;">
-            ${!isProductInStock ? `
-                <div style="margin-bottom: 12px; padding: 12px; background: #fff3f3; border-radius: 12px; border: 2px solid #ffcdd2; text-align: center;">
-                    <div style="font-size: 16px; font-weight: 700; color: #f44336;">Нет в наличии</div>
-                </div>
-            ` : ''}
             <div id="product-image-container" style="width: 100%; height: 350px; background: #ffffff; border-radius: 12px; 
-                display: flex; align-items: center; justify-content: center; font-size: ${productImageUrl ? '0' : '100px'}; margin-bottom: 20px; overflow: hidden; padding: 20px; border: 1px solid #e5e5e5; ${!isProductInStock ? 'opacity: 0.5; filter: grayscale(100%);' : ''}">
+                display: flex; align-items: center; justify-content: center; font-size: ${productImageUrl ? '0' : '100px'}; margin-bottom: 20px; overflow: hidden; padding: ${productImageUrl ? '0' : '20px'}; border: 1px solid #e5e5e5; ${!isProductInStock ? 'opacity: 0.5; filter: grayscale(100%);' : ''}">
                 ${productImageContent}
             </div>
             <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px;">
@@ -2921,8 +2916,14 @@ function selectFlavor(flavor, index) {
             : (product.inStock !== false && (product.quantity === undefined || product.quantity > 0));
         
         // Если вкус недоступен, перерисовываем всю карточку для гарантии отображения всей информации
+        // ВАЖНО: Сохраняем позицию скролла перед перерисовкой
         if (!isProductInStock) {
+            const scrollPosition = container.scrollTop || 0;
             renderProductContent(container, viewingProduct, null, null);
+            // Восстанавливаем позицию скролла после перерисовки
+            setTimeout(() => {
+                container.scrollTop = scrollPosition;
+            }, 50);
             return;
         }
         
@@ -3603,17 +3604,18 @@ function showFlavorModal() {
                 document.body.style.overflow = '';
                 modal.remove();
                 
-                // Плавно скроллим к выбранному вкусу в скроллбаре
+                // Плавно скроллим к выбранному вкусу в скроллбаре (работает и для недоступных вкусов)
                 requestAnimationFrame(() => {
                     setTimeout(() => {
                         const flavorSection = document.querySelector('[onclick="showFlavorModal()"]')?.closest('div[style*="margin: 20px 0"]');
                         if (flavorSection) {
+                            // Используем originalIndex для поиска элемента (работает для всех вкусов, включая недоступные)
                             const flavorElement = document.getElementById(`flavor-${originalIndex}`);
                             if (flavorElement) {
                                 const flavorsContainer = flavorSection.querySelector('.flavors-scroll-container') || 
                                                          flavorSection.querySelector('div[style*="overflow-x: auto"]');
                                 if (flavorsContainer) {
-                                    // Плавно скроллим к выбранному вкусу
+                                    // Плавно скроллим к выбранному вкусу (даже если он недоступен)
                                     const elementLeft = flavorElement.offsetLeft;
                                     const elementWidth = flavorElement.offsetWidth;
                                     const containerWidth = flavorsContainer.offsetWidth;
@@ -3629,7 +3631,7 @@ function showFlavorModal() {
                                 }
                             }
                         }
-                    }, 100);
+                    }, 200); // Увеличиваем задержку для надежности
                 });
             }, 200);
             
