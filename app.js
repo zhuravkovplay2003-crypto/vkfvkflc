@@ -2961,43 +2961,86 @@ function selectFlavor(flavor, index) {
     }
     
     if (container && currentPage === 'product') {
-        // ВАЖНО: Обновляем только отдельные элементы БЕЗ полной перерисовки,
-        // чтобы не сбрасывать скролл. Это работает и для доступных, и для недоступных вкусов.
-        const imageContainer = document.getElementById('product-image-container');
-        const productNameDiv = document.getElementById('product-name-display');
-        const buttonContainer = document.querySelector('button[onclick*="addToCart"]')?.parentElement || 
-                               document.querySelector('button[disabled][style*="Нет в наличии"]')?.parentElement;
-        
+        // ВАЖНО: При клике на недоступный вкус всегда перерисовываем всю карточку,
+        // чтобы гарантировать что вся информация о товаре отображается
         // Проверяем наличие выбранного вкуса
         const isProductInStock = deliveryType === 'selfPickup' && selectedPickupLocation
             ? (flavor ? isFlavorInStockAtLocation(product, flavor, selectedPickupLocation) : isProductInStockAtLocation(product, selectedPickupLocation))
             : (product.inStock !== false && (product.quantity === undefined || product.quantity > 0));
         
-        // Если основные элементы не найдены, перерисовываем всю карточку
-        // ВАЖНО: Сохраняем позицию скролла перед перерисовкой
-        if (!imageContainer || !productNameDiv || !buttonContainer) {
+        // Если вкус недоступен, перерисовываем всю карточку для гарантии отображения всей информации
+        // ВАЖНО: Сохраняем позицию скролла перед перерисовкой и восстанавливаем после
+        if (!isProductInStock) {
+            // Сохраняем позиции скролла (контейнера и окна) ПЕРЕД любыми изменениями
             const scrollPosition = container.scrollTop || 0;
             const scrollHeight = container.scrollHeight || 0;
             const windowScrollY = window.scrollY || window.pageYOffset || 0;
             const documentScrollTop = document.documentElement.scrollTop || 0;
             const scrollRatio = scrollHeight > 0 ? scrollPosition / scrollHeight : 0;
             
-            renderProductContent(container, viewingProduct, null, null);
-            
-            // Восстанавливаем позицию скролла
+            // Используем requestAnimationFrame для плавного обновления без дерганья
             requestAnimationFrame(() => {
-                const newScrollHeight = container.scrollHeight || 0;
-                if (newScrollHeight > 0 && scrollRatio > 0) {
-                    container.scrollTop = newScrollHeight * scrollRatio;
-                } else if (scrollPosition > 0) {
-                    container.scrollTop = scrollPosition;
-                }
-                if (windowScrollY > 0) {
-                    window.scrollTo(0, windowScrollY);
-                } else if (documentScrollTop > 0) {
-                    document.documentElement.scrollTop = documentScrollTop;
-                }
+                // Временно отключаем переходы для предотвращения дерганья
+                const originalTransition = container.style.transition;
+                container.style.transition = 'none';
+                
+                renderProductContent(container, viewingProduct, null, null);
+                
+                // Восстанавливаем переходы и позицию скролла
+                requestAnimationFrame(() => {
+                    container.style.transition = originalTransition;
+                    const newScrollHeight = container.scrollHeight || 0;
+                    // Восстанавливаем скролл контейнера
+                    if (newScrollHeight > 0 && scrollRatio > 0) {
+                        container.scrollTop = newScrollHeight * scrollRatio;
+                    } else if (scrollPosition > 0) {
+                        container.scrollTop = scrollPosition;
+                    }
+                    // Восстанавливаем скролл окна
+                    if (windowScrollY > 0) {
+                        window.scrollTo({ top: windowScrollY, behavior: 'instant' });
+                    } else if (documentScrollTop > 0) {
+                        document.documentElement.scrollTop = documentScrollTop;
+                    }
+                    // Дополнительные попытки восстановления для надежности
+                    setTimeout(() => {
+                        if (newScrollHeight > 0 && scrollRatio > 0) {
+                            container.scrollTop = newScrollHeight * scrollRatio;
+                        } else if (scrollPosition > 0) {
+                            container.scrollTop = scrollPosition;
+                        }
+                        if (windowScrollY > 0) {
+                            window.scrollTo({ top: windowScrollY, behavior: 'instant' });
+                        } else if (documentScrollTop > 0) {
+                            document.documentElement.scrollTop = documentScrollTop;
+                        }
+                    }, 10);
+                    setTimeout(() => {
+                        if (newScrollHeight > 0 && scrollRatio > 0) {
+                            container.scrollTop = newScrollHeight * scrollRatio;
+                        } else if (scrollPosition > 0) {
+                            container.scrollTop = scrollPosition;
+                        }
+                        if (windowScrollY > 0) {
+                            window.scrollTo({ top: windowScrollY, behavior: 'instant' });
+                        } else if (documentScrollTop > 0) {
+                            document.documentElement.scrollTop = documentScrollTop;
+                        }
+                    }, 50);
+                });
             });
+            return;
+        }
+        
+        // Если вкус доступен, обновляем только отдельные элементы для производительности
+        const imageContainer = document.getElementById('product-image-container');
+        const productNameDiv = document.getElementById('product-name-display');
+        const buttonContainer = document.querySelector('button[onclick*="addToCart"]')?.parentElement || 
+                               document.querySelector('button[disabled][style*="Нет в наличии"]')?.parentElement;
+        
+        // Если основные элементы не найдены, перерисовываем всю карточку
+        if (!imageContainer || !productNameDiv || !buttonContainer) {
+            renderProductContent(container, viewingProduct, null, null);
             return;
         }
         
