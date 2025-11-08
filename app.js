@@ -1441,9 +1441,9 @@ function showPage(page, skipHistory = false, resetCatalog = false) {
                     }
                     
                     // Показываем товар с восстановленными параметрами
-                    // Убеждаемся что все параметры правильно установлены перед показом
+                    // Передаем явно null чтобы показать все варианты вкусов, а не только один
                     setTimeout(() => {
-                        showProduct(productData.id, viewingProduct.selectedFlavor || null, viewingProduct.selectedStrength || null);
+                        showProduct(productData.id, null, null);
                     }, 50);
                     localStorage.removeItem('lastViewedProduct'); // Очищаем после восстановления
                     // Подсвечиваем кнопку "Ассортимент" при восстановлении товара
@@ -5468,9 +5468,15 @@ function showCart() {
     if (savedDeliveryAddress) {
         deliveryAddress = savedDeliveryAddress;
     }
+    // ВАЖНО: Всегда загружаем актуальный адрес из localStorage перед проверкой наличия
     const savedPickupLocation = localStorage.getItem('selectedPickupLocation');
     if (savedPickupLocation) {
         selectedPickupLocation = savedPickupLocation;
+    }
+    
+    // Принудительно обновляем deliveryType из localStorage если нужно
+    if (savedDeliveryType) {
+        deliveryType = savedDeliveryType;
     }
     
     container.innerHTML = `
@@ -5697,15 +5703,18 @@ function showCart() {
             const itemTotalCoins = paymentMethod === 'coins' ? (coinsPrice * item.quantity) : 0;
             
             // Проверяем наличие товара на выбранной точке
+            // ВАЖНО: Используем актуальный selectedPickupLocation из переменной (уже обновлен из localStorage выше)
             const product = products.find(p => p.id === item.productId);
             let isItemInStock = true;
             if (product) {
-                if (deliveryType === 'selfPickup' && selectedPickupLocation) {
+                // Получаем актуальный адрес из переменной (уже обновлен из localStorage выше)
+                const currentLocation = selectedPickupLocation || '';
+                if (deliveryType === 'selfPickup' && currentLocation) {
                     // Проверяем наличие конкретного вкуса если он указан
                     if (item.flavor) {
-                        isItemInStock = isFlavorInStockAtLocation(product, item.flavor, selectedPickupLocation);
+                        isItemInStock = isFlavorInStockAtLocation(product, item.flavor, currentLocation);
                     } else {
-                        isItemInStock = isProductInStockAtLocation(product, selectedPickupLocation);
+                        isItemInStock = isProductInStockAtLocation(product, currentLocation);
                     }
                 } else {
                     isItemInStock = product.inStock !== false && (product.quantity === undefined || product.quantity > 0);
@@ -6150,11 +6159,22 @@ function updateCartItemsDisplay() {
         selectedPickupLocation = savedLocation;
     }
     
+    // Убеждаемся что deliveryType обновлен из localStorage
+    const savedDeliveryType = localStorage.getItem('deliveryType');
+    if (savedDeliveryType) {
+        deliveryType = savedDeliveryType;
+    }
+    
     // Полностью перерисовываем корзину для правильного обновления всех элементов
     // Используем setTimeout чтобы гарантировать что все переменные обновлены
     setTimeout(() => {
+        // Принудительно очищаем контейнер перед перерисовкой для гарантии полного обновления
+        const container = document.getElementById('page-content');
+        if (container) {
+            container.innerHTML = '';
+        }
         showCart();
-    }, 10);
+    }, 50);
 }
 
 // Обновление итоговой суммы корзины без полной перерисовки
