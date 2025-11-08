@@ -2044,25 +2044,44 @@ function showProduct(productId, favoriteFlavor = null, favoriteStrength = null) 
         localStorage.setItem('viewedProducts', JSON.stringify(viewedProducts));
     }
     
-    // Получаем контейнер после showPage
-    const container = document.getElementById('page-content');
+    // Получаем контейнер после showPage - используем setTimeout чтобы убедиться что showPage завершился
+    let container = document.getElementById('page-content');
     if (!container) {
-        console.error('Container not found');
+        // Если контейнер не найден сразу, ждем немного и пробуем снова
+        setTimeout(() => {
+            container = document.getElementById('page-content');
+            if (!container) {
+                console.error('Container not found after timeout');
+                return;
+            }
+            renderProductContent(container, product, favoriteFlavor, favoriteStrength);
+        }, 50);
         return;
     }
     
     // Убеждаемся что контейнер видим и готов к отображению
     container.style.display = 'block';
     container.style.visibility = 'visible';
+    container.style.opacity = '1'; // Сразу показываем, чтобы не было пустого экрана
     
     // Начальное состояние для анимации
-    container.style.opacity = '0';
     container.style.transform = 'translateY(20px)';
     container.style.transition = 'none';
     
     container.className = '';
     container.style.padding = '16px';
     container.style.background = '#ffffff';
+    
+    // Сразу устанавливаем содержимое, чтобы не было пустого экрана
+    renderProductContent(container, product, favoriteFlavor, favoriteStrength);
+}
+
+// Функция для рендеринга содержимого карточки товара
+function renderProductContent(container, product, favoriteFlavor, favoriteStrength) {
+    if (!container || !product) {
+        console.error('renderProductContent: container or product is missing');
+        return;
+    }
     
     // Проверяем, открыт ли товар из избранного (если переданы favoriteFlavor или favoriteStrength)
     const isFromFavorites = favoriteFlavor !== null || favoriteStrength !== null;
@@ -2226,6 +2245,16 @@ function showProduct(productId, favoriteFlavor = null, favoriteStrength = null) 
                             
                             // Всегда вызываем selectFlavor, даже если вкус не в наличии
                             const onClickAction = `selectFlavor('${flavor.replace(/'/g, "\\'")}', ${originalIndex})`;
+                            
+                            // Определяем сообщение о наличии для вкуса
+                            let stockMessage = '';
+                            if (!isFlavorInStock) {
+                                if (flavorLocations.length === 0) {
+                                    stockMessage = '<div style="font-size: 10px; color: #f44336; text-align: center; width: 100%; margin-top: 2px;">Нет ни на одной точке</div>';
+                                } else {
+                                    stockMessage = '<div style="font-size: 10px; color: #666; text-align: center; width: 100%; margin-top: 2px;">Нет в наличии</div>';
+                                }
+                            }
                             
                             return `
                             <div onclick="${onClickAction}" id="flavor-${originalIndex}" 
