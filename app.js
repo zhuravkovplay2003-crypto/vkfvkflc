@@ -444,9 +444,13 @@ function updatePickupLocationDisplay() {
         const navRightContent = document.getElementById('nav-right-content');
         if (navRightContent) {
             if (selectedPickupLocation) {
-                // Не обрезаем адрес, показываем полностью с переносом если нужно
-                navRightContent.innerHTML = `<span style="display: inline-flex; align-items: center; gap: 6px; width: 100%; justify-content: center;"><span style="width: 16px; height: 16px; display: flex; align-items: center; justify-content: center; flex-shrink: 0;">${getLocationIcon('#ffffff').replace('width="24" height="24"', 'width="16" height="16"')}</span><span style="white-space: nowrap; overflow: visible; text-align: center; flex: 1; min-width: 0;">${selectedPickupLocation}</span></span>`;
+                // Показываем адрес с ограничением ширины для статичного размера
+                navRightContent.innerHTML = `<span style="display: inline-flex; align-items: center; gap: 6px; width: 100%; justify-content: center;"><span style="width: 16px; height: 16px; display: flex; align-items: center; justify-content: center; flex-shrink: 0;">${getLocationIcon('#ffffff').replace('width="24" height="24"', 'width="16" height="16"')}</span><span style="text-align: center; flex: 1; min-width: 0; max-width: 200px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${selectedPickupLocation}</span></span>`;
                 navRightContent.style.cursor = 'pointer';
+                navRightContent.style.minWidth = '180px';
+                navRightContent.style.maxWidth = '220px';
+                navRightContent.style.width = 'auto';
+                navRightContent.style.flex = '0 0 auto';
                 navRightContent.onclick = () => selectPickupLocation();
             } else {
                 navRightContent.innerHTML = `<span style="display: inline-flex; align-items: center; gap: 6px;"><span style="width: 16px; height: 16px; display: flex; align-items: center; justify-content: center; flex-shrink: 0;">${getLocationIcon('#ffffff').replace('width="24" height="24"', 'width="16" height="16"')}</span><span>Выберите точку</span></span>`;
@@ -1286,23 +1290,23 @@ function showPage(page, skipHistory = false, resetCatalog = false) {
     if (pageContent) {
         // Для страницы товара не очищаем содержимое - оно будет установлено в showProduct
         if (page !== 'product') {
-            // Отменяем все анимации и переходы немедленно
-            pageContent.style.transition = 'none';
-            pageContent.style.opacity = '1';
-            pageContent.style.transform = '';
-            pageContent.style.scale = '';
-            pageContent.style.width = '';
-            pageContent.style.height = '';
-            pageContent.style.left = '';
-            pageContent.style.top = '';
-            pageContent.style.right = '';
-            pageContent.style.bottom = '';
-            pageContent.style.display = '';
-            pageContent.style.gridTemplateColumns = '';
-            pageContent.style.gap = '';
-            
-            // Принудительно перерисовываем, чтобы применить изменения
-            void pageContent.offsetHeight;
+        // Отменяем все анимации и переходы немедленно
+        pageContent.style.transition = 'none';
+        pageContent.style.opacity = '1';
+        pageContent.style.transform = '';
+        pageContent.style.scale = '';
+        pageContent.style.width = '';
+        pageContent.style.height = '';
+        pageContent.style.left = '';
+        pageContent.style.top = '';
+        pageContent.style.right = '';
+        pageContent.style.bottom = '';
+        pageContent.style.display = '';
+        pageContent.style.gridTemplateColumns = '';
+        pageContent.style.gap = '';
+        
+        // Принудительно перерисовываем, чтобы применить изменения
+        void pageContent.offsetHeight;
         } else {
             // Для страницы товара только сбрасываем некоторые стили, но не очищаем содержимое
             pageContent.style.transition = 'none';
@@ -1343,9 +1347,28 @@ function showPage(page, skipHistory = false, resetCatalog = false) {
         }
     }
     
-    // Если переходим на каталог с другой вкладки, очищаем viewingProduct только если не было сохраненного товара
-    if (page === 'catalog' && currentPage !== 'product') {
+    // Если переходим на каталог с другой вкладки, проверяем сохраненный товар
+    if (page === 'catalog') {
         const savedProduct = localStorage.getItem('lastViewedProduct');
+        if (savedProduct) {
+            try {
+                const productData = JSON.parse(savedProduct);
+                const product = products.find(p => p.id === productData.id);
+                if (product) {
+                    // Восстанавливаем товар
+                    viewingProduct = product;
+                    if (productData.selectedFlavor) viewingProduct.selectedFlavor = productData.selectedFlavor;
+                    if (productData.selectedStrength) viewingProduct.selectedStrength = productData.selectedStrength;
+                    // Показываем товар
+                    showProduct(productData.id, productData.selectedFlavor || null, productData.selectedStrength || null);
+                    localStorage.removeItem('lastViewedProduct'); // Очищаем после восстановления
+                    return;
+                }
+            } catch (e) {
+                console.error('Error restoring product:', e);
+            }
+        }
+        // Если нет сохраненного товара, очищаем viewingProduct
         if (!savedProduct) {
             viewingProduct = null;
         }
@@ -1431,23 +1454,16 @@ function showPage(page, skipHistory = false, resetCatalog = false) {
         if (page === 'catalog') {
             // Для каталога показываем адрес с SVG иконкой
             if (selectedPickupLocation) {
-                // Форматируем адрес для лучшего отображения
-                let displayLocation = selectedPickupLocation;
-                // Если адрес слишком длинный, обрезаем но стараемся сохранить важную часть
-                if (displayLocation.length > 20) {
-                    // Пытаемся найти запятую и обрезать после неё
-                    const commaIndex = displayLocation.indexOf(',');
-                    if (commaIndex > 0 && commaIndex < 15) {
-                        displayLocation = displayLocation.substring(0, commaIndex + 1) + '...';
-                    } else {
-                        displayLocation = displayLocation.substring(0, 17) + '...';
-                    }
-                }
-                navRightContent.innerHTML = `<span style="display: inline-flex; align-items: center; gap: 6px; justify-content: center; width: 100%;"><span style="width: 16px; height: 16px; display: flex; align-items: center; justify-content: center; flex-shrink: 0;">${getLocationIcon('#ffffff').replace('width="24" height="24"', 'width="16" height="16"')}</span><span style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-align: center; flex: 1; min-width: 0;">${displayLocation}</span></span>`;
+                // Показываем адрес с ограничением ширины для статичного размера
+                navRightContent.innerHTML = `<span style="display: inline-flex; align-items: center; gap: 6px; width: 100%; justify-content: center;"><span style="width: 16px; height: 16px; display: flex; align-items: center; justify-content: center; flex-shrink: 0;">${getLocationIcon('#ffffff').replace('width="24" height="24"', 'width="16" height="16"')}</span><span style="text-align: center; flex: 1; min-width: 0; max-width: 200px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${selectedPickupLocation}</span></span>`;
                 navRightContent.style.cursor = 'pointer';
                 navRightContent.style.textAlign = 'center';
                 navRightContent.style.justifyContent = 'center';
                 navRightContent.style.display = 'flex';
+                navRightContent.style.minWidth = '180px';
+                navRightContent.style.maxWidth = '220px';
+                navRightContent.style.width = 'auto';
+                navRightContent.style.flex = '0 0 auto';
                 navRightContent.onclick = () => selectPickupLocation();
             } else {
                 navRightContent.innerHTML = `<span style="display: inline-flex; align-items: center; gap: 6px; justify-content: center; width: 100%;"><span style="width: 16px; height: 16px; display: flex; align-items: center; justify-content: center; flex-shrink: 0;">${getLocationIcon('#ffffff').replace('width="24" height="24"', 'width="16" height="16"')}</span><span style="text-align: center;">Выберите точку</span></span>`;
@@ -1460,14 +1476,18 @@ function showPage(page, skipHistory = false, resetCatalog = false) {
         } else if (page === 'product') {
             // Для страницы товара показываем адрес с SVG иконкой
             if (selectedPickupLocation) {
-                // Показываем адрес полностью без обрезки
-                navRightContent.innerHTML = `<span style="display: inline-flex; align-items: center; gap: 6px; justify-content: center; width: 100%;"><span style="width: 16px; height: 16px; display: flex; align-items: center; justify-content: center; flex-shrink: 0;">${getLocationIcon('#ffffff').replace('width="24" height="24"', 'width="16" height="16"')}</span><span style="text-align: center; flex: 1; min-width: 0; white-space: nowrap; overflow: visible;">${selectedPickupLocation}</span></span>`;
+                // Показываем адрес с ограничением ширины для статичного размера
+                navRightContent.innerHTML = `<span style="display: inline-flex; align-items: center; gap: 6px; justify-content: center; width: 100%;"><span style="width: 16px; height: 16px; display: flex; align-items: center; justify-content: center; flex-shrink: 0;">${getLocationIcon('#ffffff').replace('width="24" height="24"', 'width="16" height="16"')}</span><span style="text-align: center; flex: 1; min-width: 0; max-width: 200px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${selectedPickupLocation}</span></span>`;
                 navRightContent.style.cursor = 'pointer';
                 navRightContent.style.textAlign = 'center';
                 navRightContent.style.justifyContent = 'center';
                 navRightContent.style.display = 'flex';
+                navRightContent.style.minWidth = '180px';
+                navRightContent.style.maxWidth = '220px';
+                navRightContent.style.width = 'auto';
+                navRightContent.style.flex = '0 0 auto';
                 navRightContent.onclick = () => selectPickupLocation();
-            } else {
+        } else {
                 navRightContent.innerHTML = `<span style="display: inline-flex; align-items: center; gap: 6px; justify-content: center; width: 100%;"><span style="width: 16px; height: 16px; display: flex; align-items: center; justify-content: center; flex-shrink: 0;">${getLocationIcon('#ffffff').replace('width="24" height="24"', 'width="16" height="16"')}</span><span style="text-align: center;">Выберите точку</span></span>`;
                 navRightContent.style.cursor = 'pointer';
                 navRightContent.style.textAlign = 'center';
@@ -1477,12 +1497,12 @@ function showPage(page, skipHistory = false, resetCatalog = false) {
             }
         } else {
             // Для других страниц показываем vapeshop с фиксированным размером
-            navRightContent.innerHTML = '<span style="font-weight: 700; letter-spacing: 1px; font-size: 14px;">VAPESHOP</span>';
+            navRightContent.innerHTML = '<span style="font-weight: 700; letter-spacing: 2px; font-size: 16px; text-transform: uppercase;">VAPESHOP</span>';
             navRightContent.style.cursor = 'default';
-            navRightContent.style.minWidth = '120px';
-            navRightContent.style.maxWidth = '120px';
-            navRightContent.style.width = '120px';
-            navRightContent.style.flex = '0 0 120px';
+            navRightContent.style.minWidth = '140px';
+            navRightContent.style.maxWidth = '140px';
+            navRightContent.style.width = '140px';
+            navRightContent.style.flex = '0 0 140px';
             navRightContent.onclick = null;
         }
     }
@@ -1806,14 +1826,14 @@ function displayProducts(productsToShow = null) {
         }
         
         // Если оба в наличии или оба не в наличии, применяем обычную сортировку
-        if (sortOrder) {
+    if (sortOrder) {
             if (sortOrder === 'name_asc') return a.name.localeCompare(b.name);
             if (sortOrder === 'name_desc') return b.name.localeCompare(a.name);
             if (sortOrder === 'price_asc') return a.price - b.price;
             if (sortOrder === 'price_desc') return b.price - a.price;
         }
-        return 0;
-    });
+            return 0;
+        });
     
     filtered.forEach(product => {
         const card = document.createElement('div');
@@ -2016,7 +2036,7 @@ function showProduct(productId, favoriteFlavor = null, favoriteStrength = null) 
         if (product.flavors && product.flavors.length > 0) {
             // Убеждаемся что индекс правильный
             if (viewingProduct.selectedFlavorIndex === undefined || viewingProduct.selectedFlavorIndex < 0 || viewingProduct.selectedFlavorIndex >= product.flavors.length) {
-                viewingProduct.selectedFlavorIndex = 0;
+            viewingProduct.selectedFlavorIndex = 0;
             }
             viewingProduct.selectedFlavor = product.flavors[viewingProduct.selectedFlavorIndex];
         }
@@ -2351,10 +2371,10 @@ function renderProductContent(container, product, favoriteFlavor, favoriteStreng
                 } else {
                     // Проверяем общее наличие товара
                     isInStock = deliveryType === 'selfPickup' && selectedPickupLocation
-                        ? isProductInStockAtLocation(product, selectedPickupLocation)
-                        : (product.inStock !== false && (product.quantity === undefined || product.quantity > 0));
-                    
-                    if (!isInStock) {
+                    ? isProductInStockAtLocation(product, selectedPickupLocation)
+                    : (product.inStock !== false && (product.quantity === undefined || product.quantity > 0));
+                
+                if (!isInStock) {
                         locationsWithStock = getLocationsWithStock(product);
                         // Фильтруем по городу если выбран город
                         const selectedCity = selectedPickupLocation ? getCityFromLocation(selectedPickupLocation) : null;
@@ -2401,13 +2421,13 @@ function renderProductContent(container, product, favoriteFlavor, favoriteStreng
                     }
                     
                     if (canAddToCart) {
-                        return `
-                            <button onclick="addToCart(${product.id})" style="width: 100%; padding: 16px; 
-                                background: #007AFF; color: white; border: none; border-radius: 12px; 
-                                font-size: 16px; font-weight: 600; cursor: pointer; margin-top: 20px;">
-                                В корзину
-                            </button>
-                        `;
+                    return `
+                        <button onclick="addToCart(${product.id})" style="width: 100%; padding: 16px; 
+                            background: #007AFF; color: white; border: none; border-radius: 12px; 
+                            font-size: 16px; font-weight: 600; cursor: pointer; margin-top: 20px;">
+                            В корзину
+                        </button>
+                    `;
                     } else {
                         // Если товар открыт из избранного и информация о наличии уже показана в flavorOptions, не дублируем
                         const isFromFavorites = favoriteFlavor !== null || favoriteStrength !== null;
@@ -2513,7 +2533,7 @@ function selectFlavor(flavor, index) {
             correctIndex = 0;
         }
         viewingProduct.selectedFlavorIndex = correctIndex;
-        viewingProduct.selectedFlavor = flavor;
+    viewingProduct.selectedFlavor = flavor;
     } else {
         viewingProduct.selectedFlavorIndex = index !== undefined ? index : 0;
         viewingProduct.selectedFlavor = flavor;
@@ -2713,7 +2733,7 @@ function selectFlavor(flavor, index) {
                         <div style="margin-top: 12px; padding: 12px; background: #f5f5f5; border-radius: 12px; font-size: 13px; color: #666; line-height: 1.5;">
                             <div style="font-weight: 600; margin-bottom: 4px; color: #333;">Есть в наличии на:</div>
                             <div>${locationsWithStock.join(', ')}</div>
-                        </div>
+                                </div>
                     ` : '<div style="margin-top: 12px; padding: 12px; background: #fff3f3; border-radius: 12px; font-size: 13px; color: #f44336; line-height: 1.5; text-align: center; font-weight: 600;">Товара нет ни на одной точке</div>';
                     buttonContainer.innerHTML = `
                         <button disabled style="width: 100%; padding: 16px; 
@@ -2785,9 +2805,16 @@ function showFlavorModal() {
         // Восстанавливаем кнопку "Назад"
         if (tg && tg.BackButton && originalBackButtonHandler) {
             tg.BackButton.onClick(originalBackButtonHandler);
-            // Показываем кнопку "Назад" если нужно
-            if (currentPage && currentPage !== 'catalog' && currentPage !== 'cart' && currentPage !== 'favorites' && currentPage !== 'profile' && currentPage !== 'promotions') {
+            // Если мы на странице товара, показываем кнопку "Назад" (не "Закрыть")
+            if (currentPage === 'product') {
                 tg.BackButton.show();
+            } else {
+                // На других страницах скрываем кнопку
+                if (currentPage === 'catalog' || currentPage === 'cart' || currentPage === 'favorites' || currentPage === 'profile' || currentPage === 'promotions') {
+                    tg.BackButton.hide();
+                } else {
+                tg.BackButton.show();
+                }
             }
         }
         
@@ -3642,7 +3669,7 @@ function selectPickupLocation() {
         
         const modalContent = document.createElement('div');
         modalContent.className = 'location-modal-content';
-        modalContent.style.cssText = 'background: white; padding: 20px; border-radius: 14px; width: 90%; max-width: 380px; max-height: 75vh; overflow-y: auto; position: relative; transform: scale(0.95); opacity: 0; transition: transform 0.3s ease, opacity 0.3s ease;';
+        modalContent.style.cssText = 'background: white; padding: 20px; border-radius: 14px; width: 85%; max-width: 360px; min-width: 320px; max-height: 75vh; overflow-y: auto; position: relative; transform: scale(0.95); opacity: 0; transition: transform 0.3s ease, opacity 0.3s ease;';
         
         // Заголовок с кнопкой назад
         const header = document.createElement('div');
@@ -3726,7 +3753,7 @@ function selectPickupLocation() {
                 if (currentPage === 'cart') {
                     // Полностью перерисовываем корзину чтобы обновить все состояния
                     setTimeout(() => {
-                        showCart();
+                            showCart();
                     }, 100);
                 }
                 
@@ -5725,9 +5752,9 @@ function changeQuantity(index, change) {
         showCart();
     } else {
         // Восстанавливаем позицию скролла
-        if (container && scrollPosition > 0) {
-            setTimeout(() => {
-                container.scrollTop = scrollPosition;
+    if (container && scrollPosition > 0) {
+        setTimeout(() => {
+            container.scrollTop = scrollPosition;
             }, 10);
         }
     }
@@ -6471,7 +6498,7 @@ function checkout() {
         
         // Обновляем отображение корзины (покажем пустую корзину)
         // Всегда показываем корзину после оформления заказа, даже если пользователь был на другой странице
-        showCart();
+            showCart();
         
         // Тактильная обратная связь
         if (tg && tg.HapticFeedback) {
