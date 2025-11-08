@@ -1339,15 +1339,20 @@ function showPage(page, skipHistory = false, resetCatalog = false) {
     
     // Сохраняем состояние просмотра товара, если мы на странице товара и переходим на другую вкладку
     // НЕ сохраняем при переходе из каталога в каталог (когда выбираем вкус и возвращаемся)
-    if (currentPage === 'product' && viewingProduct && page !== 'product' && page !== 'catalog' && !(currentPage === 'catalog' && page === 'catalog')) {
-        // Сохраняем товар в localStorage для восстановления при возврате
-        // Включая переход в корзину - нужно восстановить товар после возврата из корзины
+    // Сохраняем только если переходим из product в другую основную вкладку (cart, favorites, profile, promotions)
+    if (currentPage === 'product' && viewingProduct && page !== 'product' && page !== 'catalog' && 
+        (page === 'cart' || page === 'favorites' || page === 'profile' || page === 'promotions')) {
+        // Сохраняем товар в localStorage для восстановления при возврате в каталог
         localStorage.setItem('lastViewedProduct', JSON.stringify({
             id: viewingProduct.id,
             selectedFlavor: viewingProduct.selectedFlavor,
             selectedStrength: viewingProduct.selectedStrength,
-            selectedFlavorIndex: viewingProduct.selectedFlavorIndex
+            selectedFlavorIndex: viewingProduct.selectedFlavorIndex,
+            fromPage: currentPage // Сохраняем откуда переходим
         }));
+    } else if (currentPage === 'product' && viewingProduct && page === 'catalog') {
+        // Если переходим из product в catalog, очищаем сохраненный товар
+        localStorage.removeItem('lastViewedProduct');
     }
     
     // Определяем текущую вкладку (основную страницу)
@@ -1406,21 +1411,32 @@ function showPage(page, skipHistory = false, resetCatalog = false) {
     }
     
     // Если переходим на каталог с другой вкладки, проверяем сохраненный товар
-    // НО только если мы действительно переходим с другой вкладки, а не при первой загрузке
-    if (page === 'catalog' && currentPage && currentPage !== 'catalog' && currentPage !== '' && currentPage !== 'product') {
+    // НО только если мы действительно переходим с другой основной вкладки (cart, favorites, profile, promotions)
+    // И только если товар был сохранен из product страницы
+    if (page === 'catalog' && currentPage && currentPage !== 'catalog' && currentPage !== '' && currentPage !== 'product' &&
+        (currentPage === 'cart' || currentPage === 'favorites' || currentPage === 'profile' || currentPage === 'promotions')) {
         const savedProduct = localStorage.getItem('lastViewedProduct');
         if (savedProduct) {
             try {
                 const productData = JSON.parse(savedProduct);
-                const product = products.find(p => p.id === productData.id);
-                if (product) {
-                    // Восстанавливаем товар с полным состоянием
-                    viewingProduct = product;
-                    if (productData.selectedFlavor) {
-                        viewingProduct.selectedFlavor = productData.selectedFlavor;
-                        // Убеждаемся что индекс правильный
-                        if (product.flavors && product.flavors.includes(productData.selectedFlavor)) {
-                            viewingProduct.selectedFlavorIndex = product.flavors.indexOf(productData.selectedFlavor);
+                // Проверяем, что товар был сохранен из product страницы
+                if (productData.fromPage === 'product') {
+                    const product = products.find(p => p.id === productData.id);
+                    if (product) {
+                        // Восстанавливаем товар с полным состоянием
+                        viewingProduct = product;
+                        if (productData.selectedFlavor) {
+                            viewingProduct.selectedFlavor = productData.selectedFlavor;
+                            // Убеждаемся что индекс правильный
+                            if (product.flavors && product.flavors.includes(productData.selectedFlavor)) {
+                                viewingProduct.selectedFlavorIndex = product.flavors.indexOf(productData.selectedFlavor);
+                            } else if (productData.selectedFlavorIndex !== undefined && product.flavors && product.flavors[productData.selectedFlavorIndex]) {
+                                viewingProduct.selectedFlavorIndex = productData.selectedFlavorIndex;
+                                viewingProduct.selectedFlavor = product.flavors[productData.selectedFlavorIndex];
+                            } else if (product.flavors && product.flavors.length > 0) {
+                                viewingProduct.selectedFlavorIndex = 0;
+                                viewingProduct.selectedFlavor = product.flavors[0];
+                            }
                         } else if (productData.selectedFlavorIndex !== undefined && product.flavors && product.flavors[productData.selectedFlavorIndex]) {
                             viewingProduct.selectedFlavorIndex = productData.selectedFlavorIndex;
                             viewingProduct.selectedFlavor = product.flavors[productData.selectedFlavorIndex];
@@ -1428,44 +1444,42 @@ function showPage(page, skipHistory = false, resetCatalog = false) {
                             viewingProduct.selectedFlavorIndex = 0;
                             viewingProduct.selectedFlavor = product.flavors[0];
                         }
-                    } else if (productData.selectedFlavorIndex !== undefined && product.flavors && product.flavors[productData.selectedFlavorIndex]) {
-                        viewingProduct.selectedFlavorIndex = productData.selectedFlavorIndex;
-                        viewingProduct.selectedFlavor = product.flavors[productData.selectedFlavorIndex];
-                    } else if (product.flavors && product.flavors.length > 0) {
-                        viewingProduct.selectedFlavorIndex = 0;
-                        viewingProduct.selectedFlavor = product.flavors[0];
-                    }
-                    
-                    if (productData.selectedStrength) {
-                        viewingProduct.selectedStrength = productData.selectedStrength;
-                    } else if (product.strengths && product.strengths.length > 0) {
-                        viewingProduct.selectedStrength = product.strengths[0];
-                    }
-                    
-                    // Показываем товар с восстановленными параметрами
-                    // Передаем сохраненные flavor и strength для правильного восстановления состояния
-                    setTimeout(() => {
-                        showProduct(productData.id, productData.selectedFlavor || null, productData.selectedStrength || null);
-                    }, 50);
-                    localStorage.removeItem('lastViewedProduct'); // Очищаем после восстановления
-                    // Подсвечиваем кнопку "Ассортимент" при восстановлении товара
-                    document.querySelectorAll('.nav-item').forEach(btn => {
-                        btn.classList.remove('active');
-                        const onclick = btn.getAttribute('onclick');
-                        if (onclick && onclick.includes("'catalog'")) {
-                            btn.classList.add('active');
+                        
+                        if (productData.selectedStrength) {
+                            viewingProduct.selectedStrength = productData.selectedStrength;
+                        } else if (product.strengths && product.strengths.length > 0) {
+                            viewingProduct.selectedStrength = product.strengths[0];
                         }
-                    });
-                    return;
+                        
+                        // Показываем товар с восстановленными параметрами
+                        // Передаем сохраненные flavor и strength для правильного восстановления состояния
+                        setTimeout(() => {
+                            showProduct(productData.id, productData.selectedFlavor || null, productData.selectedStrength || null);
+                        }, 50);
+                        localStorage.removeItem('lastViewedProduct'); // Очищаем после восстановления
+                        // Подсвечиваем кнопку "Ассортимент" при восстановлении товара
+                        document.querySelectorAll('.nav-item').forEach(btn => {
+                            btn.classList.remove('active');
+                            const onclick = btn.getAttribute('onclick');
+                            if (onclick && onclick.includes("'catalog'")) {
+                                btn.classList.add('active');
+                            }
+                        });
+                        return;
+                    }
                 }
             } catch (e) {
                 console.error('Error restoring product:', e);
+                localStorage.removeItem('lastViewedProduct'); // Очищаем при ошибке
             }
         }
-        // Если нет сохраненного товара, очищаем viewingProduct
-        if (!savedProduct) {
-            viewingProduct = null;
-        }
+        // Если нет сохраненного товара или он не из product, очищаем viewingProduct
+        viewingProduct = null;
+        localStorage.removeItem('lastViewedProduct'); // Очищаем на всякий случай
+    } else if (page === 'catalog') {
+        // Если переходим на каталог из других мест, очищаем viewingProduct и сохраненный товар
+        viewingProduct = null;
+        localStorage.removeItem('lastViewedProduct');
     }
     
     currentPage = page;
@@ -2805,17 +2819,65 @@ function selectFlavor(flavor, index) {
             if (productImageUrl) {
                 const img = imageContainer.querySelector('img');
                 if (img) {
-                    img.src = productImageUrl;
+                    // Обновляем src с timestamp для принудительной перезагрузки
+                    const timestamp = Date.now();
+                    img.src = productImageUrl + (productImageUrl.includes('?') ? '&' : '?') + 't=' + timestamp;
                     img.style.opacity = isProductInStock ? '1' : '0.5';
                     img.style.filter = isProductInStock ? 'none' : 'grayscale(100%)';
+                    img.onerror = function() {
+                        imageContainer.innerHTML = getPackageIcon('#999999');
+                        imageContainer.style.fontSize = '0';
+                        imageContainer.style.display = 'flex';
+                        imageContainer.style.alignItems = 'center';
+                        imageContainer.style.justifyContent = 'center';
+                    };
                 } else {
-                    imageContainer.innerHTML = `<img src="${productImageUrl}" alt="${product.name}" style="width: 100%; height: 100%; object-fit: contain; border-radius: 12px; ${!isProductInStock ? 'opacity: 0.5; filter: grayscale(100%);' : ''}" onerror="this.parentElement.innerHTML='${getPackageIcon('#999999')}'">`;
+                    imageContainer.innerHTML = `<img src="${productImageUrl}" alt="${product.name}" style="width: 100%; height: 100%; object-fit: contain; border-radius: 12px; ${!isProductInStock ? 'opacity: 0.5; filter: grayscale(100%);' : ''}" onerror="this.parentElement.innerHTML='${getPackageIcon('#999999')}'; this.parentElement.style.fontSize='0'; this.parentElement.style.display='flex'; this.parentElement.style.alignItems='center'; this.parentElement.style.justifyContent='center';">`;
                 }
+            } else {
+                // Если нет изображения, показываем иконку
+                imageContainer.innerHTML = getPackageIcon('#999999');
+                imageContainer.style.fontSize = '0';
+                imageContainer.style.display = 'flex';
+                imageContainer.style.alignItems = 'center';
+                imageContainer.style.justifyContent = 'center';
             }
             
             // Применяем стили к контейнеру изображения
             imageContainer.style.opacity = isProductInStock ? '1' : '0.5';
             imageContainer.style.filter = isProductInStock ? 'none' : 'grayscale(100%)';
+        }
+        
+        // Обновляем название товара с выбранным вкусом
+        const productNameDiv = document.getElementById('product-name-display');
+        if (productNameDiv && product) {
+            const displayName = flavor ? `${product.name}, ${flavor}` : product.name;
+            productNameDiv.textContent = displayName;
+        }
+        
+        // Обновляем информацию о наличии товара
+        const stockMessageDiv = document.querySelector('[id*="stock-message"]') || 
+                                 document.querySelector('div[style*="Нет в наличии"]')?.parentElement;
+        if (!stockMessageDiv) {
+            // Ищем контейнер где должна быть информация о наличии
+            const buttonContainer = document.querySelector('[onclick*="addToCart"]')?.parentElement;
+            if (buttonContainer) {
+                const isProductInStock = deliveryType === 'selfPickup' && selectedPickupLocation
+                    ? (flavor ? isFlavorInStockAtLocation(product, flavor, selectedPickupLocation) : isProductInStockAtLocation(product, selectedPickupLocation))
+                    : (product.inStock !== false && (product.quantity === undefined || product.quantity > 0));
+                
+                // Удаляем старое сообщение о наличии если есть
+                const oldMessage = buttonContainer.querySelector('[style*="Нет в наличии"]');
+                if (oldMessage) oldMessage.remove();
+                
+                // Добавляем новое сообщение если товар не в наличии
+                if (!isProductInStock) {
+                    const stockMessage = document.createElement('div');
+                    stockMessage.style.cssText = 'margin-top: 12px; padding: 12px; background: #fff3f3; border-radius: 8px; font-size: 14px; color: #f44336; font-weight: 600; text-align: center; border: 2px solid #ffcdd2;';
+                    stockMessage.textContent = 'Нет в наличии';
+                    buttonContainer.insertBefore(stockMessage, buttonContainer.querySelector('[onclick*="addToCart"]'));
+                }
+            }
         }
         
         // Обновляем визуальное состояние выбранного вкуса БЕЗ перерисовки
