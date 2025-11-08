@@ -316,6 +316,10 @@ function transformProductsData(productsData, variantsData) {
         // Формат: { "Минск, ст. м. Грушевка": 5, "Минск, ст. м. Площадь Победы": 0, ... }
         const stockByLocation = {};
         
+        // Объект для хранения количества товара по вкусам и точкам самовывоза
+        // Формат: { "Вкус1": { "Минск, ст. м. Грушевка": 5, ... }, ... }
+        const stockByFlavorAndLocation = {};
+        
         variants.forEach(variant => {
             const крепость = (variant['Крепость'] || '').trim();
             const сопротивление = (variant['Сопротивление'] || '').trim();
@@ -344,6 +348,18 @@ function transformProductsData(productsData, variantsData) {
                     // (берем максимальное количество из всех вариантов для этой точки)
                     if (!stockByLocation[locationName] || quantity > stockByLocation[locationName]) {
                         stockByLocation[locationName] = quantity;
+                    }
+                    
+                    // Сохраняем количество по вкусам и точкам
+                    // Если есть вкус, сохраняем для этого вкуса
+                    if (вкус && вкус !== '-' && вкус !== '') {
+                        if (!stockByFlavorAndLocation[вкус]) {
+                            stockByFlavorAndLocation[вкус] = {};
+                        }
+                        // Берем максимальное количество для этого вкуса на этой точке
+                        if (!stockByFlavorAndLocation[вкус][locationName] || quantity > stockByFlavorAndLocation[вкус][locationName]) {
+                            stockByFlavorAndLocation[вкус][locationName] = quantity;
+                        }
                     }
                 }
             });
@@ -383,6 +399,11 @@ function transformProductsData(productsData, variantsData) {
         // Сохраняем информацию о количестве на точках самовывоза
         if (Object.keys(stockByLocation).length > 0) {
             product.stockByLocation = stockByLocation;
+        }
+        
+        // Сохраняем информацию о количестве по вкусам и точкам
+        if (Object.keys(stockByFlavorAndLocation).length > 0) {
+            product.stockByFlavorAndLocation = stockByFlavorAndLocation;
         }
         
         if (strengths.size > 0) product.strengths = Array.from(strengths);
@@ -521,6 +542,90 @@ function getLocationsWithStock(product) {
     return Object.keys(product.stockByLocation).filter(location => {
         const quantity = product.stockByLocation[location];
         return quantity !== undefined && quantity > 0;
+    });
+}
+
+// Получить город из адреса
+function getCityFromLocation(location) {
+    if (!location) return null;
+    if (location.startsWith('Минск')) return 'Минск';
+    if (location.startsWith('Могилёв') || location.startsWith('Могилев')) return 'Могилёв';
+    return null;
+}
+
+// Проверить наличие конкретного вкуса на конкретной точке
+function isFlavorInStockAtLocation(product, flavor, location) {
+    if (!product || !flavor || !location) return false;
+    
+    // Если товар не в наличии вообще, возвращаем false
+    if (product.inStock === false) {
+        return false;
+    }
+    
+    // Сначала проверяем наличие конкретного вкуса на конкретной точке
+    if (product.stockByFlavorAndLocation && product.stockByFlavorAndLocation[flavor]) {
+        const quantityAtLocation = product.stockByFlavorAndLocation[flavor][location];
+        if (quantityAtLocation !== undefined) {
+            return quantityAtLocation > 0;
+        }
+    }
+    
+    // Если нет информации о количестве на точках, используем общее количество
+    if (!product.stockByLocation || Object.keys(product.stockByLocation).length === 0) {
+        return product.quantity === undefined || product.quantity > 0;
+    }
+    
+    // Проверяем количество на конкретной точке (общее для товара)
+    const quantityAtLocation = product.stockByLocation[location];
+    
+    // Если для этой точки нет данных, считаем что товар есть (используем общее количество)
+    if (quantityAtLocation === undefined) {
+        return product.quantity === undefined || product.quantity > 0;
+    }
+    
+    // Товар есть, если количество больше 0
+    return quantityAtLocation > 0;
+}
+
+// Получить список точек, где есть конкретный вкус
+function getLocationsWithFlavorStock(product, flavor) {
+    if (!product || !flavor || product.inStock === false) {
+        return [];
+    }
+    
+    // Сначала проверяем наличие конкретного вкуса на точках
+    if (product.stockByFlavorAndLocation && product.stockByFlavorAndLocation[flavor]) {
+        return Object.keys(product.stockByFlavorAndLocation[flavor]).filter(location => {
+            const quantity = product.stockByFlavorAndLocation[flavor][location];
+            return quantity !== undefined && quantity > 0;
+        });
+    }
+    
+    // Если нет информации о количестве на точках, возвращаем пустой массив
+    if (!product.stockByLocation || Object.keys(product.stockByLocation).length === 0) {
+        return [];
+    }
+    
+    // Возвращаем список точек, где количество > 0 (общее для товара)
+    return Object.keys(product.stockByLocation).filter(location => {
+        const quantity = product.stockByLocation[location];
+        return quantity !== undefined && quantity > 0;
+    });
+}
+
+// Получить список точек, где есть конкретный вкус, отфильтрованный по городу
+function getLocationsWithFlavorStockByCity(product, flavor, city) {
+    const allLocations = getLocationsWithFlavorStock(product, flavor);
+    if (!city) return allLocations;
+    
+    // Фильтруем по городу
+    return allLocations.filter(location => {
+        if (city === 'Минск') {
+            return location.includes('Минск');
+        } else if (city === 'Могилёв' || city === 'Могилев') {
+            return location.includes('Могилёв') || location.includes('Могилев');
+        }
+        return true;
     });
 }
 
@@ -1617,6 +1722,29 @@ function displayProducts(productsToShow = null) {
         }
     }
     
+    // Фильтр по городу (если выбрана точка самовывоза)
+    if (selectedPickupLocation && deliveryType === 'selfPickup') {
+        const selectedCity = getCityFromLocation(selectedPickupLocation);
+        if (selectedCity) {
+            filtered = filtered.filter(product => {
+                // Проверяем, есть ли товар хотя бы на одной точке в выбранном городе
+                if (!product.stockByLocation || Object.keys(product.stockByLocation).length === 0) {
+                    // Если нет информации о точках, показываем товар
+                    return true;
+                }
+                // Проверяем наличие на точках в выбранном городе
+                return Object.keys(product.stockByLocation).some(location => {
+                    const locationCity = getCityFromLocation(location);
+                    if (locationCity === selectedCity) {
+                        const quantity = product.stockByLocation[location];
+                        return quantity !== undefined && quantity > 0;
+                    }
+                    return false;
+                });
+            });
+        }
+    }
+    
     // Сортировка
     if (sortOrder) {
         filtered = [...filtered].sort((a, b) => {
@@ -1925,6 +2053,16 @@ function showProduct(productId, favoriteFlavor = null, favoriteStrength = null) 
                         ${allFlavors.map((flavor, idx) => {
                             const originalIndex = product.flavors.indexOf(flavor);
                             const isSelected = flavor === selectedFlavor || originalIndex === selectedFlavorIndex;
+                            
+                            // Проверяем наличие вкуса на выбранной точке
+                            const isFlavorInStock = deliveryType === 'selfPickup' && selectedPickupLocation
+                                ? isFlavorInStockAtLocation(product, flavor, selectedPickupLocation)
+                                : (product.inStock !== false && (product.quantity === undefined || product.quantity > 0));
+                            
+                            // Получаем список точек, где есть этот вкус (отфильтрованный по городу)
+                            const selectedCity = getCityFromLocation(selectedPickupLocation || currentLocation);
+                            const flavorLocations = !isFlavorInStock ? getLocationsWithFlavorStockByCity(product, flavor, selectedCity) : [];
+                            
                             // Определяем изображение для вкуса
                             const flavorImage = (product.flavorImages && product.flavorImages[flavor]) 
                                 ? product.flavorImages[flavor] 
@@ -1933,21 +2071,30 @@ function showProduct(productId, favoriteFlavor = null, favoriteStrength = null) 
                             // Обрабатываем URL через processImageUrl для правильной загрузки
                             const processedFlavorUrl = flavorImage ? processImageUrl(flavorImage) : null;
                             const flavorImageContent = processedFlavorUrl
-                                ? `<img id="${flavorImgId}" src="${processedFlavorUrl}" alt="${flavor}" style="width: 100%; height: 100%; object-fit: cover; border-radius: 50%; display: block; margin: 0 auto;" onerror="handleImageError('${flavorImgId}')" loading="lazy" crossorigin="anonymous">`
-                                : getPackageIcon('#999999');
+                                ? `<img id="${flavorImgId}" src="${processedFlavorUrl}" alt="${flavor}" style="width: 100%; height: 100%; object-fit: cover; border-radius: 50%; display: block; margin: 0 auto; ${!isFlavorInStock ? 'opacity: 0.5; filter: grayscale(100%);' : ''}" onerror="handleImageError('${flavorImgId}')" loading="lazy" crossorigin="anonymous">`
+                                : getPackageIcon(!isFlavorInStock ? '#999999' : '#999999');
+                            
+                            // Если вкус не в наличии, делаем его кликабельным для перехода на карточку
+                            const onClickAction = !isFlavorInStock && flavorLocations.length > 0
+                                ? `showProduct(${product.id}, '${flavor.replace(/'/g, "\\'")}', null);`
+                                : `selectFlavor('${flavor.replace(/'/g, "\\'")}', ${originalIndex})`;
+                            
                             return `
-                            <div onclick="selectFlavor('${flavor}', ${originalIndex})" id="flavor-${originalIndex}" 
+                            <div onclick="${onClickAction}" id="flavor-${originalIndex}" 
                                 style="width: 80px; text-align: center; cursor: pointer; flex-shrink: 0; display: flex; flex-direction: column; align-items: center; outline: none; user-select: none; -webkit-user-select: none; -webkit-tap-highlight-color: transparent;">
-                                <div style="width: 80px; height: 80px; border-radius: 50%; background: #f0f0f0; 
+                                <div style="width: 80px; height: 80px; border-radius: 50%; background: ${!isFlavorInStock ? '#e0e0e0' : '#f0f0f0'}; 
                                     display: flex; align-items: center; justify-content: center; 
-                                    border: ${isSelected ? '2px solid #007AFF' : '2px solid #e5e5e5'}; 
-                                    margin-bottom: 8px; overflow: hidden; position: relative; flex-shrink: 0;">
-                                    ${flavorImageContent}
-                                    ${isSelected ? '<span style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); color: white; font-size: 20px; text-shadow: 0 0 4px rgba(0,0,0,0.5); z-index: 10;">✓</span>' : ''}
+                                    border: ${isSelected ? '3px solid #007AFF' : (!isFlavorInStock ? '2px solid #999' : '2px solid #e5e5e5')}; 
+                                    margin-bottom: 8px; overflow: visible; position: relative; flex-shrink: 0; box-shadow: ${isSelected ? '0 2px 8px rgba(0,122,255,0.3)' : '0 1px 3px rgba(0,0,0,0.1)'}; ${!isFlavorInStock ? 'opacity: 0.6; filter: grayscale(100%);' : ''}">
+                                    <div style="width: 100%; height: 100%; border-radius: 50%; overflow: hidden; position: relative;">
+                                        ${flavorImageContent}
+                                    </div>
+                                    ${isSelected ? '<div style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 24px; height: 24px; background: #007AFF; border-radius: 50%; display: flex; align-items: center; justify-content: center; z-index: 10; box-shadow: 0 2px 4px rgba(0,0,0,0.2);"><span style="color: white; font-size: 14px; font-weight: bold; line-height: 1;">✓</span></div>' : ''}
                                 </div>
-                                <div style="font-size: 12px; color: ${isSelected ? '#007AFF' : '#000'}; font-weight: ${isSelected ? '600' : '400'}; text-align: center; width: 100%;">
+                                <div style="font-size: 12px; color: ${isSelected ? '#007AFF' : (!isFlavorInStock ? '#999' : '#000')}; font-weight: ${isSelected ? '600' : '400'}; text-align: center; width: 100%;">
                                     ${flavor.length > 15 ? flavor.substring(0, 15) + '...' : flavor}
                                 </div>
+                                ${!isFlavorInStock ? '<div style="font-size: 10px; color: #999; text-align: center; width: 100%; margin-top: 2px;">Нет в наличии</div>' : ''}
                             </div>
                         `;
                         }).join('')}
@@ -2010,12 +2157,33 @@ function showProduct(productId, favoriteFlavor = null, favoriteStrength = null) 
             ${strengthOptions}
             ${flavorOptions}
             ${(() => {
-                const isInStock = deliveryType === 'selfPickup' && selectedPickupLocation
-                    ? isProductInStockAtLocation(product, selectedPickupLocation)
-                    : (product.inStock !== false && (product.quantity === undefined || product.quantity > 0));
+                // Проверяем наличие товара или конкретного вкуса
+                let isInStock = false;
+                let locationsWithStock = [];
+                
+                if (selectedFlavor) {
+                    // Проверяем наличие конкретного вкуса
+                    isInStock = deliveryType === 'selfPickup' && selectedPickupLocation
+                        ? isFlavorInStockAtLocation(product, selectedFlavor, selectedPickupLocation)
+                        : (product.inStock !== false && (product.quantity === undefined || product.quantity > 0));
+                    
+                    if (!isInStock) {
+                        // Получаем адреса для конкретного вкуса, отфильтрованные по городу
+                        const selectedCity = getCityFromLocation(selectedPickupLocation || currentLocation);
+                        locationsWithStock = getLocationsWithFlavorStockByCity(product, selectedFlavor, selectedCity);
+                    }
+                } else {
+                    // Проверяем общее наличие товара
+                    isInStock = deliveryType === 'selfPickup' && selectedPickupLocation
+                        ? isProductInStockAtLocation(product, selectedPickupLocation)
+                        : (product.inStock !== false && (product.quantity === undefined || product.quantity > 0));
+                    
+                    if (!isInStock) {
+                        locationsWithStock = getLocationsWithStock(product);
+                    }
+                }
                 
                 if (!isInStock) {
-                    const locationsWithStock = getLocationsWithStock(product);
                     return `
                         <div style="margin-top: 20px;">
                             <button disabled style="width: 100%; padding: 16px; 
@@ -2186,29 +2354,43 @@ function selectFlavor(flavor, index) {
                 flavorsContainer.innerHTML = allFlavors.map((flavorItem) => {
                     const originalIndex = product.flavors.indexOf(flavorItem);
                     const isSelected = flavorItem === selectedFlavor || originalIndex === selectedFlavorIndex;
+                    
+                    // Проверяем наличие вкуса на выбранной точке
+                    const isFlavorInStock = deliveryType === 'selfPickup' && selectedPickupLocation
+                        ? isFlavorInStockAtLocation(product, flavorItem, selectedPickupLocation)
+                        : (product.inStock !== false && (product.quantity === undefined || product.quantity > 0));
+                    
                     const flavorImage = (product.flavorImages && product.flavorImages[flavorItem]) 
                         ? product.flavorImages[flavorItem] 
                         : (product.imageUrl || null);
                     const flavorImgId = `flavor-img-${originalIndex}-${Date.now()}`;
                     const flavorImageContent = flavorImage
-                        ? `<img id="${flavorImgId}" src="${flavorImage}" alt="${flavorItem}" style="width: 100%; height: 100%; object-fit: cover; border-radius: 50%; display: block;" onerror="handleImageError('${flavorImgId}')">`
+                        ? `<img id="${flavorImgId}" src="${flavorImage}" alt="${flavorItem}" style="width: 100%; height: 100%; object-fit: cover; border-radius: 50%; display: block; ${!isFlavorInStock ? 'opacity: 0.5; filter: grayscale(100%);' : ''}" onerror="handleImageError('${flavorImgId}')">`
                         : getPackageIcon('#999999');
                     
+                    // Если вкус не в наличии, делаем его кликабельным для перехода на карточку
+                    const selectedCity = getCityFromLocation(selectedPickupLocation || currentLocation);
+                    const flavorLocations = !isFlavorInStock ? getLocationsWithFlavorStockByCity(product, flavorItem, selectedCity) : [];
+                    const onClickAction = !isFlavorInStock && flavorLocations.length > 0
+                        ? `showProduct(${product.id}, '${flavorItem.replace(/'/g, "\\'")}', null);`
+                        : `selectFlavor('${flavorItem.replace(/'/g, "\\'")}', ${originalIndex})`;
+                    
                             return `
-                            <div onclick="selectFlavor('${flavorItem}', ${originalIndex})" id="flavor-${originalIndex}" 
+                            <div onclick="${onClickAction}" id="flavor-${originalIndex}" 
                                 style="min-width: 80px; text-align: center; cursor: pointer; flex-shrink: 0;">
-                            <div style="width: 80px; height: 80px; border-radius: 50%; background: #f0f0f0; 
+                            <div style="width: 80px; height: 80px; border-radius: 50%; background: ${!isFlavorInStock ? '#e0e0e0' : '#f0f0f0'}; 
                                 display: flex; align-items: center; justify-content: center; 
-                                border: ${isSelected ? '3px solid #007AFF' : '2px solid #e5e5e5'}; 
-                                margin-bottom: 8px; overflow: visible; position: relative; box-shadow: ${isSelected ? '0 2px 8px rgba(0,122,255,0.3)' : '0 1px 3px rgba(0,0,0,0.1)'};">
+                                border: ${isSelected ? '3px solid #007AFF' : (!isFlavorInStock ? '2px solid #999' : '2px solid #e5e5e5')}; 
+                                margin-bottom: 8px; overflow: visible; position: relative; box-shadow: ${isSelected ? '0 2px 8px rgba(0,122,255,0.3)' : '0 1px 3px rgba(0,0,0,0.1)'}; ${!isFlavorInStock ? 'opacity: 0.6; filter: grayscale(100%);' : ''}">
                                 <div style="width: 100%; height: 100%; border-radius: 50%; overflow: hidden; position: relative;">
                                     ${flavorImageContent}
                                 </div>
                                 ${isSelected ? '<div style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 24px; height: 24px; background: #007AFF; border-radius: 50%; display: flex; align-items: center; justify-content: center; z-index: 10; box-shadow: 0 2px 4px rgba(0,0,0,0.2);"><span style="color: white; font-size: 14px; font-weight: bold; line-height: 1;">✓</span></div>' : ''}
                             </div>
-                            <div style="font-size: 12px; color: ${isSelected ? '#007AFF' : '#000'}; font-weight: ${isSelected ? '600' : '400'};">
+                            <div style="font-size: 12px; color: ${isSelected ? '#007AFF' : (!isFlavorInStock ? '#999' : '#000')}; font-weight: ${isSelected ? '600' : '400'};">
                                 ${flavorItem.length > 15 ? flavorItem.substring(0, 15) + '...' : flavorItem}
                             </div>
+                            ${!isFlavorInStock ? '<div style="font-size: 10px; color: #999; text-align: center; width: 100%; margin-top: 2px;">Нет в наличии</div>' : ''}
                         </div>
                     `;
                 }).join('');
@@ -2302,12 +2484,24 @@ function showFlavorModal() {
     
         sortedFlavors.forEach((flavor, displayIdx) => {
         const originalIndex = viewingProduct.flavors.indexOf(flavor);
-        const flavorCard = document.createElement('div');
         const isInitiallySelected = flavor === selectedFlavor || originalIndex === selectedFlavorIndex;
-        flavorCard.style.cssText = 'padding: 16px; border: 2px solid ' + (isInitiallySelected ? '#007AFF' : '#e5e5e5') + '; border-radius: 12px; background: ' + (isInitiallySelected ? '#007AFF' : '#ffffff') + '; cursor: pointer; text-align: center; touch-action: manipulation; user-select: none; -webkit-user-select: none; position: relative; overflow: visible;';
+        
+        // Проверяем наличие вкуса на выбранной точке
+        const isFlavorInStock = deliveryType === 'selfPickup' && selectedPickupLocation
+            ? isFlavorInStockAtLocation(viewingProduct, flavor, selectedPickupLocation)
+            : (viewingProduct.inStock !== false && (viewingProduct.quantity === undefined || viewingProduct.quantity > 0));
+        
+        // Получаем список точек, где есть этот вкус (отфильтрованный по городу)
+        const selectedCity = getCityFromLocation(selectedPickupLocation || currentLocation);
+        const flavorLocations = !isFlavorInStock ? getLocationsWithFlavorStockByCity(viewingProduct, flavor, selectedCity) : [];
+        
+        const flavorCard = document.createElement('div');
+        const borderColor = isInitiallySelected ? '#007AFF' : (!isFlavorInStock ? '#999' : '#e5e5e5');
+        const bgColor = isInitiallySelected ? '#007AFF' : (!isFlavorInStock ? '#f5f5f5' : '#ffffff');
+        flavorCard.style.cssText = 'padding: 16px; border: 2px solid ' + borderColor + '; border-radius: 12px; background: ' + bgColor + '; cursor: pointer; text-align: center; touch-action: manipulation; user-select: none; -webkit-user-select: none; position: relative; overflow: visible; ' + (!isFlavorInStock ? 'opacity: 0.7;' : '');
         
         const iconDiv = document.createElement('div');
-        iconDiv.style.cssText = 'width: 60px; height: 60px; border-radius: 50%; background: #f0f0f0; margin: 0 auto 8px; display: flex; align-items: center; justify-content: center; position: relative; overflow: hidden;';
+        iconDiv.style.cssText = 'width: 60px; height: 60px; border-radius: 50%; background: ' + (!isFlavorInStock ? '#e0e0e0' : '#f0f0f0') + '; margin: 0 auto 8px; display: flex; align-items: center; justify-content: center; position: relative; overflow: hidden;';
         
         // Определяем изображение для вкуса
         const flavorImage = (viewingProduct.flavorImages && viewingProduct.flavorImages[flavor]) 
@@ -2318,7 +2512,7 @@ function showFlavorModal() {
             const img = document.createElement('img');
             img.src = flavorImage;
             img.alt = flavor;
-            img.style.cssText = 'width: 100%; height: 100%; object-fit: cover; border-radius: 50%;';
+            img.style.cssText = 'width: 100%; height: 100%; object-fit: cover; border-radius: 50%;' + (!isFlavorInStock ? ' opacity: 0.5; filter: grayscale(100%);' : '');
             img.onerror = function() {
                 iconDiv.innerHTML = getPackageIcon('#999999');
                 iconDiv.style.fontSize = '0';
@@ -2330,13 +2524,23 @@ function showFlavorModal() {
         
         
         const textDiv = document.createElement('div');
-        textDiv.style.cssText = 'font-size: 14px; font-weight: 500; color: ' + (isInitiallySelected ? '#ffffff' : '#000') + '; min-height: 20px; display: block; white-space: normal; word-wrap: break-word; position: relative; z-index: 100; visibility: visible; opacity: 1; background: transparent; pointer-events: none; padding: 4px 0;';
+        const textColor = isInitiallySelected ? '#ffffff' : (!isFlavorInStock ? '#999' : '#000');
+        textDiv.style.cssText = 'font-size: 14px; font-weight: 500; color: ' + textColor + '; min-height: 20px; display: block; white-space: normal; word-wrap: break-word; position: relative; z-index: 100; visibility: visible; opacity: 1; background: transparent; pointer-events: none; padding: 4px 0;';
         textDiv.textContent = flavor;
+        
+        // Добавляем текст "Нет в наличии" если вкус не в наличии
+        if (!isFlavorInStock) {
+            const stockText = document.createElement('div');
+            stockText.style.cssText = 'font-size: 11px; color: #999; margin-top: 4px;';
+            stockText.textContent = 'Нет в наличии';
+            textDiv.appendChild(stockText);
+        }
         
         flavorCard.appendChild(iconDiv);
         flavorCard.appendChild(textDiv);
         
         // Обработчики событий - один клик сразу выбирает вкус и закрывает окно
+        // Если вкус не в наличии, открываем карточку товара с этим вкусом
         let isProcessing = false;
         const handleSelect = function(e) {
             if (isProcessing) return;
@@ -2345,6 +2549,20 @@ function showFlavorModal() {
             e.preventDefault();
             e.stopPropagation();
             e.stopImmediatePropagation();
+            
+            // Если вкус не в наличии и есть адреса где он есть, открываем карточку товара
+            if (!isFlavorInStock && flavorLocations.length > 0) {
+                document.body.style.overflow = '';
+                modal.remove();
+                showProduct(viewingProduct.id, flavor, null);
+                if (tg && tg.HapticFeedback) {
+                    tg.HapticFeedback.notificationOccurred('success');
+                }
+                setTimeout(() => {
+                    isProcessing = false;
+                }, 500);
+                return false;
+            }
             
             // Сохраняем выбранный индекс (оригинальный индекс в массиве)
             viewingProduct.selectedFlavorIndex = originalIndex;
@@ -7257,14 +7475,10 @@ function showFavorites() {
         // Правильно экранируем кавычки в URL для изображения
         const safeImageUrl = imageUrl ? imageUrl.replace(/'/g, "&#39;").replace(/"/g, "&quot;") : '';
         
-        // Для товаров без наличия используем серое изображение
-        const imageContent = isInStock 
-            ? (imageUrl
+        // Не показываем фото, если товар не в наличии
+        const imageContent = isInStock && imageUrl
             ? `<img src="${safeImageUrl}" alt="${product.name.replace(/'/g, "&#39;")}" style="width: 100%; height: 100%; object-fit: cover; border-radius: 12px; display: block;" onerror="this.parentElement.innerHTML='${getPackageIcon('#999999')}'">`
-                : getPackageIcon('#999999'))
-            : `<div style="width: 100%; height: 100%; background: #e0e0e0; border-radius: 12px; display: flex; align-items: center; justify-content: center; opacity: 0.5;">
-                ${getPackageIcon('#999999')}
-            </div>`;
+            : getPackageIcon('#999999');
         
         // Формируем параметры для передачи в showProduct - правильно экранируем
         const flavorParam = flavor ? `'${String(flavor).replace(/'/g, "\\'").replace(/\\/g, "\\\\")}'` : 'null';
