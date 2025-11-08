@@ -2385,6 +2385,7 @@ function renderProductContent(container, product, favoriteFlavor, favoriteStreng
                 : (product.inStock !== false && (product.quantity === undefined || product.quantity > 0));
             
             // Если выбранный вкус не в наличии, выбираем первый доступный
+            let finalSelectedFlavor = selectedFlavor;
             if (!isSelectedInStock) {
                 for (let i = 0; i < allFlavors.length; i++) {
                     const flavor = allFlavors[i];
@@ -2393,16 +2394,24 @@ function renderProductContent(container, product, favoriteFlavor, favoriteStreng
                         : (product.inStock !== false && (product.quantity === undefined || product.quantity > 0));
                     if (isInStock) {
                         currentSelectedIndex = i;
+                        finalSelectedFlavor = flavor;
                         break;
                     }
                 }
             }
             
             // Обновляем viewingProduct с правильным индексом и вкусом
-            const finalSelectedFlavor = allFlavors[currentSelectedIndex];
+            // ВАЖНО: Используем оригинальный индекс из product.flavors, а не из отсортированного массива
             viewingProduct.selectedFlavorIndex = product.flavors.indexOf(finalSelectedFlavor);
             viewingProduct.selectedFlavor = finalSelectedFlavor;
             const currentSelectedFlavor = finalSelectedFlavor;
+            
+            // Обновляем currentSelectedIndex для правильного отображения в списке вкусов
+            // Находим индекс в отсортированном массиве для правильного выделения
+            const sortedIndex = allFlavors.indexOf(finalSelectedFlavor);
+            if (sortedIndex >= 0) {
+                currentSelectedIndex = sortedIndex;
+            }
             
             flavorOptions = `
                 <div style="margin: 20px 0;">
@@ -2425,8 +2434,8 @@ function renderProductContent(container, product, favoriteFlavor, favoriteStreng
                         ${allFlavors.map((flavor, idx) => {
                             // Используем оригинальный индекс из product.flavors для правильной работы
                             const originalIndex = product.flavors.indexOf(flavor);
-                            // Используем строгое сравнение - проверяем что и индекс и вкус совпадают
-                            const isSelected = (originalIndex === currentSelectedIndex) && (flavor === currentSelectedFlavor);
+                            // Используем строгое сравнение - проверяем что вкус совпадает с выбранным
+                            const isSelected = (flavor === currentSelectedFlavor);
                             
                             // Проверяем наличие вкуса на выбранной точке
                             const isFlavorInStock = deliveryType === 'selfPickup' && selectedPickupLocation
@@ -2487,8 +2496,9 @@ function renderProductContent(container, product, favoriteFlavor, favoriteStreng
     }
     
     // Определяем изображение для страницы товара (с учетом выбранного вкуса)
-    const selectedFlavor = viewingProduct.selectedFlavor;
-    const selectedStrength = viewingProduct.selectedStrength;
+    // ВАЖНО: Используем актуальный selectedFlavor из viewingProduct (уже установлен в flavorOptions выше)
+    const selectedFlavor = viewingProduct.selectedFlavor || null;
+    const selectedStrength = viewingProduct.selectedStrength || null;
     const isFav = isFavorite(product.id, selectedFlavor, selectedStrength);
     
     let productImageUrl = product.imageUrl;
