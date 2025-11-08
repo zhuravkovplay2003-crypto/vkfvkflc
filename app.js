@@ -2480,26 +2480,29 @@ function renderProductContent(container, product, favoriteFlavor, favoriteStreng
                 ? isFlavorInStockAtLocation(product, selectedFlavor, selectedPickupLocation)
                 : (product.inStock !== false && (product.quantity === undefined || product.quantity > 0));
             
-            // Если выбранный вкус не в наличии, выбираем первый доступный
+            // ВАЖНО: НЕ меняем выбранный вкус, даже если он недоступен
+            // Пользователь должен видеть выбранный вкус, даже если его нет в наличии
             let finalSelectedFlavor = selectedFlavor;
-            if (!isSelectedInStock) {
-                for (let i = 0; i < allFlavors.length; i++) {
-                    const flavor = allFlavors[i];
-                    const isInStock = deliveryType === 'selfPickup' && selectedPickupLocation
-                        ? isFlavorInStockAtLocation(product, flavor, selectedPickupLocation)
-                        : (product.inStock !== false && (product.quantity === undefined || product.quantity > 0));
-                    if (isInStock) {
-                        currentSelectedIndex = i;
-                        finalSelectedFlavor = flavor;
-                        break;
-                    }
-                }
-            }
             
             // Обновляем viewingProduct с правильным индексом и вкусом
             // ВАЖНО: Используем оригинальный индекс из product.flavors, а не из отсортированного массива
-            viewingProduct.selectedFlavorIndex = product.flavors.indexOf(finalSelectedFlavor);
-            viewingProduct.selectedFlavor = finalSelectedFlavor;
+            // НЕ меняем выбранный вкус - сохраняем тот, который выбрал пользователь
+            // Если пользователь уже выбрал вкус (даже если он недоступен), сохраняем его выбор
+            if (viewingProduct.selectedFlavor && product.flavors.includes(viewingProduct.selectedFlavor)) {
+                // Сохраняем выбранный пользователем вкус, даже если он недоступен
+                viewingProduct.selectedFlavorIndex = product.flavors.indexOf(viewingProduct.selectedFlavor);
+                viewingProduct.selectedFlavor = viewingProduct.selectedFlavor;
+                finalSelectedFlavor = viewingProduct.selectedFlavor;
+                // Обновляем currentSelectedIndex для правильного отображения
+                const originalIndexInSorted = allFlavors.indexOf(viewingProduct.selectedFlavor);
+                if (originalIndexInSorted >= 0) {
+                    currentSelectedIndex = originalIndexInSorted;
+                }
+            } else {
+                // Только если вкус не был выбран ранее, используем текущий
+                viewingProduct.selectedFlavorIndex = product.flavors.indexOf(finalSelectedFlavor);
+                viewingProduct.selectedFlavor = finalSelectedFlavor;
+            }
             const currentSelectedFlavor = finalSelectedFlavor;
             
             // Обновляем currentSelectedIndex для правильного отображения в списке вкусов
