@@ -1337,20 +1337,15 @@ function showPage(page, skipHistory = false, resetCatalog = false) {
     }
     
     // Сохраняем состояние просмотра товара, если мы на странице товара и переходим на другую вкладку
-    // НЕ сохраняем при переходе в корзину, чтобы не восстанавливать товар после корзины
-    if (currentPage === 'product' && viewingProduct && page !== 'product' && page !== 'catalog' && page !== 'cart') {
+    if (currentPage === 'product' && viewingProduct && page !== 'product' && page !== 'catalog') {
         // Сохраняем товар в localStorage для восстановления при возврате
+        // Включая переход в корзину - нужно восстановить товар после возврата из корзины
         localStorage.setItem('lastViewedProduct', JSON.stringify({
             id: viewingProduct.id,
             selectedFlavor: viewingProduct.selectedFlavor,
             selectedStrength: viewingProduct.selectedStrength,
             selectedFlavorIndex: viewingProduct.selectedFlavorIndex
         }));
-    }
-    
-    // Очищаем сохраненный товар при переходе в корзину
-    if (page === 'cart' && currentPage === 'product') {
-        localStorage.removeItem('lastViewedProduct');
     }
     
     // Добавляем текущую страницу в историю (если не пропущено)
@@ -1371,13 +1366,36 @@ function showPage(page, skipHistory = false, resetCatalog = false) {
                 const productData = JSON.parse(savedProduct);
                 const product = products.find(p => p.id === productData.id);
                 if (product) {
-                    // Восстанавливаем товар
+                    // Восстанавливаем товар с полным состоянием
                     viewingProduct = product;
-                    if (productData.selectedFlavor) viewingProduct.selectedFlavor = productData.selectedFlavor;
-                    if (productData.selectedStrength) viewingProduct.selectedStrength = productData.selectedStrength;
-                    if (productData.selectedFlavorIndex !== undefined) viewingProduct.selectedFlavorIndex = productData.selectedFlavorIndex;
-                    // Показываем товар
-                    showProduct(productData.id, productData.selectedFlavor || null, productData.selectedStrength || null);
+                    if (productData.selectedFlavor) {
+                        viewingProduct.selectedFlavor = productData.selectedFlavor;
+                        // Убеждаемся что индекс правильный
+                        if (product.flavors && product.flavors.includes(productData.selectedFlavor)) {
+                            viewingProduct.selectedFlavorIndex = product.flavors.indexOf(productData.selectedFlavor);
+                        } else if (productData.selectedFlavorIndex !== undefined && product.flavors && product.flavors[productData.selectedFlavorIndex]) {
+                            viewingProduct.selectedFlavorIndex = productData.selectedFlavorIndex;
+                            viewingProduct.selectedFlavor = product.flavors[productData.selectedFlavorIndex];
+                        } else if (product.flavors && product.flavors.length > 0) {
+                            viewingProduct.selectedFlavorIndex = 0;
+                            viewingProduct.selectedFlavor = product.flavors[0];
+                        }
+                    } else if (productData.selectedFlavorIndex !== undefined && product.flavors && product.flavors[productData.selectedFlavorIndex]) {
+                        viewingProduct.selectedFlavorIndex = productData.selectedFlavorIndex;
+                        viewingProduct.selectedFlavor = product.flavors[productData.selectedFlavorIndex];
+                    } else if (product.flavors && product.flavors.length > 0) {
+                        viewingProduct.selectedFlavorIndex = 0;
+                        viewingProduct.selectedFlavor = product.flavors[0];
+                    }
+                    
+                    if (productData.selectedStrength) {
+                        viewingProduct.selectedStrength = productData.selectedStrength;
+                    } else if (product.strengths && product.strengths.length > 0) {
+                        viewingProduct.selectedStrength = product.strengths[0];
+                    }
+                    
+                    // Показываем товар с восстановленными параметрами
+                    showProduct(productData.id, viewingProduct.selectedFlavor || null, viewingProduct.selectedStrength || null);
                     localStorage.removeItem('lastViewedProduct'); // Очищаем после восстановления
                     // Подсвечиваем кнопку "Ассортимент" при восстановлении товара
                     document.querySelectorAll('.nav-item').forEach(btn => {
@@ -2079,16 +2097,24 @@ function showProduct(productId, favoriteFlavor = null, favoriteStrength = null) 
             viewingProduct.selectedStrength = product.strengths[0];
         }
     } else {
-        // Если не из избранного, используем дефолтные значения
+        // Если не из избранного, используем сохраненные или дефолтные значения
         if (product.flavors && product.flavors.length > 0) {
-            // Убеждаемся что индекс правильный
-            if (viewingProduct.selectedFlavorIndex === undefined || viewingProduct.selectedFlavorIndex < 0 || viewingProduct.selectedFlavorIndex >= product.flavors.length) {
-            viewingProduct.selectedFlavorIndex = 0;
+            // Если уже есть сохраненный вкус и индекс, используем их
+            if (viewingProduct.selectedFlavor && product.flavors.includes(viewingProduct.selectedFlavor)) {
+                viewingProduct.selectedFlavorIndex = product.flavors.indexOf(viewingProduct.selectedFlavor);
+            } else if (viewingProduct.selectedFlavorIndex !== undefined && viewingProduct.selectedFlavorIndex >= 0 && viewingProduct.selectedFlavorIndex < product.flavors.length) {
+                // Используем сохраненный индекс
+                viewingProduct.selectedFlavor = product.flavors[viewingProduct.selectedFlavorIndex];
+            } else {
+                // Используем дефолтные значения
+                viewingProduct.selectedFlavorIndex = 0;
+                viewingProduct.selectedFlavor = product.flavors[0];
             }
-            viewingProduct.selectedFlavor = product.flavors[viewingProduct.selectedFlavorIndex];
         }
         if (product.strengths && product.strengths.length > 0) {
-            viewingProduct.selectedStrength = product.strengths[0];
+            if (!viewingProduct.selectedStrength || !product.strengths.includes(viewingProduct.selectedStrength)) {
+                viewingProduct.selectedStrength = product.strengths[0];
+            }
         }
     }
     
@@ -6029,77 +6055,8 @@ function setPaymentMethod(index, method) {
 function updateCartItemsDisplay() {
     if (currentPage !== 'cart') return;
     
-    const pageContent = document.getElementById('page-content');
-    if (!pageContent) return;
-    
-    // Обновляем каждый товар в корзине
-    cart.forEach((item, idx) => {
-        const product = products.find(p => p.id === item.productId || p.id === item.id);
-        if (!product) return;
-        
-        // Проверяем наличие товара на выбранной точке
-        let isItemInStock = true;
-        if (deliveryType === 'selfPickup' && selectedPickupLocation) {
-            if (item.flavor) {
-                isItemInStock = isFlavorInStockAtLocation(product, item.flavor, selectedPickupLocation);
-            } else {
-                isItemInStock = isProductInStockAtLocation(product, selectedPickupLocation);
-            }
-        } else if (deliveryType === 'delivery') {
-            // Для доставки проверяем общее наличие
-            isItemInStock = product.inStock !== false && (product.quantity === undefined || product.quantity > 0);
-        } else {
-            isItemInStock = product.inStock !== false && (product.quantity === undefined || product.quantity > 0);
-        }
-        
-        // Обновляем изображение
-        const imageContainer = document.getElementById(`cart-item-image-${idx}`);
-        if (imageContainer) {
-            if (isItemInStock) {
-                imageContainer.style.opacity = '1';
-                imageContainer.style.filter = 'none';
-                const img = imageContainer.querySelector('img');
-                if (img) {
-                    img.style.opacity = '1';
-                    img.style.filter = 'none';
-                }
-            } else {
-                imageContainer.style.opacity = '0.5';
-                imageContainer.style.filter = 'grayscale(100%)';
-                const img = imageContainer.querySelector('img');
-                if (img) {
-                    img.style.opacity = '0.5';
-                    img.style.filter = 'grayscale(100%)';
-                }
-            }
-        }
-        
-        // Обновляем сообщение о наличии
-        const stockMessage = document.getElementById(`cart-item-stock-message-${idx}`);
-        if (isItemInStock) {
-            if (stockMessage) {
-                stockMessage.remove();
-            }
-        } else {
-            if (!stockMessage) {
-                // Находим контейнер с информацией о товаре
-                const itemContainer = imageContainer?.closest('div[style*="display: flex; gap: 16px"]');
-                if (itemContainer) {
-                    const infoContainer = itemContainer.querySelector('div[style*="flex: 1"]');
-                    if (infoContainer) {
-                        const messageDiv = document.createElement('div');
-                        messageDiv.id = `cart-item-stock-message-${idx}`;
-                        messageDiv.style.cssText = 'margin-top: 8px; padding: 8px 12px; background: #fff3f3; border-radius: 8px; font-size: 13px; color: #f44336; font-weight: 600; border: 1px solid #ffcdd2;';
-                        messageDiv.textContent = 'На данной точке этого товара нет';
-                        infoContainer.appendChild(messageDiv);
-                    }
-                }
-            } else {
-                // Обновляем существующее сообщение
-                stockMessage.textContent = 'На данной точке этого товара нет';
-            }
-        }
-    });
+    // Полностью перерисовываем корзину для правильного обновления всех элементов
+    showCart();
 }
 
 // Обновление итоговой суммы корзины без полной перерисовки
