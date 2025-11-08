@@ -2894,6 +2894,21 @@ function selectFlavor(flavor, index) {
     // ВАЖНО: Убеждаемся что мы остаемся на странице товара
     // НЕ вызываем showPage или другие функции которые могут перенаправить
     const container = document.getElementById('page-content');
+    
+    // Если мы не на странице товара, но viewingProduct существует, значит нужно перерисовать карточку
+    if ((!currentPage || currentPage !== 'product') && viewingProduct) {
+        // Убеждаемся что мы на странице товара и перерисовываем карточку полностью
+        showPage('product', true);
+        // Перерисовываем карточку с выбранным вкусом
+        setTimeout(() => {
+            const pageContent = document.getElementById('page-content');
+            if (pageContent && viewingProduct) {
+                renderProductContent(pageContent, viewingProduct, null, null);
+            }
+        }, 50);
+        return;
+    }
+    
     if (container && currentPage === 'product') {
         // Убеждаемся что мы на странице товара, не переходим никуда
         // Обновляем изображение товара
