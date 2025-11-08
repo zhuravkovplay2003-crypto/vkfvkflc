@@ -1837,7 +1837,23 @@ function displayProducts(productsToShow = null) {
         // Отображаем только цену в BYN
         const priceDisplay = `<div class="product-price" style="${!isInStock ? 'color: #999;' : ''}">${product.price.toFixed(2)} BYN</div>`;
         
-        const locationsWithStock = !isInStock ? getLocationsWithStock(product) : [];
+        // Фильтруем адреса по городу выбранной точки
+        const selectedCity = selectedPickupLocation ? getCityFromLocation(selectedPickupLocation) : null;
+        let locationsWithStock = [];
+        if (!isInStock) {
+            locationsWithStock = getLocationsWithStock(product);
+            // Фильтруем по городу если выбран город
+            if (selectedCity) {
+                locationsWithStock = locationsWithStock.filter(location => {
+                    if (selectedCity === 'Минск') {
+                        return location.includes('Минск');
+                    } else if (selectedCity === 'Могилёв' || selectedCity === 'Могилев') {
+                        return location.includes('Могилёв') || location.includes('Могилев');
+                    }
+                    return true;
+                });
+            }
+        }
         card.innerHTML = `
             <div class="product-image" data-product-id="${product.id}" style="${product.imageUrl ? 'background: #f8f8f8; overflow: hidden; position: relative;' : 'display: flex; align-items: center; justify-content: center;'} ${!isInStock ? 'opacity: 0.5;' : ''}">${imageContent}</div>
             <div class="product-info" style="display: flex; flex-direction: column; align-items: flex-start; text-align: left; width: 100%;">
@@ -1929,8 +1945,11 @@ function showProduct(productId, favoriteFlavor = null, favoriteStrength = null) 
     } else {
         // Если не из избранного, используем дефолтные значения
         if (product.flavors && product.flavors.length > 0) {
-            viewingProduct.selectedFlavor = product.flavors[0];
-            viewingProduct.selectedFlavorIndex = 0;
+            // Убеждаемся что индекс правильный
+            if (viewingProduct.selectedFlavorIndex === undefined || viewingProduct.selectedFlavorIndex < 0 || viewingProduct.selectedFlavorIndex >= product.flavors.length) {
+                viewingProduct.selectedFlavorIndex = 0;
+            }
+            viewingProduct.selectedFlavor = product.flavors[viewingProduct.selectedFlavorIndex];
         }
         if (product.strengths && product.strengths.length > 0) {
             viewingProduct.selectedStrength = product.strengths[0];
@@ -2021,6 +2040,15 @@ function showProduct(productId, favoriteFlavor = null, favoriteStrength = null) 
                                 ? `<img src="${processedFlavorUrl}" alt="${favoriteFlavor}" style="width: 60px; height: 60px; object-fit: cover; border-radius: 50%; display: block; margin: 0 auto;" loading="lazy" crossorigin="anonymous">`
                                 : getPackageIcon('#999999');
             
+            // Проверяем наличие вкуса на выбранной точке
+            const isFlavorInStock = deliveryType === 'selfPickup' && selectedPickupLocation
+                ? isFlavorInStockAtLocation(product, favoriteFlavor, selectedPickupLocation)
+                : (product.inStock !== false && (product.quantity === undefined || product.quantity > 0));
+            
+            // Получаем список точек, где есть этот вкус (отфильтрованный по городу)
+            const selectedCity = getCityFromLocation(selectedPickupLocation || currentLocation);
+            const flavorLocations = !isFlavorInStock ? getLocationsWithFlavorStockByCity(product, favoriteFlavor, selectedCity) : [];
+            
             flavorOptions = `
                 <div style="margin: 20px 0;">
                     <div style="font-weight: 600; margin-bottom: 12px;">Вкус</div>
@@ -2034,11 +2062,30 @@ function showProduct(productId, favoriteFlavor = null, favoriteStrength = null) 
                             ${favoriteFlavor}
                         </div>
                     </div>
+                    ${!isFlavorInStock && flavorLocations.length > 0 ? `
+                        <div style="margin-top: 12px; padding: 12px; background: #f5f5f5; border-radius: 12px; font-size: 13px; color: #666; line-height: 1.5;">
+                            <div style="font-weight: 600; margin-bottom: 4px; color: #333;">Есть в наличии на:</div>
+                            <div>${flavorLocations.join(', ')}</div>
+                        </div>
+                    ` : ''}
                 </div>
             `;
         } else {
             // Показываем все вкусы для выбора
             const allFlavors = [...product.flavors];
+            
+            // Убеждаемся что selectedFlavorIndex правильный
+            let currentSelectedIndex = viewingProduct.selectedFlavorIndex;
+            if (currentSelectedIndex === undefined || currentSelectedIndex < 0 || currentSelectedIndex >= allFlavors.length) {
+                if (viewingProduct.selectedFlavor) {
+                    currentSelectedIndex = allFlavors.indexOf(viewingProduct.selectedFlavor);
+                }
+                if (currentSelectedIndex < 0 || currentSelectedIndex >= allFlavors.length) {
+                    currentSelectedIndex = 0;
+                }
+                viewingProduct.selectedFlavorIndex = currentSelectedIndex;
+            }
+            const currentSelectedFlavor = viewingProduct.selectedFlavor || allFlavors[currentSelectedIndex];
             
             flavorOptions = `
                 <div style="margin: 20px 0;">
@@ -2052,15 +2099,16 @@ function showProduct(productId, favoriteFlavor = null, favoriteStrength = null) 
                     <div style="display: flex; justify-content: flex-start; gap: 12px; overflow-x: auto; padding-bottom: 8px; -webkit-overflow-scrolling: touch;">
                         ${allFlavors.map((flavor, idx) => {
                             const originalIndex = product.flavors.indexOf(flavor);
-                            const isSelected = flavor === selectedFlavor || originalIndex === selectedFlavorIndex;
+                            // Используем строгое сравнение с индексом и вкусом
+                            const isSelected = (originalIndex === currentSelectedIndex) || (flavor === currentSelectedFlavor);
                             
                             // Проверяем наличие вкуса на выбранной точке
                             const isFlavorInStock = deliveryType === 'selfPickup' && selectedPickupLocation
                                 ? isFlavorInStockAtLocation(product, flavor, selectedPickupLocation)
                                 : (product.inStock !== false && (product.quantity === undefined || product.quantity > 0));
                             
-                            // Получаем список точек, где есть этот вкус (отфильтрованный по городу)
-                            const selectedCity = getCityFromLocation(selectedPickupLocation || currentLocation);
+                            // Получаем список точек, где есть этот вкус (отфильтрованный по городу выбранной точки)
+                            const selectedCity = selectedPickupLocation ? getCityFromLocation(selectedPickupLocation) : null;
                             const flavorLocations = !isFlavorInStock ? getLocationsWithFlavorStockByCity(product, flavor, selectedCity) : [];
                             
                             // Определяем изображение для вкуса
@@ -2166,8 +2214,8 @@ function showProduct(productId, favoriteFlavor = null, favoriteStrength = null) 
                         : (product.inStock !== false && (product.quantity === undefined || product.quantity > 0));
                     
                     if (!isInStock) {
-                        // Получаем адреса для конкретного вкуса, отфильтрованные по городу
-                        const selectedCity = getCityFromLocation(selectedPickupLocation || currentLocation);
+                        // Получаем адреса для конкретного вкуса, отфильтрованные по городу выбранной точки
+                        const selectedCity = selectedPickupLocation ? getCityFromLocation(selectedPickupLocation) : null;
                         locationsWithStock = getLocationsWithFlavorStockByCity(product, selectedFlavor, selectedCity);
                     }
                 } else {
@@ -2178,6 +2226,18 @@ function showProduct(productId, favoriteFlavor = null, favoriteStrength = null) 
                     
                     if (!isInStock) {
                         locationsWithStock = getLocationsWithStock(product);
+                        // Фильтруем по городу если выбран город
+                        const selectedCity = selectedPickupLocation ? getCityFromLocation(selectedPickupLocation) : null;
+                        if (selectedCity) {
+                            locationsWithStock = locationsWithStock.filter(location => {
+                                if (selectedCity === 'Минск') {
+                                    return location.includes('Минск');
+                                } else if (selectedCity === 'Могилёв' || selectedCity === 'Могилев') {
+                                    return location.includes('Могилёв') || location.includes('Могилев');
+                                }
+                                return true;
+                            });
+                        }
                     }
                 }
                 
@@ -2216,7 +2276,7 @@ function showProduct(productId, favoriteFlavor = null, favoriteStrength = null) 
                             </button>
                         `;
                     } else {
-                        const selectedCity = getCityFromLocation(selectedPickupLocation || currentLocation);
+                        const selectedCity = selectedPickupLocation ? getCityFromLocation(selectedPickupLocation) : null;
                         const flavorLocations = getLocationsWithFlavorStockByCity(product, selectedFlavorForButton, selectedCity);
                         return `
                             <div style="margin-top: 20px;">
@@ -2303,11 +2363,24 @@ function selectFlavor(flavor, index) {
     if (!viewingProduct) return;
     
     // Сохраняем выбранный вкус
-    viewingProduct.selectedFlavorIndex = index !== undefined ? index : viewingProduct.flavors.indexOf(flavor);
-    viewingProduct.selectedFlavor = flavor;
+    const product = products.find(p => p.id === viewingProduct.id);
+    if (product && product.flavors) {
+        // Убеждаемся что индекс правильный
+        let correctIndex = index;
+        if (correctIndex === undefined || correctIndex < 0 || correctIndex >= product.flavors.length) {
+            correctIndex = product.flavors.indexOf(flavor);
+        }
+        if (correctIndex < 0 || correctIndex >= product.flavors.length) {
+            correctIndex = 0;
+        }
+        viewingProduct.selectedFlavorIndex = correctIndex;
+        viewingProduct.selectedFlavor = flavor;
+    } else {
+        viewingProduct.selectedFlavorIndex = index !== undefined ? index : 0;
+        viewingProduct.selectedFlavor = flavor;
+    }
     
     // Обновляем изображение товара на странице, если есть изображение для этого вкуса
-    const product = products.find(p => p.id === viewingProduct.id);
     if (product && product.flavorImages && product.flavorImages[flavor]) {
         const imageContainer = document.getElementById('product-image-container');
         if (imageContainer) {
@@ -2371,8 +2444,18 @@ function selectFlavor(flavor, index) {
     if (flavorSection && viewingProduct) {
         const product = products.find(p => p.id === viewingProduct.id);
         if (product && product.flavors && product.flavors.length > 0) {
-            const selectedFlavorIndex = viewingProduct.selectedFlavorIndex !== undefined ? viewingProduct.selectedFlavorIndex : 0;
-            const selectedFlavor = viewingProduct.selectedFlavor || product.flavors[selectedFlavorIndex];
+            // Убеждаемся что selectedFlavorIndex правильный
+            let currentSelectedIndex = viewingProduct.selectedFlavorIndex;
+            if (currentSelectedIndex === undefined || currentSelectedIndex < 0 || currentSelectedIndex >= product.flavors.length) {
+                if (viewingProduct.selectedFlavor) {
+                    currentSelectedIndex = product.flavors.indexOf(viewingProduct.selectedFlavor);
+                }
+                if (currentSelectedIndex < 0 || currentSelectedIndex >= product.flavors.length) {
+                    currentSelectedIndex = 0;
+                }
+                viewingProduct.selectedFlavorIndex = currentSelectedIndex;
+            }
+            const selectedFlavor = viewingProduct.selectedFlavor || product.flavors[currentSelectedIndex];
             
             const allFlavors = [...product.flavors];
             
@@ -2380,7 +2463,8 @@ function selectFlavor(flavor, index) {
             if (flavorsContainer) {
                 flavorsContainer.innerHTML = allFlavors.map((flavorItem) => {
                     const originalIndex = product.flavors.indexOf(flavorItem);
-                    const isSelected = flavorItem === selectedFlavor || originalIndex === selectedFlavorIndex;
+                    // Используем строгое сравнение с индексом и вкусом
+                    const isSelected = (originalIndex === currentSelectedIndex) || (flavorItem === selectedFlavor);
                     
                     // Проверяем наличие вкуса на выбранной точке
                     const isFlavorInStock = deliveryType === 'selfPickup' && selectedPickupLocation
@@ -2435,7 +2519,7 @@ function selectFlavor(flavor, index) {
                     : (product.inStock !== false && (product.quantity === undefined || product.quantity > 0));
                 
                 if (!isInStock) {
-                    const selectedCity = getCityFromLocation(selectedPickupLocation || currentLocation);
+                    const selectedCity = selectedPickupLocation ? getCityFromLocation(selectedPickupLocation) : null;
                     locationsWithStock = getLocationsWithFlavorStockByCity(product, selectedFlavor, selectedCity);
                 }
             } else {
@@ -2445,6 +2529,18 @@ function selectFlavor(flavor, index) {
                 
                 if (!isInStock) {
                     locationsWithStock = getLocationsWithStock(product);
+                    // Фильтруем по городу если выбран город
+                    const selectedCity = selectedPickupLocation ? getCityFromLocation(selectedPickupLocation) : null;
+                    if (selectedCity) {
+                        locationsWithStock = locationsWithStock.filter(location => {
+                            if (selectedCity === 'Минск') {
+                                return location.includes('Минск');
+                            } else if (selectedCity === 'Могилёв' || selectedCity === 'Могилев') {
+                                return location.includes('Могилёв') || location.includes('Могилев');
+                            }
+                            return true;
+                        });
+                    }
                 }
             }
             
@@ -2579,8 +2675,8 @@ function showFlavorModal() {
             ? isFlavorInStockAtLocation(viewingProduct, flavor, selectedPickupLocation)
             : (viewingProduct.inStock !== false && (viewingProduct.quantity === undefined || viewingProduct.quantity > 0));
         
-        // Получаем список точек, где есть этот вкус (отфильтрованный по городу)
-        const selectedCity = getCityFromLocation(selectedPickupLocation || currentLocation);
+        // Получаем список точек, где есть этот вкус (отфильтрованный по городу выбранной точки)
+        const selectedCity = selectedPickupLocation ? getCityFromLocation(selectedPickupLocation) : null;
         const flavorLocations = !isFlavorInStock ? getLocationsWithFlavorStockByCity(viewingProduct, flavor, selectedCity) : [];
         
         const flavorCard = document.createElement('div');
@@ -2905,8 +3001,8 @@ function addToCart(productId, strength = null, flavor = null) {
     
     if (!isInStock) {
         const message = selectedFlavor 
-            ? `Вкус "${selectedFlavor}" временно недоступен` 
-            : 'Товар временно недоступен';
+            ? `На данной точке этого товара нет` 
+            : 'На данной точке этого товара нет';
         showToast(message, 'error', 3000);
         return;
     }
@@ -5824,6 +5920,40 @@ function checkout() {
         return;
     }
     
+    // Проверяем наличие всех товаров в корзине на выбранной точке
+    const unavailableItems = [];
+    cart.forEach(item => {
+        const product = products.find(p => p.id === item.id);
+        if (!product) {
+            unavailableItems.push({ name: item.name || 'Неизвестный товар', reason: 'Товар не найден' });
+            return;
+        }
+        
+        let isInStock = false;
+        if (item.flavor) {
+            // Проверяем наличие конкретного вкуса
+            isInStock = deliveryType === 'selfPickup' && selectedPickupLocation
+                ? isFlavorInStockAtLocation(product, item.flavor, selectedPickupLocation)
+                : (product.inStock !== false && (product.quantity === undefined || product.quantity > 0));
+        } else {
+            // Проверяем общее наличие товара
+            isInStock = deliveryType === 'selfPickup' && selectedPickupLocation
+                ? isProductInStockAtLocation(product, selectedPickupLocation)
+                : (product.inStock !== false && (product.quantity === undefined || product.quantity > 0));
+        }
+        
+        if (!isInStock) {
+            const itemName = item.flavor ? `${item.name}, ${item.flavor}` : item.name;
+            unavailableItems.push({ name: itemName, reason: 'На данной точке этого товара нет' });
+        }
+    });
+    
+    if (unavailableItems.length > 0) {
+        const itemsList = unavailableItems.map(item => `• ${item.name}: ${item.reason}`).join('\n');
+        showToast(`Некоторые товары недоступны на выбранной точке:\n${itemsList}`, 'error', 5000);
+        return;
+    }
+    
     let orderText = 'Заказ:\n\n';
     
     cart.forEach(item => {
@@ -7619,7 +7749,26 @@ function showFavorites() {
                             Товара нет в наличии
                         </div>
                         ${(() => {
-                            const locationsWithStock = getLocationsWithStock(product);
+                            let locationsWithStock = [];
+                            if (flavor) {
+                                // Проверяем наличие конкретного вкуса
+                                const selectedCity = selectedPickupLocation ? getCityFromLocation(selectedPickupLocation) : null;
+                                locationsWithStock = getLocationsWithFlavorStockByCity(product, flavor, selectedCity);
+                            } else {
+                                locationsWithStock = getLocationsWithStock(product);
+                                // Фильтруем по городу если выбран город
+                                const selectedCity = selectedPickupLocation ? getCityFromLocation(selectedPickupLocation) : null;
+                                if (selectedCity) {
+                                    locationsWithStock = locationsWithStock.filter(location => {
+                                        if (selectedCity === 'Минск') {
+                                            return location.includes('Минск');
+                                        } else if (selectedCity === 'Могилёв' || selectedCity === 'Могилев') {
+                                            return location.includes('Могилёв') || location.includes('Могилев');
+                                        }
+                                        return true;
+                                    });
+                                }
+                            }
                             if (locationsWithStock.length > 0) {
                                 return `<div style="color: #666; font-size: 11px; margin-bottom: 8px; line-height: 1.4;">
                                     Есть в наличии на: ${locationsWithStock.join(', ')}
@@ -10974,8 +11123,8 @@ function addToCartFromFavorites(productId, flavor = null, strength = null) {
     
     if (!isInStock) {
         const message = flavorValue 
-            ? `Вкус "${flavorValue}" временно недоступен` 
-            : 'Товара нет в наличии';
+            ? `На данной точке этого товара нет` 
+            : 'На данной точке этого товара нет';
         showToast(message, 'error', 2000);
         return;
     }
