@@ -526,9 +526,51 @@ function isTomorrow(dateString) {
     return dateString === tomorrowStr;
 }
 
+// Проверка мобильного устройства
+function isMobileDevice() {
+    // Проверяем через user agent
+    const userAgent = navigator.userAgent || navigator.vendor || window.opera;
+    
+    // Проверяем размер экрана (мобильные обычно меньше 768px)
+    const isSmallScreen = window.innerWidth <= 768;
+    
+    // Проверяем наличие touch событий
+    const hasTouch = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
+    
+    // Проверяем user agent на мобильные устройства
+    const mobileRegex = /android|webos|iphone|ipad|ipod|blackberry|iemobile|opera mini/i;
+    const isMobileUA = mobileRegex.test(userAgent);
+    
+    // Проверяем, запущено ли в Telegram WebApp (всегда мобильное)
+    const isTelegramWebApp = typeof window.Telegram !== 'undefined' && window.Telegram.WebApp;
+    
+    // Если это Telegram WebApp, считаем мобильным
+    if (isTelegramWebApp) {
+        return true;
+    }
+    
+    // Иначе проверяем комбинацию факторов
+    return isMobileUA || (isSmallScreen && hasTouch);
+}
+
+// Показ модального окна для десктопов
+function showMobileOnlyMessage() {
+    const overlay = document.getElementById('mobile-only-overlay');
+    if (overlay) {
+        overlay.classList.add('show');
+    }
+}
+
 // Инициализация
 function init() {
     console.log('Init function called');
+    
+    // Проверяем, мобильное ли устройство
+    if (!isMobileDevice()) {
+        console.log('Обнаружено десктопное устройство, показываем предупреждение');
+        showMobileOnlyMessage();
+        return; // Не продолжаем инициализацию для десктопов
+    }
     
     if (tg) {
         tg.expand();
