@@ -509,11 +509,15 @@
             transition: transform 0.2s, box-shadow 0.2s;
             box-shadow: 0 2px 8px rgba(0,0,0,0.05);
             cursor: pointer;
+            will-change: transform;
+            backface-visibility: hidden;
+            -webkit-backface-visibility: hidden;
         }
         
-        .product-card:active {
+        /* Убираем :active чтобы избежать конфликтов с JavaScript обработчиками */
+        /* .product-card:active {
             transform: scale(0.98);
-        }
+        } */
         
         .product-image {
             width: 100%;
@@ -525,12 +529,20 @@
             font-size: 50px;
             overflow: hidden;
             position: relative;
+            transform: translateZ(0);
+            -webkit-transform: translateZ(0);
+            backface-visibility: hidden;
+            -webkit-backface-visibility: hidden;
         }
         
         .product-image img {
             width: 100%;
             height: 100%;
             object-fit: cover;
+            transform: translateZ(0);
+            -webkit-transform: translateZ(0);
+            backface-visibility: hidden;
+            -webkit-backface-visibility: hidden;
         }
         
         .product-info {
