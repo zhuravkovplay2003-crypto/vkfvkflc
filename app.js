@@ -2627,6 +2627,11 @@ function renderProductContent(container, product, favoriteFlavor, favoriteStreng
     
     container.innerHTML = `
         <div style="margin-bottom: 20px;">
+            ${!isProductInStock ? `
+                <div style="margin-bottom: 12px; padding: 12px; background: #fff3f3; border-radius: 12px; border: 2px solid #ffcdd2; text-align: center;">
+                    <div style="font-size: 16px; font-weight: 700; color: #f44336;">Нет в наличии</div>
+                </div>
+            ` : ''}
             <div id="product-image-container" style="width: 100%; height: 350px; background: #ffffff; border-radius: 12px; 
                 display: flex; align-items: center; justify-content: center; font-size: ${productImageUrl ? '0' : '100px'}; margin-bottom: 20px; overflow: hidden; padding: 20px; border: 1px solid #e5e5e5; ${!isProductInStock ? 'opacity: 0.5; filter: grayscale(100%);' : ''}">
                 ${productImageContent}
