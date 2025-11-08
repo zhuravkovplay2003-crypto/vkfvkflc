@@ -439,22 +439,28 @@ function updatePickupLocationDisplay() {
         }
     }
     
-    // Обновляем правую часть навигации для каталога
-    if (currentPage === 'catalog') {
+    // Обновляем правую часть навигации для каталога и страницы товара
+    if (currentPage === 'catalog' || currentPage === 'product') {
         const navRightContent = document.getElementById('nav-right-content');
         if (navRightContent) {
             if (selectedPickupLocation) {
                 // Показываем адрес с ограничением ширины для статичного размера
                 navRightContent.innerHTML = `<span style="display: inline-flex; align-items: center; gap: 6px; width: 100%; justify-content: center;"><span style="width: 16px; height: 16px; display: flex; align-items: center; justify-content: center; flex-shrink: 0;">${getLocationIcon('#ffffff').replace('width="24" height="24"', 'width="16" height="16"')}</span><span style="text-align: center; flex: 1; min-width: 0; max-width: 200px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${selectedPickupLocation}</span></span>`;
                 navRightContent.style.cursor = 'pointer';
+                navRightContent.style.textAlign = 'center';
+                navRightContent.style.justifyContent = 'center';
+                navRightContent.style.display = 'flex';
                 navRightContent.style.minWidth = '180px';
                 navRightContent.style.maxWidth = '220px';
                 navRightContent.style.width = 'auto';
                 navRightContent.style.flex = '0 0 auto';
                 navRightContent.onclick = () => selectPickupLocation();
             } else {
-                navRightContent.innerHTML = `<span style="display: inline-flex; align-items: center; gap: 6px;"><span style="width: 16px; height: 16px; display: flex; align-items: center; justify-content: center; flex-shrink: 0;">${getLocationIcon('#ffffff').replace('width="24" height="24"', 'width="16" height="16"')}</span><span>Выберите точку</span></span>`;
+                navRightContent.innerHTML = `<span style="display: inline-flex; align-items: center; gap: 6px; justify-content: center; width: 100%;"><span style="width: 16px; height: 16px; display: flex; align-items: center; justify-content: center; flex-shrink: 0;">${getLocationIcon('#ffffff').replace('width="24" height="24"', 'width="16" height="16"')}</span><span style="text-align: center;">Выберите точку</span></span>`;
                 navRightContent.style.cursor = 'pointer';
+                navRightContent.style.textAlign = 'center';
+                navRightContent.style.justifyContent = 'center';
+                navRightContent.style.display = 'flex';
                 navRightContent.onclick = () => selectPickupLocation();
             }
         }
@@ -1362,6 +1368,14 @@ function showPage(page, skipHistory = false, resetCatalog = false) {
                     // Показываем товар
                     showProduct(productData.id, productData.selectedFlavor || null, productData.selectedStrength || null);
                     localStorage.removeItem('lastViewedProduct'); // Очищаем после восстановления
+                    // Подсвечиваем кнопку "Ассортимент" при восстановлении товара
+                    document.querySelectorAll('.nav-item').forEach(btn => {
+                        btn.classList.remove('active');
+                        const onclick = btn.getAttribute('onclick');
+                        if (onclick && onclick.includes("'catalog'")) {
+                            btn.classList.add('active');
+                        }
+                    });
                     return;
                 }
             } catch (e) {
@@ -1380,8 +1394,16 @@ function showPage(page, skipHistory = false, resetCatalog = false) {
     document.querySelectorAll('.nav-item').forEach(btn => {
         btn.classList.remove('active');
         const onclick = btn.getAttribute('onclick');
-        if (onclick && onclick.includes(`'${page}'`)) {
-            btn.classList.add('active');
+        // Если мы на странице товара, подсвечиваем кнопку "Ассортимент" (catalog)
+        if (page === 'product') {
+            if (onclick && onclick.includes("'catalog'")) {
+                btn.classList.add('active');
+            }
+        } else {
+            // Для других страниц подсвечиваем соответствующую кнопку
+            if (onclick && onclick.includes(`'${page}'`)) {
+                btn.classList.add('active');
+            }
         }
     });
     
@@ -1539,7 +1561,7 @@ function showPage(page, skipHistory = false, resetCatalog = false) {
         }
         // Если пользователь нажимает на вкладку "Ассортимент" с страницы товара,
         // очищаем viewingProduct и показываем главную страницу каталога
-        else if (viewingProduct && (currentPage === 'product' || currentPage === 'catalog')) {
+        if (viewingProduct && (currentPage === 'product' || currentPage === 'catalog')) {
             viewingProduct = null;
             localStorage.removeItem('lastViewedProduct'); // Очищаем сохраненный товар
         }
@@ -1562,8 +1584,10 @@ function showPage(page, skipHistory = false, resetCatalog = false) {
             }
         }
         
-        // Очищаем viewingProduct если переходим на каталог
-        viewingProduct = null;
+        // Очищаем viewingProduct если переходим на каталог (только если не восстанавливаем товар)
+        if (!localStorage.getItem('lastViewedProduct')) {
+            viewingProduct = null;
+        }
         
         if (searchSection) searchSection.style.display = 'flex';
         if (categoriesSection) categoriesSection.style.display = 'flex';
@@ -2008,6 +2032,17 @@ function showProduct(productId, favoriteFlavor = null, favoriteStrength = null) 
     // Обновляем интерфейс через showPage для правильного отображения кнопок и заголовка
     // Вызываем showPage ДО установки содержимого, чтобы не перезаписать его
     showPage('product', true);
+    
+    // Убеждаемся, что кнопка "Ассортимент" подсвечена при просмотре товара
+    setTimeout(() => {
+        document.querySelectorAll('.nav-item').forEach(btn => {
+            btn.classList.remove('active');
+            const onclick = btn.getAttribute('onclick');
+            if (onclick && onclick.includes("'catalog'")) {
+                btn.classList.add('active');
+            }
+        });
+    }, 10);
     
     // Показываем кнопку "Назад" при открытии страницы товара
     if (tg && tg.BackButton) {
@@ -2844,8 +2879,21 @@ function showFlavorModal() {
     let selectedFlavorIndex = viewingProduct.selectedFlavorIndex !== undefined ? viewingProduct.selectedFlavorIndex : 0;
     const selectedFlavor = viewingProduct.selectedFlavor || viewingProduct.flavors[selectedFlavorIndex];
     
-    // Используем исходный порядок вкусов, без перемещения
-    const sortedFlavors = [...viewingProduct.flavors];
+    // Сортируем вкусы - сначала в наличии, потом не в наличии
+    const sortedFlavors = [...viewingProduct.flavors].sort((a, b) => {
+        const aInStock = deliveryType === 'selfPickup' && selectedPickupLocation
+            ? isFlavorInStockAtLocation(viewingProduct, a, selectedPickupLocation)
+            : (viewingProduct.inStock !== false && (viewingProduct.quantity === undefined || viewingProduct.quantity > 0));
+        const bInStock = deliveryType === 'selfPickup' && selectedPickupLocation
+            ? isFlavorInStockAtLocation(viewingProduct, b, selectedPickupLocation)
+            : (viewingProduct.inStock !== false && (viewingProduct.quantity === undefined || viewingProduct.quantity > 0));
+        
+        // Сначала вкусы в наличии (true идет перед false)
+        if (aInStock !== bInStock) {
+            return bInStock ? 1 : -1;
+        }
+        return 0;
+    });
     
     // Сохраняем состояние выбранного вкуса на уровне модального окна
     let currentlySelectedFlavor = selectedFlavor;
@@ -6261,13 +6309,15 @@ function checkout() {
         
         if (!isInStock) {
             const itemName = item.flavor ? `${item.name}, ${item.flavor}` : item.name;
-            unavailableItems.push({ name: itemName, reason: 'На данной точке этого товара нет' });
+            const reason = 'На данном адресе этого товара нет';
+            unavailableItems.push({ name: itemName, reason: reason });
         }
     });
     
     if (unavailableItems.length > 0) {
         const itemsList = unavailableItems.map(item => `• ${item.name}: ${item.reason}`).join('\n');
-        showToast(`Некоторые товары недоступны на выбранной точке:\n${itemsList}`, 'error', 5000);
+        const message = `Некоторые товары недоступны на данном адресе:\n${itemsList}`;
+        showToast(message, 'error', 5000);
         return;
     }
     
