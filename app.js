@@ -2193,9 +2193,10 @@ function showProduct(productId, favoriteFlavor = null, favoriteStrength = null) 
                 console.error('Container not found after timeout');
                 return;
             }
-            // Передаем правильные параметры - если favoriteFlavor/favoriteStrength не переданы, используем сохраненные из viewingProduct
-            const flavorToRender = favoriteFlavor || viewingProduct.selectedFlavor || null;
-            const strengthToRender = favoriteStrength || viewingProduct.selectedStrength || null;
+            // Передаем правильные параметры - если favoriteFlavor/favoriteStrength не переданы, передаем null
+            // чтобы показать все варианты (не из избранного)
+            const flavorToRender = (favoriteFlavor !== null && favoriteFlavor !== undefined) ? favoriteFlavor : null;
+            const strengthToRender = (favoriteStrength !== null && favoriteStrength !== undefined) ? favoriteStrength : null;
             renderProductContent(container, product, flavorToRender, strengthToRender);
         }, 50);
         return;
@@ -2215,9 +2216,10 @@ function showProduct(productId, favoriteFlavor = null, favoriteStrength = null) 
     container.style.background = '#ffffff';
     
     // Сразу устанавливаем содержимое, чтобы не было пустого экрана
-    // Если favoriteFlavor/favoriteStrength переданы явно (не null), используем их, иначе используем установленные в viewingProduct
-    const flavorToRender = (favoriteFlavor !== null && favoriteFlavor !== undefined) ? favoriteFlavor : (viewingProduct.selectedFlavor || null);
-    const strengthToRender = (favoriteStrength !== null && favoriteStrength !== undefined) ? favoriteStrength : (viewingProduct.selectedStrength || null);
+    // Если favoriteFlavor/favoriteStrength переданы явно (не null и не undefined), используем их
+    // Иначе передаем null чтобы показать все варианты (не из избранного)
+    const flavorToRender = (favoriteFlavor !== null && favoriteFlavor !== undefined) ? favoriteFlavor : null;
+    const strengthToRender = (favoriteStrength !== null && favoriteStrength !== undefined) ? favoriteStrength : null;
     renderProductContent(container, product, flavorToRender, strengthToRender);
 }
 
