@@ -1,5 +1,7 @@
 // userData.js - Управление данными пользователей с синхронизацией с сервером
 
+console.log('📦 userData.js загружается...');
+
 // Получить URL API сервера
 function getApiUrl() {
     // ВАЖНО: Используем правильный URL сервера (Render.com)
@@ -17,11 +19,57 @@ function getApiUrl() {
 
 // Получить ID пользователя
 function getUserId() {
-    if (!window.tg?.initDataUnsafe?.user?.id) {
-        console.error('Telegram user data not available');
-        return null;
+    // Проверяем разные способы получения userId
+    let userId = null;
+    
+    // Способ 1: window.tg.initDataUnsafe.user.id (основной)
+    if (window.tg?.initDataUnsafe?.user?.id) {
+        userId = window.tg.initDataUnsafe.user.id.toString();
+        console.log('✅ userId получен из window.tg.initDataUnsafe.user.id:', userId);
+        return userId;
     }
-    return window.tg.initDataUnsafe.user.id.toString();
+    
+    // Способ 2: window.tg.initData.user.id
+    if (window.tg?.initData?.user?.id) {
+        userId = window.tg.initData.user.id.toString();
+        console.log('✅ userId получен из window.tg.initData.user.id:', userId);
+        return userId;
+    }
+    
+    // Способ 3: window.Telegram.WebApp.initDataUnsafe.user.id
+    if (window.Telegram?.WebApp?.initDataUnsafe?.user?.id) {
+        userId = window.Telegram.WebApp.initDataUnsafe.user.id.toString();
+        console.log('✅ userId получен из window.Telegram.WebApp.initDataUnsafe.user.id:', userId);
+        return userId;
+    }
+    
+    // Способ 4: Пытаемся получить из initData строки (если доступна)
+    if (window.tg?.initData) {
+        try {
+            // Парсим initData строку
+            const params = new URLSearchParams(window.tg.initData);
+            const userParam = params.get('user');
+            if (userParam) {
+                const user = JSON.parse(decodeURIComponent(userParam));
+                if (user.id) {
+                    userId = user.id.toString();
+                    console.log('✅ userId получен из window.tg.initData (parsed):', userId);
+                    return userId;
+                }
+            }
+        } catch (e) {
+            console.warn('Не удалось распарсить initData:', e);
+        }
+    }
+    
+    // Если ничего не сработало
+    console.error('❌ Telegram user data not available');
+    console.error('window.tg:', window.tg);
+    console.error('window.tg?.initDataUnsafe:', window.tg?.initDataUnsafe);
+    console.error('window.tg?.initData:', window.tg?.initData);
+    console.error('window.Telegram:', window.Telegram);
+    
+    return null;
 }
 
 // Стандартные данные пользователя
@@ -63,19 +111,42 @@ function getDefaultData(userId) {
 async function loadUserDataFromServer(userId) {
     try {
         const apiUrl = getApiUrl();
-        const response = await fetch(`${apiUrl}/api/user/${userId}`);
+        const url = `${apiUrl}/api/user/${userId}`;
+        console.log('📡 Запрос к серверу:', url);
+        
+        const response = await fetch(url, {
+            method: 'GET',
+            headers: {
+                'Content-Type': 'application/json'
+            }
+        });
+        
+        console.log('📡 Ответ сервера:', response.status, response.statusText);
         
         if (response.ok) {
             const data = await response.json();
+            console.log('📡 Данные от сервера:', data);
             if (data.success && data.userData) {
+                console.log('✅ Данные пользователя получены с сервера:', {
+                    userId: data.userData.id,
+                    vapeCoins: data.userData.vapeCoins,
+                    stamps: data.userData.stamps,
+                    cart: data.userData.cart?.length || 0,
+                    favorites: data.userData.favorites?.length || 0
+                });
                 return data.userData;
             }
         } else if (response.status === 404) {
             // Пользователь не найден - создадим нового
+            console.log('⚠️ Пользователь не найден на сервере (404)');
             return null;
+        } else {
+            const errorText = await response.text();
+            console.error('❌ Ошибка ответа сервера:', response.status, errorText);
         }
     } catch (error) {
-        console.error('Ошибка при загрузке данных с сервера:', error);
+        console.error('❌ Ошибка при загрузке данных с сервера:', error);
+        console.error('❌ Детали ошибки:', error.message, error.stack);
     }
     return null;
 }
@@ -236,14 +307,40 @@ function saveUserData(userData) {
 
 // Обновить данные пользователя (с синхронизацией на сервер)
 async function updateUserData(updates) {
-    const userData = await getUserData();
-    if (!userData) {
-        console.error('❌ Не удалось получить данные пользователя для обновления');
+    // ВАЖНО: Сначала получаем userId напрямую, чтобы убедиться что он определен
+    const userId = getUserId();
+    if (!userId) {
+        console.error('❌ userId не определен! Не могу обновить данные.');
         return null;
     }
     
-    const userId = userData.id;
     console.log('💾 Обновляем данные пользователя, userId:', userId, 'updates:', updates);
+    
+    const userData = await getUserData();
+    if (!userData) {
+        console.error('❌ Не удалось получить данные пользователя для обновления');
+        // Создаем новые данные если их нет
+        const defaultData = getDefaultData(userId);
+        const updatedData = { 
+            ...defaultData, 
+            ...updates,
+            lastActive: new Date().toISOString()
+        };
+        
+        // Сохраняем локально
+        const storageKey = `user_${userId}`;
+        localStorage.setItem(storageKey, JSON.stringify(updatedData));
+        
+        // Синхронизируем с сервером
+        try {
+            await saveUserDataToServer(updatedData);
+            console.log('✅ Новые данные пользователя созданы и синхронизированы с сервером');
+        } catch (err) {
+            console.error('❌ Ошибка при синхронизации новых данных на сервер:', err);
+        }
+        
+        return updatedData;
+    }
     
     const updatedData = { 
         ...userData, 
@@ -260,16 +357,30 @@ async function updateUserData(updates) {
         console.error('❌ Ошибка при сохранении в localStorage:', e);
     }
     
-    // Синхронизируем с сервером (в фоне, но ждем результат)
+    // Синхронизируем с сервером (ВАЖНО: ждем результат)
     try {
         const success = await updateUserDataOnServer(updates);
         if (success) {
             console.log('✅ Данные синхронизированы с сервером');
         } else {
-            console.error('❌ Ошибка синхронизации с сервером');
+            console.error('❌ Ошибка синхронизации с сервером - данные не сохранены на сервере!');
+            // Пытаемся сохранить полные данные через POST
+            try {
+                await saveUserDataToServer(updatedData);
+                console.log('✅ Данные сохранены на сервер через POST');
+            } catch (err2) {
+                console.error('❌ Критическая ошибка: данные не сохранены на сервер:', err2);
+            }
         }
     } catch (err) {
         console.error('❌ Ошибка при синхронизации на сервер:', err);
+        // Пытаемся сохранить полные данные через POST
+        try {
+            await saveUserDataToServer(updatedData);
+            console.log('✅ Данные сохранены на сервер через POST (fallback)');
+        } catch (err2) {
+            console.error('❌ Критическая ошибка: данные не сохранены на сервер:', err2);
+        }
     }
     
     return updatedData;
@@ -480,6 +591,7 @@ async function syncCart(cart) {
 }
 
 // Экспортируем все функции
+console.log('📦 Создаем window.userDataManager...');
 window.userDataManager = {
     getUserData,
     getUserDataSync,
@@ -496,3 +608,9 @@ window.userDataManager = {
     syncCart,
     getUserId
 };
+
+console.log('✅ window.userDataManager создан:', {
+    exists: typeof window.userDataManager !== 'undefined',
+    getUserData: typeof window.userDataManager.getUserData === 'function',
+    getUserId: typeof window.userDataManager.getUserId === 'function'
+});
