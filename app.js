@@ -9847,41 +9847,101 @@ function showOrders() {
         }
     }
     
-    // ВАЖНО: Проверяем статус заказов БЕЗ автоматического вызова showOrders() снова
-    // Это предотвращает бесконечные циклы
-    // ВАЖНО: НЕ запускаем проверку для уже переданных заказов, чтобы не начислять коины/штампы повторно
-    orders.forEach(order => {
-        if (order.id && (order.status === 'pending' || order.status === 'processing' || order.status === 'confirmed')) {
-            // Запускаем проверку статуса, если еще не запущена
-            if (!orderStatusCheckIntervals[order.id]) {
-                checkOrderStatus(order.id);
-            }
-        } else if (order.id && order.status === 'transferred') {
-            // ВАЖНО: Для переданных заказов проверяем, что коины/штампы начислены
-            // Если нет - начисляем один раз (для синхронизации между устройствами)
-            const coinsAlreadyAdded = localStorage.getItem(`coins_added_${order.id}`);
-            const stampsAlreadyAdded = localStorage.getItem(`stamps_added_${order.id}`);
+    // ВАЖНО: Сначала проверяем актуальный статус ВСЕХ заказов с сервера для синхронизации между устройствами
+    // Это гарантирует, что на всех устройствах показывается актуальная информация
+    const checkAllOrdersStatus = async () => {
+        const statusPromises = orders.map(async (order) => {
+            if (!order.id) return;
             
-            // Если коины или штампы не начислены, запускаем проверку один раз
-            if (!coinsAlreadyAdded || !stampsAlreadyAdded) {
+            try {
+                const response = await fetch(`${SERVER_URL}/api/orders/${order.id}/status`);
+                const data = await response.json();
+                
+                if (data.success && data.status) {
+                    const oldStatus = order.status;
+                    
+                    // Обновляем статус заказа если он изменился
+                    if (oldStatus !== data.status) {
+                        order.status = data.status;
+                        
+                        // Обновляем vapeCoinsEarned если есть
+                        if (data.order && data.order.vapeCoinsEarned !== undefined) {
+                            order.vapeCoinsEarned = data.order.vapeCoinsEarned;
+                        }
+                        
+                        console.log(`✅ Статус заказа ${order.id} обновлен: ${oldStatus} -> ${data.status}`);
+                    }
+                }
+            } catch (error) {
+                console.error(`Ошибка проверки статуса заказа ${order.id}:`, error);
+            }
+        });
+        
+        await Promise.all(statusPromises);
+        
+        // Сохраняем обновленные заказы
+        localStorage.setItem('orders', JSON.stringify(orders));
+        
+        // Теперь запускаем проверку статуса для активных заказов
+        orders.forEach(order => {
+            if (order.id && (order.status === 'pending' || order.status === 'processing' || order.status === 'confirmed')) {
+                // Запускаем проверку статуса, если еще не запущена
                 if (!orderStatusCheckIntervals[order.id]) {
                     checkOrderStatus(order.id);
                 }
+            } else if (order.id && order.status === 'transferred') {
+                // ВАЖНО: Для переданных заказов проверяем, что коины/штампы начислены
+                // Если нет - начисляем один раз (для синхронизации между устройствами)
+                const coinsAlreadyAdded = localStorage.getItem(`coins_added_${order.id}`);
+                const stampsAlreadyAdded = localStorage.getItem(`stamps_added_${order.id}`);
+                
+                // Если коины или штампы не начислены, запускаем проверку один раз
+                if (!coinsAlreadyAdded || !stampsAlreadyAdded) {
+                    if (!orderStatusCheckIntervals[order.id]) {
+                        checkOrderStatus(order.id);
+                    }
+                }
+            }
+        });
+    };
+    
+    // ВАЖНО: Сначала проверяем статусы всех заказов с сервера, затем отрисовываем
+    // Это гарантирует актуальную информацию на всех устройствах
+    checkAllOrdersStatus().then(() => {
+        // После проверки статусов перезагружаем заказы из localStorage
+        const savedOrders = localStorage.getItem('orders');
+        if (savedOrders) {
+            try {
+                const parsedOrders = JSON.parse(savedOrders);
+                if (Array.isArray(parsedOrders)) {
+                    orders = parsedOrders;
+                }
+            } catch (e) {
+                console.error('Error loading orders from localStorage:', e);
             }
         }
+        
+        // Продолжаем отрисовку с актуальными статусами
+        renderOrdersContent();
+    }).catch(err => {
+        console.error('Ошибка проверки статусов заказов:', err);
+        // Продолжаем отрисовку даже если проверка не удалась
+        renderOrdersContent();
     });
     
-    const colors = getThemeColors();
+    // Если заказов нет, отрисовываем сразу
+    if (orders.length === 0) {
+        renderOrdersContent();
+    }
     
-    // ВАЖНО: Сбрасываем флаг после завершения отрисовки
-    setTimeout(() => {
-        isUpdatingOrders = false;
-    }, 100);
-    
-    container.className = '';
-    container.style.padding = '16px';
-    container.style.background = colors.bg;
-    container.style.color = colors.text;
+    // Функция для отрисовки содержимого заказов
+    function renderOrdersContent() {
+        const colors = getThemeColors();
+        
+        container.className = '';
+        container.style.padding = '16px';
+        container.style.background = colors.bg;
+        container.style.color = colors.text;
     
     // Сортируем заказы: активные выше, отклоненные/отмененные ниже
     const filteredOrders = [...orders].sort((a, b) => {
@@ -10325,13 +10385,19 @@ function showOrders() {
         `;
         }).join('')}
     `;
-    
-    // Анимация появления контейнера
-    setTimeout(() => {
-        container.style.opacity = '1';
-        container.style.transform = 'translateY(0)';
-        container.style.transition = 'opacity 0.4s ease, transform 0.4s ease';
-    }, 10);
+        
+        // Анимация появления контейнера
+        setTimeout(() => {
+            container.style.opacity = '1';
+            container.style.transform = 'translateY(0)';
+            container.style.transition = 'opacity 0.4s ease, transform 0.4s ease';
+        }, 10);
+        
+        // ВАЖНО: Сбрасываем флаг после завершения отрисовки
+        setTimeout(() => {
+            isUpdatingOrders = false;
+        }, 100);
+    }
 }
 
 // Очистить заказы по статусу
