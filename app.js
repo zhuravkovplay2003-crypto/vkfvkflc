@@ -830,14 +830,55 @@ function isTomorrow(dateString) {
 
 // Функция для показа информации о синхронизации (для отладки)
 function showDebugInfo() {
-    const userId = window.tg?.initDataUnsafe?.user?.id || 'НЕ ОПРЕДЕЛЕН';
+    // Пытаемся получить userId разными способами
+    let userId = null;
+    let userIdSource = '';
+    
+    if (window.tg?.initDataUnsafe?.user?.id) {
+        userId = window.tg.initDataUnsafe.user.id.toString();
+        userIdSource = 'window.tg.initDataUnsafe.user.id';
+    } else if (window.tg?.initData?.user?.id) {
+        userId = window.tg.initData.user.id.toString();
+        userIdSource = 'window.tg.initData.user.id';
+    } else if (window.Telegram?.WebApp?.initDataUnsafe?.user?.id) {
+        userId = window.Telegram.WebApp.initDataUnsafe.user.id.toString();
+        userIdSource = 'window.Telegram.WebApp.initDataUnsafe.user.id';
+    }
+    
     const userDataManagerExists = typeof window.userDataManager !== 'undefined';
     const getUserDataExists = typeof window.userDataManager?.getUserData === 'function';
+    const getUserIdExists = typeof window.userDataManager?.getUserId === 'function';
     
     let info = '🔍 ИНФОРМАЦИЯ О СИНХРОНИЗАЦИИ\n\n';
-    info += `✅ User ID: ${userId}\n\n`;
+    
+    // Проверяем Telegram Web App
+    info += `📱 Telegram Web App:\n`;
+    info += `  window.tg: ${typeof window.tg !== 'undefined' ? '✅' : '❌'}\n`;
+    info += `  window.Telegram: ${typeof window.Telegram !== 'undefined' ? '✅' : '❌'}\n`;
+    if (window.tg) {
+        info += `  window.tg.initDataUnsafe: ${window.tg.initDataUnsafe ? '✅' : '❌'}\n`;
+        if (window.tg.initDataUnsafe) {
+            info += `  window.tg.initDataUnsafe.user: ${window.tg.initDataUnsafe.user ? '✅' : '❌'}\n`;
+        }
+    }
+    info += `\n`;
+    
+    // User ID
+    if (userId) {
+        info += `✅ User ID: ${userId}\n`;
+        info += `   Источник: ${userIdSource}\n\n`;
+    } else {
+        info += `❌ User ID: НЕ ОПРЕДЕЛЕН\n\n`;
+        info += `⚠️ ВАЖНО: Без User ID синхронизация НЕ РАБОТАЕТ!\n`;
+        info += `Убедитесь, что:\n`;
+        info += `1. Приложение открыто в Telegram (не в браузере)\n`;
+        info += `2. Используется последняя версия Telegram\n`;
+        info += `3. Разрешен доступ к данным пользователя\n\n`;
+    }
+    
     info += `📦 userDataManager: ${userDataManagerExists ? '✅ Загружен' : '❌ НЕ загружен'}\n`;
-    info += `📦 getUserData: ${getUserDataExists ? '✅ Доступна' : '❌ НЕ доступна'}\n\n`;
+    info += `📦 getUserData: ${getUserDataExists ? '✅ Доступна' : '❌ НЕ доступна'}\n`;
+    info += `📦 getUserId: ${getUserIdExists ? '✅ Доступна' : '❌ НЕ доступна'}\n\n`;
     
     // Проверяем данные в localStorage
     const localCart = localStorage.getItem('cart');
@@ -849,7 +890,7 @@ function showDebugInfo() {
     info += `🎫 Штампы (localStorage): ${localStamps || 0}\n\n`;
     
     // Пытаемся получить данные с сервера
-    if (userDataManagerExists && getUserDataExists) {
+    if (userId && userDataManagerExists && getUserDataExists) {
         info += '📡 Проверяю данные на сервере...\n';
         window.userDataManager.getUserData().then(userData => {
             if (userData) {
@@ -860,11 +901,13 @@ function showDebugInfo() {
                 serverInfo += `⭐ Избранное: ${userData.favorites?.length || 0} товаров\n`;
                 alert(info + serverInfo);
             } else {
-                alert(info + '❌ Данные на сервере не найдены');
+                alert(info + '❌ Данные на сервере не найдены\n\n⚠️ Это нормально для нового пользователя. Добавьте товар в корзину, и данные будут созданы на сервере.');
             }
         }).catch(err => {
-            alert(info + `❌ Ошибка загрузки с сервера: ${err.message}`);
+            alert(info + `❌ Ошибка загрузки с сервера:\n${err.message}\n\nПроверьте интернет-соединение.`);
         });
+    } else if (!userId) {
+        alert(info);
     } else {
         alert(info + '❌ userDataManager не загружен, невозможно проверить сервер');
     }
