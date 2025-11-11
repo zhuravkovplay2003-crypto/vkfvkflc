@@ -3,6 +3,7 @@ const { Telegraf } = require('telegraf');
 const cors = require('cors');
 const fs = require('fs');
 const path = require('path');
+const db = require('./database');
 
 const app = express();
 app.use(cors());
@@ -266,6 +267,128 @@ function formatOrderForManager(order) {
            `<b>Итого:</b> ${totalText}\n\n` +
            `${userInfo}`;
 }
+
+// ==================== API для работы с данными пользователей ====================
+
+// GET: Получить данные пользователя
+app.get('/api/user/:userId', (req, res) => {
+    try {
+        const userId = req.params.userId;
+        const userData = db.getUserData(userId);
+        
+        if (!userData) {
+            return res.status(404).json({ success: false, error: 'User not found' });
+        }
+        
+        res.json({ success: true, userData });
+    } catch (error) {
+        console.error('Error getting user data:', error);
+        res.status(500).json({ success: false, error: error.message });
+    }
+});
+
+// POST: Создать или обновить данные пользователя
+app.post('/api/user/:userId', (req, res) => {
+    try {
+        const userId = req.params.userId;
+        const userData = req.body;
+        
+        // Убеждаемся, что ID совпадает
+        userData.id = userId;
+        
+        db.saveUserData(userData);
+        
+        res.json({ success: true, message: 'User data saved' });
+    } catch (error) {
+        console.error('Error saving user data:', error);
+        res.status(500).json({ success: false, error: error.message });
+    }
+});
+
+// PATCH: Обновить частичные данные пользователя
+app.patch('/api/user/:userId', (req, res) => {
+    try {
+        const userId = req.params.userId;
+        const updates = req.body;
+        
+        db.updateUserData(userId, updates);
+        
+        res.json({ success: true, message: 'User data updated' });
+    } catch (error) {
+        console.error('Error updating user data:', error);
+        res.status(500).json({ success: false, error: error.message });
+    }
+});
+
+// POST: Обновить корзину пользователя
+app.post('/api/user/:userId/cart', (req, res) => {
+    try {
+        const userId = req.params.userId;
+        const cart = req.body.cart || [];
+        
+        db.updateCart(userId, cart);
+        
+        res.json({ success: true, message: 'Cart updated' });
+    } catch (error) {
+        console.error('Error updating cart:', error);
+        res.status(500).json({ success: false, error: error.message });
+    }
+});
+
+// POST: Обновить избранное пользователя
+app.post('/api/user/:userId/favorites', (req, res) => {
+    try {
+        const userId = req.params.userId;
+        const favorites = req.body.favorites || [];
+        
+        db.updateFavorites(userId, favorites);
+        
+        res.json({ success: true, message: 'Favorites updated' });
+    } catch (error) {
+        console.error('Error updating favorites:', error);
+        res.status(500).json({ success: false, error: error.message });
+    }
+});
+
+// POST: Добавить Vape Coins
+app.post('/api/user/:userId/coins', (req, res) => {
+    try {
+        const userId = req.params.userId;
+        const { amount, reason } = req.body;
+        
+        if (!amount || isNaN(amount)) {
+            return res.status(400).json({ success: false, error: 'Invalid amount' });
+        }
+        
+        const newBalance = db.addVapeCoins(userId, amount, reason || '');
+        
+        res.json({ success: true, balance: newBalance });
+    } catch (error) {
+        console.error('Error adding coins:', error);
+        res.status(500).json({ success: false, error: error.message });
+    }
+});
+
+// POST: Обновить штампы
+app.post('/api/user/:userId/stamps', (req, res) => {
+    try {
+        const userId = req.params.userId;
+        const { stamps } = req.body;
+        
+        if (stamps === undefined || isNaN(stamps)) {
+            return res.status(400).json({ success: false, error: 'Invalid stamps value' });
+        }
+        
+        db.updateStamps(userId, stamps);
+        
+        res.json({ success: true, message: 'Stamps updated' });
+    } catch (error) {
+        console.error('Error updating stamps:', error);
+        res.status(500).json({ success: false, error: error.message });
+    }
+});
+
+// ==================== API для работы с заказами ====================
 
 // API endpoint для приема заказов от клиентского приложения
 app.post('/api/orders', (req, res) => {
@@ -738,6 +861,28 @@ bot.on('callback_query', async (ctx) => {
             // Минимум 0 коинов (если все оплачено коинами)
             order.vapeCoinsEarned = Math.max(0, coinsToAdd);
             
+            // Сохраняем заказ в БД пользователя и начисляем коины
+            if (order.userId && order.userId !== 'unknown' && coinsToAdd > 0) {
+                try {
+                    // Сохраняем заказ в БД пользователя
+                    db.addOrder(order.userId, {
+                        id: order.id,
+                        date: order.date,
+                        status: 'transferred',
+                        items: order.items,
+                        total: order.total,
+                        vapeCoinsSpent: order.vapeCoinsSpent || 0,
+                        vapeCoinsEarned: coinsToAdd
+                    });
+                    
+                    // Начисляем коины
+                    db.addVapeCoins(order.userId, coinsToAdd, `Заказ #${order.id.slice(-6)}`);
+                    console.log(`Начислено ${coinsToAdd} коинов пользователю ${order.userId} за заказ ${order.id}`);
+                } catch (error) {
+                    console.error('Ошибка при сохранении заказа и начислении коинов в БД:', error);
+                }
+            }
+            
             saveOrders(orders);
             
             ctx.answerCbQuery('✅ Заказ передан клиенту');
@@ -1082,9 +1227,13 @@ process.once('SIGINT', () => {
     if (!isProduction || !webhookUrl) {
         bot.stop('SIGINT');
     }
+    db.closeDatabase();
+    process.exit(0);
 });
 process.once('SIGTERM', () => {
     if (!isProduction || !webhookUrl) {
         bot.stop('SIGTERM');
     }
+    db.closeDatabase();
+    process.exit(0);
 });
