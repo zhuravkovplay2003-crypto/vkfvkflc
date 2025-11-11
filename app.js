@@ -664,6 +664,41 @@ function isProductInStockAtLocation(product, location) {
     return quantityAtLocation > 0;
 }
 
+// Получить максимальное количество товара для конкретного вкуса на конкретной точке
+// Возвращает минимум из: количества в наличии и 9 (максимум 9)
+function getMaxQuantityForFlavorAtLocation(product, flavor, location) {
+    if (!product || !location) return 9; // По умолчанию максимум 9
+    
+    let maxQuantity = 9; // Максимум всегда 9
+    
+    // Если указан вкус, проверяем количество конкретного вкуса на точке
+    if (flavor && product.stockByFlavorAndLocation && product.stockByFlavorAndLocation[flavor]) {
+        const quantityAtLocation = product.stockByFlavorAndLocation[flavor][location];
+        if (quantityAtLocation !== undefined) {
+            // Берем минимум из количества в наличии и 9
+            maxQuantity = Math.min(quantityAtLocation, 9);
+            return maxQuantity;
+        }
+    }
+    
+    // Если нет данных по вкусу, проверяем общее количество на точке
+    if (product.stockByLocation && product.stockByLocation[location] !== undefined) {
+        const quantityAtLocation = product.stockByLocation[location];
+        // Берем минимум из количества в наличии и 9
+        maxQuantity = Math.min(quantityAtLocation, 9);
+        return maxQuantity;
+    }
+    
+    // Если нет данных по точке, проверяем общее количество товара
+    if (product.quantity !== undefined) {
+        maxQuantity = Math.min(product.quantity, 9);
+        return maxQuantity;
+    }
+    
+    // По умолчанию максимум 9
+    return 9;
+}
+
 // Получить список точек, где есть товар
 function getLocationsWithStock(product) {
     if (!product || product.inStock === false) {
@@ -4439,9 +4474,20 @@ function addToCart(productId, strength = null, flavor = null) {
     );
     
     if (existingItemIndex !== -1) {
-        // Если товар уже есть, проверяем ограничение на 9 товаров
-        if (cart[existingItemIndex].quantity >= 9) {
-            showToast('Максимальное количество товара одного вида: 9 шт.', 'error', 3000);
+        // ВАЖНО: Получаем максимальное количество из данных товара (но не больше 9)
+        let maxQuantity = 9; // По умолчанию максимум 9
+        
+        if (deliveryType === 'selfPickup' && selectedPickupLocation) {
+            // Получаем максимальное количество для конкретного вкуса на выбранной точке
+            maxQuantity = getMaxQuantityForFlavorAtLocation(product, selectedFlavor, selectedPickupLocation);
+        } else if (product.quantity !== undefined) {
+            // Если нет точки, используем общее количество (но не больше 9)
+            maxQuantity = Math.min(product.quantity, 9);
+        }
+        
+        // Если товар уже есть, проверяем ограничение
+        if (cart[existingItemIndex].quantity >= maxQuantity) {
+            showToast(`Максимальное количество товара: ${maxQuantity} шт.`, 'error', 3000);
             isAddingToCart = false;
             return;
         }
@@ -6932,8 +6978,10 @@ function showCart() {
             
             // Проверяем наличие товара на выбранной точке
             // ВАЖНО: Используем актуальный selectedPickupLocation из переменной (уже обновлен из localStorage выше)
-            const product = products.find(p => p.id === item.productId);
+            const product = products.find(p => p.id === item.productId || p.id === item.id);
             let isItemInStock = true;
+            let maxQuantity = 9; // По умолчанию максимум 9
+            
             if (product) {
                 // Получаем актуальный адрес из переменной (уже обновлен из localStorage выше)
                 const currentLocation = selectedPickupLocation || '';
@@ -6941,13 +6989,24 @@ function showCart() {
                     // Проверяем наличие конкретного вкуса если он указан
                     if (item.flavor) {
                         isItemInStock = isFlavorInStockAtLocation(product, item.flavor, currentLocation);
+                        // Получаем максимальное количество для конкретного вкуса
+                        maxQuantity = getMaxQuantityForFlavorAtLocation(product, item.flavor, currentLocation);
                     } else {
                         isItemInStock = isProductInStockAtLocation(product, currentLocation);
+                        // Получаем максимальное количество для товара
+                        maxQuantity = getMaxQuantityForFlavorAtLocation(product, null, currentLocation);
                     }
                 } else {
                     isItemInStock = product.inStock !== false && (product.quantity === undefined || product.quantity > 0);
+                    // Если нет точки, используем общее количество (но не больше 9)
+                    if (product.quantity !== undefined) {
+                        maxQuantity = Math.min(product.quantity, 9);
+                    }
                 }
             }
+            
+            // Определяем, можно ли увеличить количество
+            const canIncrease = item.quantity < maxQuantity;
             
             return `
             <div style="background: ${!isItemInStock ? '#f5f5f5' : '#ffffff'}; padding: 20px; border-radius: 16px; margin-bottom: 16px; 
@@ -7006,11 +7065,11 @@ function showCart() {
                             <span id="cart-item-quantity-${idx}" style="font-weight: 700; min-width: 40px; text-align: center; font-size: 18px; color: #000;">
                                 ${item.quantity}
                             </span>
-                            <button onclick="changeQuantity(${idx}, 1)" style="width: 32px; height: 32px; 
-                                border: none; border-radius: 8px; background: #007AFF; cursor: pointer; 
-                                font-size: 18px; font-weight: 700; color: white; transition: all 0.2s;" 
-                                onmouseover="this.style.background='#0056b3'; this.style.transform='scale(1.1)'"
-                                onmouseout="this.style.background='#007AFF'; this.style.transform='scale(1)'">+</button>
+                            <button onclick="changeQuantity(${idx}, 1)" ${!canIncrease ? 'disabled' : ''} style="width: 32px; height: 32px; 
+                                border: none; border-radius: 8px; background: ${canIncrease ? '#007AFF' : '#d0d0d0'}; cursor: ${canIncrease ? 'pointer' : 'not-allowed'}; 
+                                font-size: 18px; font-weight: 700; color: white; transition: all 0.2s; opacity: ${canIncrease ? '1' : '0.5'};" 
+                                onmouseover="${canIncrease ? "this.style.background='#0056b3'; this.style.transform='scale(1.1)'" : ''}"
+                                onmouseout="${canIncrease ? "this.style.background='#007AFF'; this.style.transform='scale(1)'" : ''}">+</button>
                         </div>
                     </div>
                     
@@ -7127,9 +7186,23 @@ function showCart() {
 function changeQuantity(index, change) {
     if (!cart[index]) return;
     
-    // Если увеличиваем количество, проверяем ограничение на 9 товаров
-    if (change > 0 && cart[index].quantity >= 9) {
-        showToast('Максимальное количество товара одного вида: 9 шт.', 'error', 3000);
+    const cartItem = cart[index];
+    const product = products.find(p => p.id === cartItem.id);
+    
+    // ВАЖНО: Получаем максимальное количество из данных товара (но не больше 9)
+    let maxQuantity = 9; // По умолчанию максимум 9
+    
+    if (product && deliveryType === 'selfPickup' && selectedPickupLocation) {
+        // Получаем максимальное количество для конкретного вкуса на выбранной точке
+        maxQuantity = getMaxQuantityForFlavorAtLocation(product, cartItem.flavor, selectedPickupLocation);
+    } else if (product && product.quantity !== undefined) {
+        // Если нет точки, используем общее количество (но не больше 9)
+        maxQuantity = Math.min(product.quantity, 9);
+    }
+    
+    // Если увеличиваем количество, проверяем ограничение
+    if (change > 0 && cartItem.quantity >= maxQuantity) {
+        showToast(`Максимальное количество товара: ${maxQuantity} шт.`, 'error', 3000);
         return;
     }
     
@@ -7156,8 +7229,28 @@ function changeQuantity(index, change) {
     // Обновляем только количество и итоги, не перерисовывая всю корзину
     // Это сохраняет состояние изображений (серые для отсутствующих товаров)
     const quantityElement = document.getElementById(`cart-item-quantity-${index}`);
-    if (quantityElement) {
+    if (quantityElement && cart[index]) {
         quantityElement.textContent = cart[index].quantity;
+        
+        // Обновляем состояние кнопки "+" в зависимости от максимального количества
+        const cartItem = cart[index];
+        const product = products.find(p => p.id === cartItem.id || p.id === cartItem.productId);
+        let maxQuantity = 9;
+        
+        if (product && deliveryType === 'selfPickup' && selectedPickupLocation) {
+            maxQuantity = getMaxQuantityForFlavorAtLocation(product, cartItem.flavor, selectedPickupLocation);
+        } else if (product && product.quantity !== undefined) {
+            maxQuantity = Math.min(product.quantity, 9);
+        }
+        
+        const canIncrease = cartItem.quantity < maxQuantity;
+        const plusButton = quantityElement.parentElement?.querySelector('button[onclick*="changeQuantity"][onclick*="1"]');
+        if (plusButton) {
+            plusButton.disabled = !canIncrease;
+            plusButton.style.background = canIncrease ? '#007AFF' : '#d0d0d0';
+            plusButton.style.cursor = canIncrease ? 'pointer' : 'not-allowed';
+            plusButton.style.opacity = canIncrease ? '1' : '0.5';
+        }
     }
     
     // Обновляем итоги
