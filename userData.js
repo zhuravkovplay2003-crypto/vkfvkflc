@@ -420,8 +420,17 @@ async function addOrder(orderData) {
     const userData = await getUserData();
     if (!userData) return null;
 
+    const orderId = orderData.id || `order_${Date.now()}`;
+    
+    // ВАЖНО: Проверяем, нет ли уже такого заказа (предотвращаем дублирование)
+    const existingOrder = userData.orders && userData.orders.find(o => o.id === orderId);
+    if (existingOrder) {
+        console.log('⚠️ Заказ уже существует в БД, пропускаем дублирование:', orderId);
+        return existingOrder;
+    }
+
     const order = {
-        id: orderData.id || `order_${Date.now()}`,
+        id: orderId,
         date: new Date().toISOString(),
         status: orderData.status || 'new',
         ...orderData,
