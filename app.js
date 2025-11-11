@@ -7326,7 +7326,7 @@ function updateCartItemsDisplay() {
 // Обновление итоговой суммы корзины без полной перерисовки
 function updateCartTotals() {
     const pageContent = document.getElementById('page-content');
-    if (!pageContent) return;
+    if (!pageContent || currentPage !== 'cart') return; // ВАЖНО: Обновляем только на странице корзины
     
     // Рассчитываем итоги
     const totalItemsCount = cart.reduce((sum, item) => sum + (item.quantity || 1), 0);
@@ -8056,8 +8056,21 @@ function checkOrderStatus(orderId) {
         }
     })();
     
+    // ВАЖНО: Проверяем, не запущена ли уже проверка для этого заказа
+    if (orderStatusCheckIntervals[orderId]) {
+        console.log(`⚠️ Проверка статуса для заказа ${orderId} уже запущена, пропускаем`);
+        return;
+    }
+    
     orderStatusCheckIntervals[orderId] = setInterval(async () => {
         attempts++;
+        
+        // ВАЖНО: Останавливаем проверку после максимального количества попыток
+        if (attempts >= maxAttempts) {
+            clearInterval(orderStatusCheckIntervals[orderId]);
+            delete orderStatusCheckIntervals[orderId];
+            return;
+        }
         
         try {
             const response = await fetch(`${SERVER_URL}/api/orders/${orderId}/status`);
@@ -8076,17 +8089,37 @@ function checkOrderStatus(orderId) {
                         
                         if (data.status === 'confirmed') {
                             showToast('Заказ подтвержден менеджером!', 'success', 4000);
-                            // Обновляем отображение заказов ВСЕГДА при изменении статуса
-                            setTimeout(() => {
-                                showOrders();
-                            }, 100);
+                            // ВАЖНО: Синхронизируем заказы с сервером
+                            if (window.userDataManager && window.userDataManager.updateUserData) {
+                                window.userDataManager.updateUserData({
+                                    orders: orders
+                                }).catch(err => {
+                                    console.error('Ошибка синхронизации заказов:', err);
+                                });
+                            }
+                            // Обновляем отображение заказов только если на странице заказов
+                            if (currentPage === 'orders') {
+                                setTimeout(() => {
+                                    showOrders();
+                                }, 100);
+                            }
                         } else if (data.status === 'rejected') {
                             // Показываем уведомление об отклонении заказа
                             showToast('Заказ отклонен менеджером', 'error', 4000);
-                            // Обновляем отображение заказов ВСЕГДА при изменении статуса
-                            setTimeout(() => {
-                                showOrders();
-                            }, 100);
+                            // ВАЖНО: Синхронизируем заказы с сервером
+                            if (window.userDataManager && window.userDataManager.updateUserData) {
+                                window.userDataManager.updateUserData({
+                                    orders: orders
+                                }).catch(err => {
+                                    console.error('Ошибка синхронизации заказов:', err);
+                                });
+                            }
+                            // Обновляем отображение заказов только если на странице заказов
+                            if (currentPage === 'orders') {
+                                setTimeout(() => {
+                                    showOrders();
+                                }, 100);
+                            }
                         } else if (data.status === 'transferred') {
                             console.log('Order status changed to transferred:', orderId);
                             // ОБЯЗАТЕЛЬНО обновляем статус заказа еще раз для гарантии
@@ -8153,6 +8186,16 @@ function checkOrderStatus(orderId) {
                                     orderId: orderId
                                 });
                                 localStorage.setItem('vapeCoinsHistory', JSON.stringify(vapeCoinsHistory));
+                                
+                                // ВАЖНО: Синхронизируем транзакции с сервером
+                                if (window.userDataManager && window.userDataManager.updateUserData) {
+                                    window.userDataManager.updateUserData({
+                                        vapeCoins: vapeCoins,
+                                        transactions: vapeCoinsHistory
+                                    }).catch(err => {
+                                        console.error('Ошибка синхронизации транзакций:', err);
+                                    });
+                                }
                             }
                             
                             // Начисляем штампы за заказ (2 товара = 1 штамп, только за товары оплаченные деньгами)
@@ -8355,103 +8398,21 @@ function checkOrderStatus(orderId) {
                             localStorage.setItem('orders', JSON.stringify(orders));
                             console.log('Final order status saved:', order.status, order.vapeCoinsEarned);
                             
-                            // ПРИНУДИТЕЛЬНО обновляем отображение заказов СРАЗУ
-                            // Перезагружаем заказы из localStorage перед обновлением
-                            const savedOrders = localStorage.getItem('orders');
-                            if (savedOrders) {
-                                try {
-                                    const parsedOrders = JSON.parse(savedOrders);
-                                    if (Array.isArray(parsedOrders)) {
-                                        orders = parsedOrders;
-                                    }
-                                } catch (e) {
-                                    console.error('Error loading orders:', e);
-                                }
+                            // ВАЖНО: Обновляем заказы в БД через userDataManager для синхронизации
+                            if (window.userDataManager && window.userDataManager.updateUserData) {
+                                window.userDataManager.updateUserData({
+                                    orders: orders
+                                }).catch(err => {
+                                    console.error('Ошибка синхронизации заказов:', err);
+                                });
                             }
                             
-                            // Обновляем отображение заказов ВСЕГДА при изменении статуса
-                            // Используем несколько вызовов для гарантии
-                            // Обновляем UI даже если не на странице заказов
-                        if (currentPage === 'orders') {
-                                showOrders(); // Сразу обновляем
-                            } else {
-                                // Если не на странице заказов, все равно обновляем данные
-                                // чтобы при переходе на страницу заказов данные были актуальны
-                                const savedOrders = localStorage.getItem('orders');
-                                if (savedOrders) {
-                                    try {
-                                        const parsedOrders = JSON.parse(savedOrders);
-                                        if (Array.isArray(parsedOrders)) {
-                                            orders = parsedOrders;
-                                        }
-                                    } catch (e) {
-                                        console.error('Error loading orders:', e);
-                                    }
-                                }
+                            // Обновляем отображение заказов ОДИН РАЗ, только если на странице заказов
+                            if (currentPage === 'orders') {
+                                setTimeout(() => {
+                                    showOrders();
+                                }, 100);
                             }
-                            
-                            setTimeout(() => {
-                                const savedOrders = localStorage.getItem('orders');
-                                if (savedOrders) {
-                                    try {
-                                        const parsedOrders = JSON.parse(savedOrders);
-                                        if (Array.isArray(parsedOrders)) {
-                                            orders = parsedOrders;
-                                        }
-                                    } catch (e) {
-                                        console.error('Error loading orders:', e);
-                                    }
-                                }
-                            showOrders();
-                            }, 100);
-                            
-                            // Дублируем обновление для надежности
-                            setTimeout(() => {
-                                const savedOrders = localStorage.getItem('orders');
-                                if (savedOrders) {
-                                    try {
-                                        const parsedOrders = JSON.parse(savedOrders);
-                                        if (Array.isArray(parsedOrders)) {
-                                            orders = parsedOrders;
-                                        }
-                                    } catch (e) {
-                                        console.error('Error loading orders:', e);
-                                    }
-                                }
-                                showOrders();
-                            }, 500);
-                            
-                            // Третий вызов для гарантии
-                            setTimeout(() => {
-                                const savedOrders = localStorage.getItem('orders');
-                                if (savedOrders) {
-                                    try {
-                                        const parsedOrders = JSON.parse(savedOrders);
-                                        if (Array.isArray(parsedOrders)) {
-                                            orders = parsedOrders;
-                                        }
-                                    } catch (e) {
-                                        console.error('Error loading orders:', e);
-                                    }
-                                }
-                                showOrders();
-                            }, 1000);
-                            
-                            // Четвертый вызов для максимальной надежности
-                            setTimeout(() => {
-                                const savedOrders = localStorage.getItem('orders');
-                                if (savedOrders) {
-                                    try {
-                                        const parsedOrders = JSON.parse(savedOrders);
-                                        if (Array.isArray(parsedOrders)) {
-                                            orders = parsedOrders;
-                                        }
-                                    } catch (e) {
-                                        console.error('Error loading orders:', e);
-                                    }
-                                }
-                                showOrders();
-                            }, 2000);
                         }
                         
                         // Обновляем баланс Vape Coins, если пользователь на странице Vape Coins
@@ -8482,7 +8443,7 @@ function checkOrderStatus(orderId) {
             clearInterval(orderStatusCheckIntervals[orderId]);
             delete orderStatusCheckIntervals[orderId];
         }
-    }, 2000); // Проверяем каждые 2 секунды для максимально быстрого обновления
+    }, 5000); // ВАЖНО: Увеличиваем интервал до 5 секунд, чтобы избежать перегрузки и бесконечных циклов
 }
 
 // Функция для создания SVG монеты
@@ -9843,10 +9804,21 @@ function showProfile() {
     }, 10);
 }
 
+// Флаг для предотвращения бесконечных циклов обновления
+let isUpdatingOrders = false;
+
 // Показать заказы
 function showOrders() {
+    // ВАЖНО: Предотвращаем бесконечные циклы обновления
+    if (isUpdatingOrders) {
+        console.log('⚠️ showOrders уже выполняется, пропускаем');
+        return;
+    }
+    
     const container = document.getElementById('page-content');
     if (!container) return;
+    
+    isUpdatingOrders = true;
     
     // Загружаем заказы из localStorage перед отображением
     const savedOrders = localStorage.getItem('orders');
@@ -9861,44 +9833,10 @@ function showOrders() {
         }
     }
     
-    // ПРИНУДИТЕЛЬНО проверяем статус всех активных заказов при открытии страницы
+    // ВАЖНО: Проверяем статус заказов БЕЗ автоматического вызова showOrders() снова
+    // Это предотвращает бесконечные циклы
     orders.forEach(order => {
         if (order.id && (order.status === 'pending' || order.status === 'processing' || order.status === 'confirmed')) {
-            // Проверяем статус немедленно
-            (async () => {
-                try {
-                    const response = await fetch(`${SERVER_URL}/api/orders/${order.id}/status`);
-                    const data = await response.json();
-                    
-                    if (data.success && data.status && data.status !== order.status) {
-                        // Статус изменился - обновляем
-                        order.status = data.status;
-                        localStorage.setItem('orders', JSON.stringify(orders));
-                        
-                        if (data.status === 'transferred' || data.status === 'rejected' || data.status === 'confirmed') {
-                            // Перезагружаем заказы и обновляем UI
-                            const savedOrders = localStorage.getItem('orders');
-                            if (savedOrders) {
-                                try {
-                                    const parsedOrders = JSON.parse(savedOrders);
-                                    if (Array.isArray(parsedOrders)) {
-                                        orders = parsedOrders;
-                                    }
-                                } catch (e) {
-                                    console.error('Error loading orders:', e);
-                                }
-                            }
-                            // Обновляем отображение
-                            setTimeout(() => {
-                                showOrders();
-                            }, 100);
-                        }
-                    }
-                } catch (error) {
-                    console.error('Error checking order status on showOrders:', error);
-                }
-            })();
-            
             // Запускаем проверку статуса, если еще не запущена
             if (!orderStatusCheckIntervals[order.id]) {
                 checkOrderStatus(order.id);
@@ -9907,6 +9845,11 @@ function showOrders() {
     });
     
     const colors = getThemeColors();
+    
+    // ВАЖНО: Сбрасываем флаг после завершения отрисовки
+    setTimeout(() => {
+        isUpdatingOrders = false;
+    }, 100);
     
     container.className = '';
     container.style.padding = '16px';
