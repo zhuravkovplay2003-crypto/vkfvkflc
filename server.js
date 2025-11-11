@@ -657,15 +657,36 @@ app.get('/api/orders/booked-times', (req, res) => {
         // Это гарантирует, что время занято для всех клиентов, а не только для текущего пользователя
         const allBookedTimes = [];
         
+        // ВАЖНО: Нормализуем адрес для сравнения (без учета регистра и форматирования)
+        const normalizeLocation = (loc) => {
+            if (!loc) return '';
+            return loc.trim().toLowerCase().replace(/\s+/g, ' ');
+        };
+        const normalizedLocation = location ? normalizeLocation(location) : null;
+        
         // 1. Заказы из файла orders.json (всех пользователей)
         orders.forEach(order => {
+            // ВАЖНО: Учитываем только заказы со статусом, который означает что заказ реально создан
             if (order.selectedDeliveryDay === dateKey && 
                 order.deliveryExactTime && 
-                (order.status === 'pending' || order.status === 'confirmed' || order.status === 'transferred')) {
-                // Если указана точка самовывоза, проверяем её
-                if (location && order.pickupLocation && order.pickupLocation !== location) {
-                    return; // Пропускаем заказы с другой точкой самовывоза
+                (order.status === 'pending' || order.status === 'confirmed' || order.status === 'transferred') &&
+                order.status !== 'cancelled' && order.status !== 'rejected') {
+                
+                // ВАЖНО: Проверяем адрес самовывоза - время занято только для конкретного адреса
+                const orderPickupLocation = order.pickupLocation || order.location || '';
+                const normalizedOrderLocation = normalizeLocation(orderPickupLocation);
+                
+                // Если указана точка самовывоза, проверяем её (с нормализацией)
+                if (normalizedLocation && normalizedOrderLocation) {
+                    if (normalizedLocation !== normalizedOrderLocation) {
+                        return; // Пропускаем заказы с другой точкой самовывоза
+                    }
+                } else if (normalizedLocation && !normalizedOrderLocation) {
+                    return; // Если в запросе указан адрес, а в заказе нет - пропускаем
+                } else if (!normalizedLocation && normalizedOrderLocation) {
+                    return; // Если в запросе не указан адрес, а в заказе есть - пропускаем
                 }
+                
                 allBookedTimes.push(order.deliveryExactTime);
             }
         });
@@ -676,13 +697,27 @@ app.get('/api/orders/booked-times', (req, res) => {
             allUsers.forEach(user => {
                 if (user.orders && Array.isArray(user.orders)) {
                     user.orders.forEach(order => {
+                        // ВАЖНО: Учитываем только заказы со статусом, который означает что заказ реально создан
                         if (order.selectedDeliveryDay === dateKey && 
                             order.deliveryExactTime && 
-                            (order.status === 'pending' || order.status === 'confirmed' || order.status === 'transferred')) {
-                            // Если указана точка самовывоза, проверяем её
-                            if (location && order.pickupLocation && order.pickupLocation !== location) {
-                                return; // Пропускаем заказы с другой точкой самовывоза
+                            (order.status === 'pending' || order.status === 'confirmed' || order.status === 'transferred') &&
+                            order.status !== 'cancelled' && order.status !== 'rejected') {
+                            
+                            // ВАЖНО: Проверяем адрес самовывоза - время занято только для конкретного адреса
+                            const orderPickupLocation = order.pickupLocation || order.location || '';
+                            const normalizedOrderLocation = normalizeLocation(orderPickupLocation);
+                            
+                            // Если указана точка самовывоза, проверяем её (с нормализацией)
+                            if (normalizedLocation && normalizedOrderLocation) {
+                                if (normalizedLocation !== normalizedOrderLocation) {
+                                    return; // Пропускаем заказы с другой точкой самовывоза
+                                }
+                            } else if (normalizedLocation && !normalizedOrderLocation) {
+                                return; // Если в запросе указан адрес, а в заказе нет - пропускаем
+                            } else if (!normalizedLocation && normalizedOrderLocation) {
+                                return; // Если в запросе не указан адрес, а в заказе есть - пропускаем
                             }
+                            
                             allBookedTimes.push(order.deliveryExactTime);
                         }
                     });
