@@ -652,9 +652,11 @@ app.get('/api/orders/booked-times', (req, res) => {
             return res.status(400).json({ success: false, error: 'Date parameter required' });
         }
         
-        // Фильтруем заказы по дате, статусу и точке самовывоза (если указана)
-        // ВАЖНО: rejected и cancelled заказы НЕ занимают время (разблокируют слот)
-        const bookedTimes = [];
+        // ВАЖНО: Собираем заказы из файла orders.json (всех пользователей) И из базы данных (всех пользователей)
+        // Это гарантирует, что время занято для всех клиентов, а не только для текущего пользователя
+        const allBookedTimes = [];
+        
+        // 1. Заказы из файла orders.json (всех пользователей)
         orders.forEach(order => {
             if (order.selectedDeliveryDay === dateKey && 
                 order.deliveryExactTime && 
@@ -663,11 +665,37 @@ app.get('/api/orders/booked-times', (req, res) => {
                 if (location && order.pickupLocation && order.pickupLocation !== location) {
                     return; // Пропускаем заказы с другой точкой самовывоза
                 }
-                bookedTimes.push(order.deliveryExactTime);
+                allBookedTimes.push(order.deliveryExactTime);
             }
         });
         
-        res.json({ success: true, bookedTimes: bookedTimes });
+        // 2. Заказы из базы данных (всех пользователей)
+        try {
+            const allUsers = db.getAllUsers();
+            allUsers.forEach(user => {
+                if (user.orders && Array.isArray(user.orders)) {
+                    user.orders.forEach(order => {
+                        if (order.selectedDeliveryDay === dateKey && 
+                            order.deliveryExactTime && 
+                            (order.status === 'pending' || order.status === 'confirmed' || order.status === 'transferred')) {
+                            // Если указана точка самовывоза, проверяем её
+                            if (location && order.pickupLocation && order.pickupLocation !== location) {
+                                return; // Пропускаем заказы с другой точкой самовывоза
+                            }
+                            allBookedTimes.push(order.deliveryExactTime);
+                        }
+                    });
+                }
+            });
+        } catch (dbError) {
+            console.error('Ошибка получения заказов из БД для booked-times:', dbError);
+            // Продолжаем работу даже если БД недоступна
+        }
+        
+        // Убираем дубликаты
+        const uniqueBookedTimes = [...new Set(allBookedTimes)];
+        
+        res.json({ success: true, bookedTimes: uniqueBookedTimes });
     } catch (error) {
         console.error('Error getting booked times:', error);
         res.status(500).json({ success: false, error: error.message });
