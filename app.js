@@ -5067,15 +5067,20 @@ function selectPickupLocation() {
         
         locations.forEach((locationName) => {
             const fullLocation = cityName + ', ' + locationName;
+            // ВАЖНО: Форматируем адрес для отображения - только первая буква каждого слова заглавная
+            const formattedLocationName = formatLocation(locationName);
             const isSelected = fullLocation === selectedPickupLocation;
-            const locationItem = createSelectItem(locationName, isSelected, function() {
+            const locationItem = createSelectItem(formattedLocationName, isSelected, function() {
                 // Обновляем выбранную точку самовывоза
                 const previousLocation = selectedPickupLocation;
-                selectedPickupLocation = fullLocation;
-                localStorage.setItem('selectedPickupLocation', selectedPickupLocation);
                 
-                // Если точка изменилась, сбрасываем время
-                if (previousLocation !== selectedPickupLocation) {
+                // ВАЖНО: Форматируем адрес - только первая буква каждого слова заглавная
+                const formattedLocation = formatLocation(fullLocation);
+                
+                // ВАЖНО: Если точка изменилась, ВСЕГДА сбрасываем время (даже если адрес похож)
+                // Время привязано к конкретному адресу, при смене адреса время должно сбрасываться
+                if (previousLocation !== formattedLocation) {
+                    // Сбрасываем время при изменении адреса
                     deliveryTime = null;
                     deliveryExactTime = null;
                     selectedDeliveryDay = null;
@@ -5086,8 +5091,12 @@ function selectPickupLocation() {
                     // Обновляем отображение времени в корзине если мы на странице корзины
                     if (currentPage === 'cart') {
                         const timeDisplay = document.getElementById('selected-delivery-time-display');
+                        const timeDisplayDelivery = document.getElementById('selected-delivery-time-display-delivery');
                         if (timeDisplay) {
                             timeDisplay.textContent = 'Выбрать время';
+                        }
+                        if (timeDisplayDelivery) {
+                            timeDisplayDelivery.textContent = 'Выбрать время';
                         }
                     }
                     
@@ -5095,11 +5104,10 @@ function selectPickupLocation() {
                     if (currentPage === 'product' && viewingProduct) {
                         renderProductContent(document.getElementById('page-content'), viewingProduct, null, null);
                     }
-                    
                 }
                 
-                // ВАЖНО: Форматируем адрес - только первая буква каждого слова заглавная
-                selectedPickupLocation = formatLocation(fullLocation);
+                // Обновляем адрес
+                selectedPickupLocation = formattedLocation;
                 localStorage.setItem('selectedPickupLocation', selectedPickupLocation);
                 
                 // Обновляем отображение точки в шапке
@@ -6131,6 +6139,7 @@ function selectLocationFromMap() {
 // Функция для получения занятых времен для даты
 function getBookedTimesForDate(dateKey, pickupLocation = null) {
     try {
+        // ВАЖНО: Время считается занятым ТОЛЬКО из реальных заказов, не из выбранного времени
         // Загружаем все заказы из localStorage
         const savedOrders = localStorage.getItem('orders');
         if (!savedOrders) return [];
@@ -6141,22 +6150,36 @@ function getBookedTimesForDate(dateKey, pickupLocation = null) {
         // Используем текущий выбранный адрес самовывоза если не передан
         const currentPickupLocation = pickupLocation || selectedPickupLocation || '';
         
+        // ВАЖНО: Нормализуем адреса для сравнения (без учета регистра и форматирования)
+        const normalizeLocation = (loc) => {
+            if (!loc) return '';
+            return loc.trim().toLowerCase().replace(/\s+/g, ' ');
+        };
+        const normalizedCurrentLocation = normalizeLocation(currentPickupLocation);
+        
         // Фильтруем заказы по дате, статусу и адресу самовывоза
         // Исключаем отмененные и отклоненные заказы - их время становится свободным
         // Учитываем только заказы на самовывоз с точным временем (для доставки точное время не используется)
         const bookedTimes = [];
         allOrders.forEach(order => {
+            // ВАЖНО: Учитываем только заказы со статусом, который означает что заказ реально создан
+            // Не учитываем просто выбранное время без заказа
             if (order.selectedDeliveryDay === dateKey && 
                 order.deliveryExactTime && 
                 (order.deliveryType === 'selfPickup' || !order.deliveryType) && // Только самовывоз
                 (order.status === 'pending' || order.status === 'confirmed' || order.status === 'transferred') &&
                 order.status !== 'cancelled' && order.status !== 'rejected') {
                 
-                // Проверяем адрес самовывоза - время занято только для конкретного адреса
+                // ВАЖНО: Проверяем адрес самовывоза - время занято только для конкретного адреса
+                // Используем нормализацию для сравнения адресов
                 const orderPickupLocation = order.pickupLocation || order.location || '';
-                if (currentPickupLocation && orderPickupLocation === currentPickupLocation) {
+                const normalizedOrderLocation = normalizeLocation(orderPickupLocation);
+                
+                // Время занято только если адрес совпадает (с нормализацией)
+                if (normalizedCurrentLocation && normalizedOrderLocation && 
+                    normalizedCurrentLocation === normalizedOrderLocation) {
                     bookedTimes.push(order.deliveryExactTime);
-                } else if (!currentPickupLocation && !orderPickupLocation) {
+                } else if (!normalizedCurrentLocation && !normalizedOrderLocation) {
                     // Если адрес не указан в запросе и в заказе - считаем что это тот же адрес
                     bookedTimes.push(order.deliveryExactTime);
                 }
@@ -11241,6 +11264,10 @@ function cancelOrder(orderId) {
                     localStorage.setItem('vapeCoinsHistory', JSON.stringify(vapeCoinsHistory));
                 }
                 
+                // ВАЖНО: Сначала меняем статус локально, затем синхронизируем с сервером
+                order.status = 'cancelled';
+                localStorage.setItem('orders', JSON.stringify(orders));
+                
                 // Отправляем уведомление на сервер об отмене заказа
                 (async () => {
                     try {
@@ -11258,20 +11285,28 @@ function cancelOrder(orderId) {
                         if (response.ok) {
                             const result = await response.json();
                             console.log('Order cancellation sent to server:', result);
+                            
+                            // ВАЖНО: Синхронизируем отмену с сервером через userDataManager после успешной отмены на сервере
+                            if (window.userDataManager && window.userDataManager.updateUserData) {
+                                window.userDataManager.updateUserData({ orders: orders }).catch(err => {
+                                    console.error('Ошибка синхронизации отмены заказа:', err);
+                                });
+                            }
                         }
                     } catch (error) {
                         console.error('Error sending cancellation to server:', error);
                         // Продолжаем выполнение даже если сервер недоступен
+                        // ВАЖНО: Синхронизируем локально даже если сервер недоступен
+                        if (window.userDataManager && window.userDataManager.updateUserData) {
+                            window.userDataManager.updateUserData({ orders: orders }).catch(err => {
+                                console.error('Ошибка синхронизации отмены заказа:', err);
+                            });
+                        }
                     }
                 })();
                 
-                // Меняем статус заказа на "отменен" вместо удаления
-                order.status = 'cancelled';
-                localStorage.setItem('orders', JSON.stringify(orders));
-                
-                // Переключаемся на вкладку "Отмененные" и обновляем отображение
-                ordersTab = 'cancelled';
-                localStorage.setItem('ordersTab', 'cancelled');
+                // ВАЖНО: НЕ переключаемся на вкладку "Отмененные" - остаемся на текущей вкладке
+                // Просто обновляем отображение заказов
                 showOrders();
                 
                 // Обновляем профиль если открыт
