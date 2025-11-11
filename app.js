@@ -7341,61 +7341,64 @@ function updateCartTotals() {
         return sum + (coinsPrice * (item.quantity || 1));
     }, 0);
     
-    // Ищем все элементы с итоговой суммой
-    const allDivs = pageContent.querySelectorAll('div');
-    allDivs.forEach(div => {
-        // Ищем блок с итоговой суммой
-        const text = div.textContent || '';
-        if (text.includes('Итого')) {
-            // Ищем следующий элемент с суммой
-            const nextDiv = div.nextElementSibling;
-            if (nextDiv && nextDiv.querySelector('div')) {
-                const totalDiv = nextDiv;
-                let html = '';
-                if (totalMoney > 0) {
-                    html += `<div style="font-weight: 700; font-size: 22px; color: #007AFF; margin-bottom: 4px;">
-                        ${totalMoney.toFixed(2)} BYN
-                    </div>`;
-                }
-                if (totalCoins > 0) {
-                    html += `<div style="font-weight: 700; font-size: 22px; color: #FF9800;">
-                        ${totalCoins.toFixed(1)} коинов
-                    </div>`;
-                }
-                if (html) {
-                    totalDiv.innerHTML = html;
-                }
+    // ВАЖНО: Ищем элементы более точно, чтобы не удалить кнопку "Оформить заказ"
+    // Ищем блок с итоговой суммой по более специфичному селектору
+    const summarySection = pageContent.querySelector('div[style*="background: linear-gradient(135deg, #ffffff"]');
+    if (summarySection) {
+        // Обновляем количество товаров
+        const itemsCountSpan = summarySection.querySelector('span:first-child');
+        if (itemsCountSpan && itemsCountSpan.textContent.includes('Товары')) {
+            itemsCountSpan.textContent = `Товары (${totalItemsCount} шт.)`;
+        }
+        
+        // Обновляем сумму товаров
+        const itemsSumSpan = itemsCountSpan?.nextElementSibling;
+        if (itemsSumSpan) {
+            let sumText = '';
+            if (totalMoney > 0) {
+                sumText += `${totalMoney.toFixed(2)} BYN`;
+            }
+            if (totalCoins > 0) {
+                if (sumText) sumText += ' ';
+                sumText += `${totalCoins.toFixed(1)} коинов`;
+            }
+            if (sumText) {
+                itemsSumSpan.textContent = sumText;
             }
         }
         
-        // Ищем строку с товарами и обновляем количество
-        if (text.includes('Товары') && text.includes('шт.')) {
-            // Рассчитываем общее количество товаров
-            const totalItemsCount = cart.reduce((sum, item) => sum + (item.quantity || 1), 0);
-            
-            // Обновляем количество товаров в тексте
-            const match = text.match(/Товары\s*\((\d+)\s*шт\.\)/);
-            if (match) {
-                div.textContent = `Товары (${totalItemsCount} шт.)`;
+        // Обновляем итоговую сумму
+        const totalSection = summarySection.querySelector('div[style*="text-align: right"]');
+        if (totalSection) {
+            let html = '';
+            if (totalMoney > 0) {
+                html += `<div style="font-weight: 700; font-size: 22px; color: #007AFF; margin-bottom: 4px;">
+                    ${totalMoney.toFixed(2)} BYN
+                </div>`;
             }
-            
-            // Обновляем сумму
-            const nextSpan = div.nextElementSibling;
-            if (nextSpan) {
-                let sumText = '';
-                if (totalMoney > 0) {
-                    sumText += `${totalMoney.toFixed(2)} BYN`;
-                }
-                if (totalCoins > 0) {
-                    if (sumText) sumText += ' ';
-                    sumText += `${totalCoins.toFixed(1)} коинов`;
-                }
-                if (sumText) {
-                    nextSpan.textContent = sumText;
-                }
+            if (totalCoins > 0) {
+                html += `<div style="font-weight: 700; font-size: 22px; color: #FF9800;">
+                    ${totalCoins.toFixed(1)} коинов
+                </div>`;
+            }
+            if (html) {
+                totalSection.innerHTML = html;
             }
         }
-    });
+        
+        // ВАЖНО: Проверяем, что кнопка "Оформить заказ" существует
+        const checkoutButton = summarySection.querySelector('button[onclick="checkout()"]');
+        if (!checkoutButton) {
+            // Если кнопка пропала, перерисовываем корзину полностью
+            console.warn('⚠️ Кнопка "Оформить заказ" пропала, перерисовываем корзину');
+            showCart();
+            return;
+        }
+    } else {
+        // Fallback: если не нашли summarySection, перерисовываем корзину
+        console.warn('⚠️ Не найден блок итогов, перерисовываем корзину');
+        showCart();
+    }
 }
 
 // Оформить заказ
@@ -7874,11 +7877,26 @@ function checkOrderStatus(orderId) {
                         }
                     }
                     
-                    // Если статус 'transferred', начисляем коины и штампы (даже если статус не изменился)
-                    // Это важно для первого заказа, когда статус уже transferred при первой проверке
+                    // ВАЖНО: Если статус 'transferred', проверяем и начисляем коины/штампы ТОЛЬКО если еще не начислены
+                    // Это предотвращает повторное начисление при каждом входе в приложение
                     const isTransferred = data.status === 'transferred' || order.status === 'transferred';
                     if (isTransferred) {
-                        // Начисляем коины
+                        // ВАЖНО: Проверяем флаги начисления ПЕРЕД любыми действиями
+                        const coinsAlreadyAdded = localStorage.getItem(`coins_added_${orderId}`);
+                        const stampsAlreadyAdded = localStorage.getItem(`stamps_added_${orderId}`);
+                        
+                        // Если коины и штампы уже начислены, просто обновляем статус и выходим
+                        if (coinsAlreadyAdded && stampsAlreadyAdded) {
+                            order.status = 'transferred';
+                            if (data.order && data.order.vapeCoinsEarned !== undefined) {
+                                order.vapeCoinsEarned = data.order.vapeCoinsEarned;
+                            }
+                            localStorage.setItem('orders', JSON.stringify(orders));
+                            console.log(`✅ Заказ ${orderId} уже обработан, пропускаем начисление`);
+                            return; // ВАЖНО: Выходим, не запуская setInterval
+                        }
+                        
+                        // Начисляем коины только если еще не начислены
                         let coinsEarned = 0;
                         if (data.order && data.order.vapeCoinsEarned !== undefined && data.order.vapeCoinsEarned !== null) {
                             coinsEarned = data.order.vapeCoinsEarned;
@@ -7895,9 +7913,7 @@ function checkOrderStatus(orderId) {
                         order.vapeCoinsEarned = coinsEarned;
                         localStorage.setItem('orders', JSON.stringify(orders));
                         
-                        const coinsAlreadyAdded = localStorage.getItem(`coins_added_${orderId}`);
-                        // ВСЕГДА начисляем коины если они есть и еще не начислены
-                        // Важно: проверяем даже если статус уже был transferred (для первого заказа)
+                        // Начисляем коины только если еще не начислены
                         if (!coinsAlreadyAdded && coinsEarned > 0) {
                             console.log('Начисляем коины за заказ (первая проверка):', orderId, 'Сумма:', coinsEarned, 'Статус:', data.status, 'Локальный статус:', order.status);
                             // Синхронизируем коины с сервером
@@ -7918,8 +7934,7 @@ function checkOrderStatus(orderId) {
                             localStorage.setItem('vapeCoinsHistory', JSON.stringify(history));
                         }
                         
-                        // Начисляем штампы
-                        const stampsAlreadyAdded = localStorage.getItem(`stamps_added_${orderId}`);
+                        // Начисляем штампы (stampsAlreadyAdded уже проверен выше)
                         if (!stampsAlreadyAdded) {
                             const savedStamps = localStorage.getItem('stamps');
                             let totalStampsValue = savedStamps ? parseInt(savedStamps) : 0;
@@ -8198,13 +8213,12 @@ function checkOrderStatus(orderId) {
                                 }
                             }
                             
-                            // Начисляем штампы за заказ (2 товара = 1 штамп, только за товары оплаченные деньгами)
-                            // Проверяем, не начислены ли уже штампы за этот заказ
-                            const stampsAlreadyAdded = localStorage.getItem(`stamps_added_${orderId}`);
-                            let stampsToAdd = 0;
-                            let bonusCoins = 0;
-                            
-                            if (!stampsAlreadyAdded) {
+                        // Начисляем штампы за заказ (2 товара = 1 штамп, только за товары оплаченные деньгами)
+                        // ВАЖНО: stampsAlreadyAdded уже проверен выше
+                        let stampsToAdd = 0;
+                        let bonusCoins = 0;
+                        
+                        if (!stampsAlreadyAdded) {
                                 // Загружаем актуальное количество штампов
                                 const savedStamps = localStorage.getItem('stamps');
                                 let totalStampsValue = savedStamps ? parseInt(savedStamps) : 0;
@@ -9835,11 +9849,24 @@ function showOrders() {
     
     // ВАЖНО: Проверяем статус заказов БЕЗ автоматического вызова showOrders() снова
     // Это предотвращает бесконечные циклы
+    // ВАЖНО: НЕ запускаем проверку для уже переданных заказов, чтобы не начислять коины/штампы повторно
     orders.forEach(order => {
         if (order.id && (order.status === 'pending' || order.status === 'processing' || order.status === 'confirmed')) {
             // Запускаем проверку статуса, если еще не запущена
             if (!orderStatusCheckIntervals[order.id]) {
                 checkOrderStatus(order.id);
+            }
+        } else if (order.id && order.status === 'transferred') {
+            // ВАЖНО: Для переданных заказов проверяем, что коины/штампы начислены
+            // Если нет - начисляем один раз (для синхронизации между устройствами)
+            const coinsAlreadyAdded = localStorage.getItem(`coins_added_${order.id}`);
+            const stampsAlreadyAdded = localStorage.getItem(`stamps_added_${order.id}`);
+            
+            // Если коины или штампы не начислены, запускаем проверку один раз
+            if (!coinsAlreadyAdded || !stampsAlreadyAdded) {
+                if (!orderStatusCheckIntervals[order.id]) {
+                    checkOrderStatus(order.id);
+                }
             }
         }
     });
