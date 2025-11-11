@@ -664,38 +664,96 @@ function isProductInStockAtLocation(product, location) {
     return quantityAtLocation > 0;
 }
 
+// ВАЖНО: Форматируем адрес - только первая буква каждого слова заглавная
+function formatLocation(location) {
+    if (!location) return location;
+    return location.split(', ').map(part => {
+        return part.split(' ').map(word => {
+            // Только первая буква заглавная, остальные остаются как есть
+            if (!word) return word;
+            return word.charAt(0).toUpperCase() + word.slice(1);
+        }).join(' ');
+    }).join(', ');
+}
+
 // Получить максимальное количество товара для конкретного вкуса на конкретной точке
 // Возвращает минимум из: количества в наличии и 9 (максимум 9)
 function getMaxQuantityForFlavorAtLocation(product, flavor, location) {
-    if (!product || !location) return 9; // По умолчанию максимум 9
+    if (!product || !location) {
+        console.log('getMaxQuantityForFlavorAtLocation: нет товара или адреса', { product: product?.id, location });
+        return 9; // По умолчанию максимум 9
+    }
     
     let maxQuantity = 9; // Максимум всегда 9
     
+    // ВАЖНО: Нормализуем адрес для сравнения (приводим к единому формату)
+    const normalizeLocation = (loc) => {
+        if (!loc) return '';
+        return loc.trim().toLowerCase();
+    };
+    const normalizedLocation = normalizeLocation(location);
+    
     // Если указан вкус, проверяем количество конкретного вкуса на точке
     if (flavor && product.stockByFlavorAndLocation && product.stockByFlavorAndLocation[flavor]) {
-        const quantityAtLocation = product.stockByFlavorAndLocation[flavor][location];
-        if (quantityAtLocation !== undefined) {
+        // Проверяем все возможные варианты адреса (с учетом регистра и форматирования)
+        const flavorStock = product.stockByFlavorAndLocation[flavor];
+        let quantityAtLocation = undefined;
+        
+        // Сначала проверяем точное совпадение
+        if (flavorStock[location] !== undefined) {
+            quantityAtLocation = flavorStock[location];
+        } else {
+            // Проверяем все ключи на совпадение (без учета регистра)
+            for (const key in flavorStock) {
+                if (normalizeLocation(key) === normalizedLocation) {
+                    quantityAtLocation = flavorStock[key];
+                    break;
+                }
+            }
+        }
+        
+        if (quantityAtLocation !== undefined && quantityAtLocation !== null) {
             // Берем минимум из количества в наличии и 9
-            maxQuantity = Math.min(quantityAtLocation, 9);
+            maxQuantity = Math.min(Number(quantityAtLocation), 9);
+            console.log(`getMaxQuantityForFlavorAtLocation: найдено для вкуса "${flavor}" на адресе "${location}": ${maxQuantity}`);
             return maxQuantity;
         }
     }
     
     // Если нет данных по вкусу, проверяем общее количество на точке
-    if (product.stockByLocation && product.stockByLocation[location] !== undefined) {
-        const quantityAtLocation = product.stockByLocation[location];
-        // Берем минимум из количества в наличии и 9
-        maxQuantity = Math.min(quantityAtLocation, 9);
-        return maxQuantity;
+    if (product.stockByLocation) {
+        let quantityAtLocation = undefined;
+        
+        // Сначала проверяем точное совпадение
+        if (product.stockByLocation[location] !== undefined) {
+            quantityAtLocation = product.stockByLocation[location];
+        } else {
+            // Проверяем все ключи на совпадение (без учета регистра)
+            for (const key in product.stockByLocation) {
+                if (normalizeLocation(key) === normalizedLocation) {
+                    quantityAtLocation = product.stockByLocation[key];
+                    break;
+                }
+            }
+        }
+        
+        if (quantityAtLocation !== undefined && quantityAtLocation !== null) {
+            // Берем минимум из количества в наличии и 9
+            maxQuantity = Math.min(Number(quantityAtLocation), 9);
+            console.log(`getMaxQuantityForFlavorAtLocation: найдено общее количество на адресе "${location}": ${maxQuantity}`);
+            return maxQuantity;
+        }
     }
     
     // Если нет данных по точке, проверяем общее количество товара
-    if (product.quantity !== undefined) {
-        maxQuantity = Math.min(product.quantity, 9);
+    if (product.quantity !== undefined && product.quantity !== null) {
+        maxQuantity = Math.min(Number(product.quantity), 9);
+        console.log(`getMaxQuantityForFlavorAtLocation: используется общее количество товара: ${maxQuantity}`);
         return maxQuantity;
     }
     
     // По умолчанию максимум 9
+    console.log(`getMaxQuantityForFlavorAtLocation: используется значение по умолчанию: 9`);
     return 9;
 }
 
@@ -979,15 +1037,6 @@ function init() {
         if (navRightContent) {
             if (selectedPickupLocation) {
                 // ВАЖНО: Форматируем адрес - только первая буква каждого слова заглавная
-                const formatLocation = (location) => {
-                    return location.split(', ').map(part => {
-                        return part.split(' ').map(word => {
-                            // Только первая буква заглавная, остальные остаются как есть
-                            if (!word) return word;
-                            return word.charAt(0).toUpperCase() + word.slice(1);
-                        }).join(' ');
-                    }).join(', ');
-                };
                 const formattedLocation = formatLocation(selectedPickupLocation);
                 const shortLocation = formattedLocation.length > 25 
                     ? formattedLocation.substring(0, 22) + '...' 
@@ -1084,7 +1133,10 @@ function init() {
     }
     const savedPickupLocation = localStorage.getItem('selectedPickupLocation');
     if (savedPickupLocation) {
-        selectedPickupLocation = savedPickupLocation;
+        // ВАЖНО: Форматируем адрес при загрузке из localStorage
+        selectedPickupLocation = formatLocation(savedPickupLocation);
+        // Сохраняем отформатированный адрес обратно
+        localStorage.setItem('selectedPickupLocation', selectedPickupLocation);
     }
     const savedSelectedCity = localStorage.getItem('selectedCity');
     if (savedSelectedCity) {
@@ -1629,6 +1681,9 @@ function showOrderConfirmation(orderText, onConfirm) {
     });
     
     function closeOrderConfirmation() {
+        // ВАЖНО: Сбрасываем флаг создания заказа при закрытии модального окна
+        isCreatingOrder = false;
+        
         // Восстанавливаем кнопку "Назад"
         if (tg && tg.BackButton && originalBackButtonHandler) {
             tg.BackButton.onClick(originalBackButtonHandler);
@@ -2036,15 +2091,6 @@ function showPage(page, skipHistory = false, resetCatalog = false) {
             // Для каталога и страницы товара ВСЕГДА показываем адрес с SVG иконкой
             if (selectedPickupLocation) {
                 // ВАЖНО: Форматируем адрес - только первая буква каждого слова заглавная
-                const formatLocation = (location) => {
-                    return location.split(', ').map(part => {
-                        return part.split(' ').map(word => {
-                            // Только первая буква заглавная, остальные остаются как есть
-                            if (!word) return word;
-                            return word.charAt(0).toUpperCase() + word.slice(1);
-                        }).join(' ');
-                    }).join(', ');
-                };
                 const formattedLocation = formatLocation(selectedPickupLocation);
                 const shortLocation = formattedLocation.length > 25 
                     ? formattedLocation.substring(0, 22) + '...' 
@@ -5051,15 +5097,6 @@ function selectPickupLocation() {
                 }
                 
                 // ВАЖНО: Форматируем адрес - только первая буква каждого слова заглавная
-                const formatLocation = (location) => {
-                    return location.split(', ').map(part => {
-                        return part.split(' ').map(word => {
-                            // Только первая буква заглавная, остальные остаются как есть
-                            if (!word) return word;
-                            return word.charAt(0).toUpperCase() + word.slice(1);
-                        }).join(' ');
-                    }).join(', ');
-                };
                 selectedPickupLocation = formatLocation(fullLocation);
                 localStorage.setItem('selectedPickupLocation', selectedPickupLocation);
                 
@@ -5070,6 +5107,7 @@ function selectPickupLocation() {
                 if (currentPage === 'catalog' || currentPage === 'product') {
                     const navRightContent = document.getElementById('nav-right-content');
                     if (navRightContent) {
+                        // ВАЖНО: Используем уже отформатированный адрес (formatLocation уже применен выше)
                         const shortLocation = selectedPickupLocation.length > 25 
                             ? selectedPickupLocation.substring(0, 22) + '...' 
                             : selectedPickupLocation;
@@ -6801,7 +6839,10 @@ function showCart() {
     // ВАЖНО: Всегда загружаем актуальный адрес из localStorage перед проверкой наличия
     const savedPickupLocation = localStorage.getItem('selectedPickupLocation');
     if (savedPickupLocation) {
-        selectedPickupLocation = savedPickupLocation;
+        // ВАЖНО: Форматируем адрес при загрузке из localStorage
+        selectedPickupLocation = formatLocation(savedPickupLocation);
+        // Сохраняем отформатированный адрес обратно
+        localStorage.setItem('selectedPickupLocation', selectedPickupLocation);
     }
     
     // Принудительно обновляем deliveryType из localStorage если нужно
