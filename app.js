@@ -42,6 +42,7 @@ let referralsData = { total: 0, active: 0 }; // Статистика рефер�
 let activePageAnimationTimeout = null; // Таймер для анимации страницы
 let orderStatusCheckIntervals = {}; // Интервалы для проверки статусов заказов
 let backButtonPressCount = 0; // Счетчик нажатий кнопки "Назад"
+let ordersTab = 'active'; // Текущая вкладка заказов: 'active' или 'cancelled'
 
 // URL сервера (измените на ваш адрес сервера)
 // const SERVER_URL = 'http://localhost:3000'; // Для разработки
@@ -1996,13 +1997,25 @@ function showPage(page, skipHistory = false, resetCatalog = false) {
         }
     }
     
-    // Обновляем отображение точки самовывоза (но не nav-right-content, так как он уже обновлен выше)
-    // Для каталога и товара nav-right-content уже обновлен, поэтому updatePickupLocationDisplay не должен его трогать
-    const savedNavRightContent = navRightContent ? navRightContent.innerHTML : null;
-    updatePickupLocationDisplay();
-    // Восстанавливаем nav-right-content для каталога и товара, если он был обновлен
-    if (navRightContent && (page === 'catalog' || page === 'product') && savedNavRightContent) {
-        navRightContent.innerHTML = savedNavRightContent;
+    // Обновляем отображение точки самовывоза (но не nav-right-content для каталога и товара)
+    // Для каталога и товара nav-right-content уже обновлен выше, поэтому updatePickupLocationDisplay не должен его трогать
+    if (page === 'catalog' || page === 'product') {
+        // Для каталога и товара обновляем только locationText, но не nav-right-content
+        const locationText = document.getElementById('pickup-location-text');
+        if (locationText) {
+            if (selectedPickupLocation) {
+                const shortLocation = selectedPickupLocation.length > 20 
+                    ? selectedPickupLocation.substring(0, 17) + '...' 
+                    : selectedPickupLocation;
+                locationText.textContent = shortLocation;
+                locationText.style.paddingRight = '8px';
+            } else {
+                locationText.textContent = 'Выберите точку';
+            }
+        }
+    } else {
+        // Для других страниц вызываем полное обновление
+        updatePickupLocationDisplay();
     }
     
     // Если на странице каталога и точка не выбрана, показываем сообщение
@@ -9883,7 +9896,18 @@ function showOrders() {
     }
     
     const container = document.getElementById('page-content');
-    if (!container) return;
+    if (!container) {
+        console.error('❌ Контейнер page-content не найден!');
+        return;
+    }
+    
+    // Загружаем выбранную вкладку из localStorage
+    const savedTab = localStorage.getItem('ordersTab');
+    if (savedTab === 'active' || savedTab === 'cancelled') {
+        ordersTab = savedTab;
+    } else {
+        ordersTab = 'active'; // По умолчанию
+    }
     
     isUpdatingOrders = true;
     
@@ -9996,8 +10020,25 @@ function showOrders() {
         container.style.background = colors.bg;
         container.style.color = colors.text;
     
+    // Фильтруем заказы по выбранной вкладке
+    let filteredOrders = [];
+    if (ordersTab === 'active') {
+        // Показываем активные и завершенные заказы (все кроме отмененных)
+        filteredOrders = orders.filter(order => 
+            order.status !== 'rejected' && order.status !== 'cancelled'
+        );
+    } else if (ordersTab === 'cancelled') {
+        // Показываем только отмененные заказы
+        filteredOrders = orders.filter(order => 
+            order.status === 'rejected' || order.status === 'cancelled'
+        );
+    } else {
+        // По умолчанию показываем все
+        filteredOrders = [...orders];
+    }
+    
     // Сортируем заказы: активные выше, отклоненные/отмененные ниже
-    const filteredOrders = [...orders].sort((a, b) => {
+    filteredOrders = filteredOrders.sort((a, b) => {
         // Определяем приоритет статуса (меньше = выше в списке)
         // Порядок: активные (0) -> переданные (1) -> отмененные (2)
         const getStatusPriority = (status) => {
@@ -10467,6 +10508,13 @@ function showOrders() {
             isUpdatingOrders = false;
         }, 100);
     }
+}
+
+// Переключение вкладок заказов
+function switchOrdersTab(tab) {
+    ordersTab = tab;
+    localStorage.setItem('ordersTab', tab); // Сохраняем выбранную вкладку
+    showOrders();
 }
 
 // Очистить заказы по статусу
