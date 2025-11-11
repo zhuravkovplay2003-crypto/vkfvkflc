@@ -978,9 +978,20 @@ function init() {
         const navRightContent = document.getElementById('nav-right-content');
         if (navRightContent) {
             if (selectedPickupLocation) {
-                const shortLocation = selectedPickupLocation.length > 25 
-                    ? selectedPickupLocation.substring(0, 22) + '...' 
-                    : selectedPickupLocation;
+                // ВАЖНО: Форматируем адрес - только первая буква каждого слова заглавная
+                const formatLocation = (location) => {
+                    return location.split(', ').map(part => {
+                        return part.split(' ').map(word => {
+                            // Только первая буква заглавная, остальные остаются как есть
+                            if (!word) return word;
+                            return word.charAt(0).toUpperCase() + word.slice(1);
+                        }).join(' ');
+                    }).join(', ');
+                };
+                const formattedLocation = formatLocation(selectedPickupLocation);
+                const shortLocation = formattedLocation.length > 25 
+                    ? formattedLocation.substring(0, 22) + '...' 
+                    : formattedLocation;
                 navRightContent.innerHTML = `<span style="display: inline-flex; align-items: center; gap: 4px; font-size: 12px; font-weight: 500; letter-spacing: 0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;">${getLocationIcon('#ffffff').replace('width="24" height="24"', 'width="14" height="14"')}<span style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 175px; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;">${shortLocation}</span></span>`;
                 navRightContent.style.cursor = 'pointer';
                 navRightContent.style.textAlign = 'center';
@@ -2024,10 +2035,20 @@ function showPage(page, skipHistory = false, resetCatalog = false) {
         if (page === 'catalog' || page === 'product') {
             // Для каталога и страницы товара ВСЕГДА показываем адрес с SVG иконкой
             if (selectedPickupLocation) {
-                // Показываем адрес с нормальным размером шрифта
-                const shortLocation = selectedPickupLocation.length > 25 
-                    ? selectedPickupLocation.substring(0, 22) + '...' 
-                    : selectedPickupLocation;
+                // ВАЖНО: Форматируем адрес - только первая буква каждого слова заглавная
+                const formatLocation = (location) => {
+                    return location.split(', ').map(part => {
+                        return part.split(' ').map(word => {
+                            // Только первая буква заглавная, остальные остаются как есть
+                            if (!word) return word;
+                            return word.charAt(0).toUpperCase() + word.slice(1);
+                        }).join(' ');
+                    }).join(', ');
+                };
+                const formattedLocation = formatLocation(selectedPickupLocation);
+                const shortLocation = formattedLocation.length > 25 
+                    ? formattedLocation.substring(0, 22) + '...' 
+                    : formattedLocation;
                 navRightContent.innerHTML = `<span style="display: inline-flex; align-items: center; gap: 4px; font-size: 12px; font-weight: 500; letter-spacing: 0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;">${getLocationIcon('#ffffff').replace('width="24" height="24"', 'width="14" height="14"')}<span style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 175px; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;">${shortLocation}</span></span>`;
                 navRightContent.style.cursor = 'pointer';
                 navRightContent.style.textAlign = 'center';
@@ -5066,44 +5087,79 @@ function selectPickupLocation() {
                     }
                 }
                 
-                // ВАЖНО: Если мы на странице корзины, проверяем наличие товаров на новом адресе
+                // ВАЖНО: Если мы на странице корзины, проверяем наличие товаров на новом адресе и сбрасываем количество
                 if (currentPage === 'cart') {
-                    // Проверяем наличие всех товаров в корзине на новом адресе
+                    // ВАЖНО: Проверяем и корректируем количество товаров в корзине на новом адресе
                     const unavailableItems = [];
-                    cart.forEach(item => {
-                        const product = products.find(p => p.id === item.id);
+                    let quantityChanged = false;
+                    
+                    cart.forEach((item, idx) => {
+                        // ВАЖНО: Проверяем оба варианта ID
+                        const product = products.find(p => p.id === item.id || p.id === item.productId);
                         if (!product) {
                             unavailableItems.push({ name: item.name || 'Неизвестный товар', reason: 'Товар не найден' });
                             return;
                         }
                         
                         let isInStock = false;
+                        let maxQuantity = 9;
+                        
                         if (item.flavor) {
                             // Проверяем наличие конкретного вкуса
                             isInStock = deliveryType === 'selfPickup' && selectedPickupLocation
                                 ? isFlavorInStockAtLocation(product, item.flavor, selectedPickupLocation)
                                 : (product.inStock !== false && (product.quantity === undefined || product.quantity > 0));
+                            
+                            // Получаем максимальное количество для конкретного вкуса
+                            if (deliveryType === 'selfPickup' && selectedPickupLocation) {
+                                maxQuantity = getMaxQuantityForFlavorAtLocation(product, item.flavor, selectedPickupLocation);
+                            } else if (product.quantity !== undefined) {
+                                maxQuantity = Math.min(product.quantity, 9);
+                            }
                         } else {
                             // Проверяем общее наличие товара
                             isInStock = deliveryType === 'selfPickup' && selectedPickupLocation
                                 ? isProductInStockAtLocation(product, selectedPickupLocation)
                                 : (product.inStock !== false && (product.quantity === undefined || product.quantity > 0));
+                            
+                            // Получаем максимальное количество для товара
+                            if (deliveryType === 'selfPickup' && selectedPickupLocation) {
+                                maxQuantity = getMaxQuantityForFlavorAtLocation(product, null, selectedPickupLocation);
+                            } else if (product.quantity !== undefined) {
+                                maxQuantity = Math.min(product.quantity, 9);
+                            }
                         }
                         
                         if (!isInStock) {
                             const itemName = item.flavor ? `${item.name}, ${item.flavor}` : item.name;
                             unavailableItems.push({ name: itemName, reason: 'На данном адресе этого товара нет' });
+                        } else {
+                            // ВАЖНО: Если товар есть, но количество больше доступного - сбрасываем до минимума (1 или доступное количество)
+                            if (item.quantity > maxQuantity) {
+                                const oldQuantity = item.quantity;
+                                item.quantity = Math.max(1, maxQuantity); // Минимум 1, но не больше доступного
+                                quantityChanged = true;
+                                console.log(`Количество товара "${item.name}" сброшено с ${oldQuantity} до ${item.quantity} (доступно: ${maxQuantity})`);
+                            }
                         }
                     });
+                    
+                    // Сохраняем изменения в корзине если количество изменилось
+                    if (quantityChanged) {
+                        localStorage.setItem('cart', JSON.stringify(cart));
+                        syncCartToServer();
+                    }
                     
                     // Если есть недоступные товары, показываем предупреждение
                     if (unavailableItems.length > 0) {
                         const itemsList = unavailableItems.map(item => `• ${item.name}`).join('\n');
                         const message = `Внимание! Некоторые товары недоступны на новом адресе:\n${itemsList}\n\nОни будут выделены серым цветом. Удалите их перед оформлением заказа.`;
                         showToast(message, 'warning', 6000);
+                    } else if (quantityChanged) {
+                        showToast('Количество товаров скорректировано под новый адрес', 'info', 3000);
                     }
                     
-                    // Обновляем корзину чтобы показать недоступные товары
+                    // Обновляем корзину чтобы показать изменения
                     showCart();
                 }
                 
@@ -7187,15 +7243,21 @@ function changeQuantity(index, change) {
     if (!cart[index]) return;
     
     const cartItem = cart[index];
-    const product = products.find(p => p.id === cartItem.id);
+    // ВАЖНО: Проверяем оба варианта ID (может быть item.id или item.productId)
+    const product = products.find(p => p.id === cartItem.id || p.id === cartItem.productId);
+    
+    if (!product) {
+        console.error('Товар не найден для cartItem:', cartItem);
+        return;
+    }
     
     // ВАЖНО: Получаем максимальное количество из данных товара (но не больше 9)
     let maxQuantity = 9; // По умолчанию максимум 9
     
-    if (product && deliveryType === 'selfPickup' && selectedPickupLocation) {
+    if (deliveryType === 'selfPickup' && selectedPickupLocation) {
         // Получаем максимальное количество для конкретного вкуса на выбранной точке
         maxQuantity = getMaxQuantityForFlavorAtLocation(product, cartItem.flavor, selectedPickupLocation);
-    } else if (product && product.quantity !== undefined) {
+    } else if (product.quantity !== undefined) {
         // Если нет точки, используем общее количество (но не больше 9)
         maxQuantity = Math.min(product.quantity, 9);
     }
