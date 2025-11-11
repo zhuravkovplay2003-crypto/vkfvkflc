@@ -6087,10 +6087,11 @@ function showExactTimeSelectionModal(timeSlot) {
             }
         }
         
-        // Получаем занятые времена для этой даты (локально)
+        // ВАЖНО: Получаем занятые времена для этой даты с сервера и локально
         // Только для самовывоза проверяем занятость времени
         let bookedTimes = [];
         if (deliveryType === 'selfPickup') {
+            // Сначала получаем локальные заказы
             bookedTimes = getBookedTimesForDate(dateKey, selectedPickupLocation);
         }
         
@@ -6119,8 +6120,8 @@ function showExactTimeSelectionModal(timeSlot) {
     
     modal.appendChild(modalContent);
     
-    // Также проверяем заказы на сервере через API (асинхронно)
-    // Это нужно для проверки заказов других пользователей
+    // ВАЖНО: Проверяем заказы на сервере через API (асинхронно)
+    // Это нужно для проверки заказов других пользователей и синхронизации между устройствами
     // Только для самовывоза проверяем занятость времени
     if (deliveryType === 'selfPickup' && selectedPickupLocation) {
         const currentPickupLocation = encodeURIComponent(selectedPickupLocation);
@@ -6133,7 +6134,7 @@ function showExactTimeSelectionModal(timeSlot) {
                     const localBookedTimes = getBookedTimesForDate(dateKey, selectedPickupLocation);
                     const allBookedTimes = [...new Set([...localBookedTimes, ...serverBookedTimes])];
                     
-                    // Обновляем модальное окно если оно открыто
+                    // ВАЖНО: Обновляем модальное окно если оно открыто
                     const modal = document.querySelector('.exact-time-modal-overlay');
                     if (modal) {
                         const container = document.getElementById('exact-time-slots-container');
@@ -7914,11 +7915,16 @@ function checkOrderStatus(orderId) {
                         localStorage.setItem('orders', JSON.stringify(orders));
                         
                         // Начисляем коины только если еще не начислены
+                        // ВАЖНО: Устанавливаем флаг ДО начисления, чтобы предотвратить двойное начисление
                         if (!coinsAlreadyAdded && coinsEarned > 0) {
                             console.log('Начисляем коины за заказ (первая проверка):', orderId, 'Сумма:', coinsEarned, 'Статус:', data.status, 'Локальный статус:', order.status);
+                            
+                            // ВАЖНО: Устанавливаем флаг СРАЗУ, чтобы предотвратить повторное начисление
+                            localStorage.setItem(`coins_added_${orderId}`, 'true');
+                            
                             // Синхронизируем коины с сервером
-                            syncVapeCoinsToServer(coinsEarned, `Заказ #${orderId.slice(-6)}`).then(() => {
-                                localStorage.setItem(`coins_added_${orderId}`, 'true');
+                            syncVapeCoinsToServer(coinsEarned, `Заказ #${orderId.slice(-6)}`).catch(err => {
+                                console.error('Ошибка синхронизации коинов:', err);
                             });
                             
                             const savedHistory = localStorage.getItem('vapeCoinsHistory');
@@ -7932,6 +7938,16 @@ function checkOrderStatus(orderId) {
                                 orderId: orderId
                             });
                             localStorage.setItem('vapeCoinsHistory', JSON.stringify(history));
+                            
+                            // ВАЖНО: Синхронизируем транзакции с сервером
+                            if (window.userDataManager && window.userDataManager.updateUserData) {
+                                window.userDataManager.updateUserData({
+                                    vapeCoins: vapeCoins,
+                                    transactions: history
+                                }).catch(err => {
+                                    console.error('Ошибка синхронизации транзакций:', err);
+                                });
+                            }
                         }
                         
                         // Начисляем штампы (stampsAlreadyAdded уже проверен выше)
@@ -8077,6 +8093,18 @@ function checkOrderStatus(orderId) {
         return;
     }
     
+    // ВАЖНО: Проверяем, не начислены ли уже коины/штампы за этот заказ
+    // Если начислены, не запускаем setInterval, чтобы избежать повторного начисления
+    const coinsAlreadyAdded = localStorage.getItem(`coins_added_${orderId}`);
+    const stampsAlreadyAdded = localStorage.getItem(`stamps_added_${orderId}`);
+    const order = orders.find(o => o.id === orderId);
+    
+    // Если заказ передан и коины/штампы уже начислены, не запускаем проверку
+    if (order && order.status === 'transferred' && coinsAlreadyAdded && stampsAlreadyAdded) {
+        console.log(`✅ Заказ ${orderId} уже обработан, не запускаем setInterval`);
+        return;
+    }
+    
     orderStatusCheckIntervals[orderId] = setInterval(async () => {
         attempts++;
         
@@ -8168,9 +8196,14 @@ function checkOrderStatus(orderId) {
                             // Проверяем, не начислены ли уже коины за этот заказ
                             const coinsAlreadyAdded = localStorage.getItem(`coins_added_${orderId}`);
                             
-                            // ВСЕГДА начисляем коины если они есть и еще не начислены
+                            // ВАЖНО: Начисляем коины только если еще не начислены
+                            // Проверяем флаг ПЕРЕД начислением, чтобы предотвратить двойное начисление
                             if (!coinsAlreadyAdded && coinsEarned > 0) {
                                 console.log('Начисляем коины за заказ (setInterval):', orderId, 'Сумма:', coinsEarned);
+                                
+                                // ВАЖНО: Устанавливаем флаг СРАЗУ, чтобы предотвратить повторное начисление
+                                localStorage.setItem(`coins_added_${orderId}`, 'true');
+                                
                                 // Загружаем актуальный баланс коинов
                                 const savedCoins = localStorage.getItem('vapeCoins');
                                 if (savedCoins) {
@@ -8179,7 +8212,6 @@ function checkOrderStatus(orderId) {
                                 
                                 vapeCoins += coinsEarned;
                                 localStorage.setItem('vapeCoins', vapeCoins.toString());
-                                localStorage.setItem(`coins_added_${orderId}`, 'true'); // Помечаем что коины начислены
                                 
                                 // Загружаем актуальную историю
                                 const savedHistory = localStorage.getItem('vapeCoinsHistory');
@@ -10402,10 +10434,8 @@ function showOrders() {
 
 // Очистить заказы по статусу
 function clearOrdersByStatus(status) {
-    if (!status) return;
-    
-    // Если выбран "Все", удаляем все заказы
-    if (status === 'all') {
+    // ВАЖНО: Если статус не указан, null, undefined или 'all', удаляем ВСЕ заказы
+    if (!status || status === 'all' || status === null || status === undefined) {
         if (tg && tg.showPopup) {
             tg.showPopup({
                 title: '⚠️ Подтверждение',
@@ -11465,41 +11495,35 @@ function clearFavorites() {
 
 // Очистить историю заказов (кроме заказов в обработке)
 function clearOrdersHistory() {
-    // Определяем заказы, которые нужно сохранить (в обработке, ожидании, подтвержденные, переданные)
-    const protectedOrders = orders.filter(order => 
-        order.status === 'processing' || 
-        order.status === 'pending' || 
-        order.status === 'confirmed' || 
-        order.status === 'transferred'
-    );
-    
-    // Подсчитываем количество заказов, которые будут удалены
-    const ordersToDelete = orders.filter(order => 
-        order.status !== 'processing' && 
-        order.status !== 'pending' && 
-        order.status !== 'confirmed' && 
-        order.status !== 'transferred'
-    );
-    
-    if (ordersToDelete.length === 0) {
+    // ВАЖНО: Удаляем ВСЕ заказы, как просил пользователь
+    if (orders.length === 0) {
         showToast('Нет заказов для удаления', 'info', 3000);
         return;
     }
     
     if (tg && tg.showPopup) {
         tg.showPopup({
-            title: 'Подтверждение',
-            message: `Вы уверены, что хотите очистить историю заказов?\n\nБудет удалено: ${ordersToDelete.length} заказ(ов)\nСохранено (в обработке/ожидании/подтвержденных): ${protectedOrders.length} заказ(ов)\n\nЭто действие нельзя отменить.`,
+            title: '⚠️ Подтверждение',
+            message: `Вы уверены, что хотите удалить ВСЕ заказы?\n\nБудет удалено: ${orders.length} заказ(ов)\n\nЭто действие нельзя отменить.`,
             buttons: [
-                {id: 'confirm', type: 'destructive', text: 'Очистить'},
+                {id: 'confirm', type: 'destructive', text: 'Удалить все'},
                 {id: 'cancel', type: 'cancel', text: 'Отмена'}
             ]
         }, (btnId) => {
             if (btnId === 'confirm') {
-                const deletedCount = ordersToDelete.length;
-                // Оставляем только заказы в обработке, ожидании и подтвержденные
-                orders = protectedOrders;
+                const deletedCount = orders.length;
+                // Удаляем ВСЕ заказы
+                orders = [];
                 localStorage.setItem('orders', JSON.stringify(orders));
+                
+                // ВАЖНО: Синхронизируем с сервером
+                if (window.userDataManager && window.userDataManager.updateUserData) {
+                    window.userDataManager.updateUserData({
+                        orders: []
+                    }).catch(err => {
+                        console.error('Ошибка синхронизации удаления заказов:', err);
+                    });
+                }
                 
                 showToast(`Удалено заказов: ${deletedCount}`, 'success', 3000);
                 
@@ -11512,11 +11536,20 @@ function clearOrdersHistory() {
             }
         });
     } else {
-        if (confirm(`Вы уверены, что хотите очистить историю заказов?\n\nБудет удалено: ${ordersToDelete.length} заказ(ов)\nСохранено (в обработке/ожидании/подтвержденных): ${protectedOrders.length} заказ(ов)`)) {
-            const deletedCount = ordersToDelete.length;
-            // Оставляем только заказы в обработке, ожидании и подтвержденные
-            orders = protectedOrders;
+        if (confirm(`Вы уверены, что хотите удалить ВСЕ заказы?\n\nБудет удалено: ${orders.length} заказ(ов)`)) {
+            const deletedCount = orders.length;
+            // Удаляем ВСЕ заказы
+            orders = [];
             localStorage.setItem('orders', JSON.stringify(orders));
+            
+            // ВАЖНО: Синхронизируем с сервером
+            if (window.userDataManager && window.userDataManager.updateUserData) {
+                window.userDataManager.updateUserData({
+                    orders: []
+                }).catch(err => {
+                    console.error('Ошибка синхронизации удаления заказов:', err);
+                });
+            }
             
             showToast(`Удалено заказов: ${deletedCount}`, 'success', 3000);
             
