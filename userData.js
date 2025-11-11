@@ -72,14 +72,31 @@ function getUserId() {
     return null;
 }
 
+// Получить данные пользователя из Telegram (универсальная функция)
+function getTelegramUser() {
+    // Пытаемся получить данные пользователя разными способами
+    if (window.tg?.initDataUnsafe?.user) {
+        return window.tg.initDataUnsafe.user;
+    }
+    if (window.Telegram?.WebApp?.initDataUnsafe?.user) {
+        return window.Telegram.WebApp.initDataUnsafe.user;
+    }
+    if (window.tg?.initData?.user) {
+        return window.tg.initData.user;
+    }
+    return null;
+}
+
 // Стандартные данные пользователя
 function getDefaultData(userId) {
+    const telegramUser = getTelegramUser();
+    
     return {
         id: userId,
-        username: window.tg.initDataUnsafe.user.username || `user_${userId}`,
-        firstName: window.tg.initDataUnsafe.user.first_name || '',
-        lastName: window.tg.initDataUnsafe.user.last_name || '',
-        languageCode: window.tg.initDataUnsafe.user.language_code || 'ru',
+        username: telegramUser?.username || `user_${userId}`,
+        firstName: telegramUser?.first_name || '',
+        lastName: telegramUser?.last_name || '',
+        languageCode: telegramUser?.language_code || 'ru',
         
         // Основные данные
         orders: [],
