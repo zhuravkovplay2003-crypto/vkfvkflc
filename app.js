@@ -946,13 +946,13 @@ function init() {
                 const shortLocation = selectedPickupLocation.length > 25 
                     ? selectedPickupLocation.substring(0, 22) + '...' 
                     : selectedPickupLocation;
-                navRightContent.innerHTML = `<span style="display: inline-flex; align-items: center; gap: 4px; font-size: 13px; font-weight: 500; letter-spacing: 0;">${getLocationIcon('#ffffff').replace('width="24" height="24"', 'width="14" height="14"')}<span style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 140px;">${shortLocation}</span></span>`;
+                navRightContent.innerHTML = `<span style="display: inline-flex; align-items: center; gap: 4px; font-size: 13px; font-weight: 500; letter-spacing: 0;">${getLocationIcon('#ffffff').replace('width="24" height="24"', 'width="14" height="14"')}<span style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 200px;">${shortLocation}</span></span>`;
                 navRightContent.style.cursor = 'pointer';
                 navRightContent.style.textAlign = 'center';
                 navRightContent.style.justifyContent = 'center';
                 navRightContent.style.display = 'flex';
                 navRightContent.style.minWidth = 'auto';
-                navRightContent.style.maxWidth = '180px';
+                navRightContent.style.maxWidth = '240px';
                 navRightContent.style.width = 'auto';
                 navRightContent.style.flex = '0 0 auto';
                 navRightContent.style.padding = '6px 12px';
@@ -1969,13 +1969,13 @@ function showPage(page, skipHistory = false, resetCatalog = false) {
                 const shortLocation = selectedPickupLocation.length > 25 
                     ? selectedPickupLocation.substring(0, 22) + '...' 
                     : selectedPickupLocation;
-                navRightContent.innerHTML = `<span style="display: inline-flex; align-items: center; gap: 4px; font-size: 13px; font-weight: 500; letter-spacing: 0;">${getLocationIcon('#ffffff').replace('width="24" height="24"', 'width="14" height="14"')}<span style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 140px;">${shortLocation}</span></span>`;
+                navRightContent.innerHTML = `<span style="display: inline-flex; align-items: center; gap: 4px; font-size: 13px; font-weight: 500; letter-spacing: 0;">${getLocationIcon('#ffffff').replace('width="24" height="24"', 'width="14" height="14"')}<span style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 200px;">${shortLocation}</span></span>`;
                 navRightContent.style.cursor = 'pointer';
                 navRightContent.style.textAlign = 'center';
                 navRightContent.style.justifyContent = 'center';
                 navRightContent.style.display = 'flex';
                 navRightContent.style.minWidth = 'auto';
-                navRightContent.style.maxWidth = '180px';
+                navRightContent.style.maxWidth = '240px';
                 navRightContent.style.width = 'auto';
                 navRightContent.style.flex = '0 0 auto';
                 navRightContent.style.padding = '6px 12px';
@@ -7467,14 +7467,25 @@ function updateCartTotals() {
     }
 }
 
+// Флаг для предотвращения двойного создания заказа
+let isCreatingOrder = false;
+
 // Оформить заказ
 function checkout() {
     console.log('checkout called, cart length:', cart.length);
+    
+    // ВАЖНО: Предотвращаем двойное создание заказа
+    if (isCreatingOrder) {
+        console.log('⚠️ Заказ уже создается, пропускаем');
+        return;
+    }
     
     if (cart.length === 0) {
         showToast('Корзина пуста', 'warning', 3000);
         return;
     }
+    
+    isCreatingOrder = true;
     
     // Проверяем баланс коинов для товаров, оплачиваемых коинами
     let totalCoinsNeeded = 0;
@@ -7800,30 +7811,45 @@ function checkout() {
                     vapeCoinsSpent: totalCoinsNeeded > 0 ? totalCoinsNeeded : 0
                 };
                 
-                // Сохраняем заказ локально
-                orders.unshift(order);
-                localStorage.setItem('orders', JSON.stringify(orders));
+                // ВАЖНО: Проверяем, нет ли уже такого заказа (предотвращаем дублирование)
+                const existingOrder = orders.find(o => o.id === result.orderId);
+                if (!existingOrder) {
+                    // Сохраняем заказ локально только если его еще нет
+                    orders.unshift(order);
+                    localStorage.setItem('orders', JSON.stringify(orders));
+                } else {
+                    console.log('⚠️ Заказ уже существует, пропускаем дублирование');
+                }
                 
-                // ВАЖНО: Сохраняем заказ в БД через userDataManager
+                // ВАЖНО: Сохраняем заказ в БД через userDataManager только если его еще нет
+                // Сервер уже сохранил заказ, поэтому проверяем перед сохранением в БД
                 if (window.userDataManager && window.userDataManager.addOrder) {
                     try {
-                        await window.userDataManager.addOrder({
-                            id: result.orderId,
-                            date: orderDate,
-                            createdAt: createdAt,
-                            status: 'pending',
-                            items: [...cart],
-                            location: deliveryType === 'selfPickup' ? selectedPickupLocation : deliveryAddress,
-                            deliveryType: deliveryType,
-                            deliveryTime: deliveryTime,
-                            deliveryExactTime: deliveryExactTime,
-                            selectedDeliveryDay: selectedDeliveryDay,
-                            deliveryAddress: deliveryType === 'delivery' ? deliveryAddress : null,
-                            pickupLocation: deliveryType === 'selfPickup' ? selectedPickupLocation : null,
-                            total: totalMoney,
-                            vapeCoinsSpent: totalCoinsNeeded > 0 ? totalCoinsNeeded : 0
-                        });
-                        console.log('✅ Заказ сохранен в БД через userDataManager');
+                        // Проверяем, нет ли уже такого заказа в БД
+                        const userData = await window.userDataManager.getUserData();
+                        const orderExists = userData && userData.orders && userData.orders.some(o => o.id === result.orderId);
+                        
+                        if (!orderExists) {
+                            await window.userDataManager.addOrder({
+                                id: result.orderId,
+                                date: orderDate,
+                                createdAt: createdAt,
+                                status: 'pending',
+                                items: [...cart],
+                                location: deliveryType === 'selfPickup' ? selectedPickupLocation : deliveryAddress,
+                                deliveryType: deliveryType,
+                                deliveryTime: deliveryTime,
+                                deliveryExactTime: deliveryExactTime,
+                                selectedDeliveryDay: selectedDeliveryDay,
+                                deliveryAddress: deliveryType === 'delivery' ? deliveryAddress : null,
+                                pickupLocation: deliveryType === 'selfPickup' ? selectedPickupLocation : null,
+                                total: totalMoney,
+                                vapeCoinsSpent: totalCoinsNeeded > 0 ? totalCoinsNeeded : 0
+                            });
+                            console.log('✅ Заказ сохранен в БД через userDataManager');
+                        } else {
+                            console.log('⚠️ Заказ уже существует в БД, пропускаем дублирование');
+                        }
                     } catch (error) {
                         console.error('Ошибка сохранения заказа в БД:', error);
                     }
@@ -7864,8 +7890,14 @@ function checkout() {
                 vapeCoinsSpent: totalCoinsNeeded > 0 ? totalCoinsNeeded : 0
             };
             
-            orders.unshift(order);
-            localStorage.setItem('orders', JSON.stringify(orders));
+            // ВАЖНО: Проверяем, нет ли уже такого заказа (предотвращаем дублирование)
+            const existingOrder = orders.find(o => o.id === orderId);
+            if (!existingOrder) {
+                orders.unshift(order);
+                localStorage.setItem('orders', JSON.stringify(orders));
+            } else {
+                console.log('⚠️ Заказ уже существует, пропускаем дублирование');
+            }
             
             showToast('Заказ создан, но сервер недоступен. Статус будет обновлен позже.', 'warning', 4000);
         }
@@ -7911,9 +7943,11 @@ function checkout() {
             bottomNav.style.zIndex = '';
         }
         
-        // Обновляем отображение корзины (покажем пустую корзину)
-        // Всегда показываем корзину после оформления заказа, даже если пользователь был на другой странице
-        showCart();
+        // Сбрасываем флаг создания заказа
+        isCreatingOrder = false;
+        
+        // ВАЖНО: Всегда открываем корзину после создания заказа
+        showPage('cart');
         
         // Тактильная обратная связь
         if (tg && tg.HapticFeedback) {
@@ -10626,6 +10660,13 @@ function clearOrdersByStatus(status) {
                     orders = [];
                     localStorage.setItem('orders', JSON.stringify(orders));
                     
+                    // ВАЖНО: Синхронизируем очистку заказов с сервером
+                    if (window.userDataManager && window.userDataManager.updateUserData) {
+                        window.userDataManager.updateUserData({ orders: [] }).catch(err => {
+                            console.error('Ошибка синхронизации очистки заказов:', err);
+                        });
+                    }
+                    
                     const deletedCount = initialLength;
                     showToast(`Удалено заказов: ${deletedCount}`, 'success', 3000);
                     
@@ -10637,6 +10678,13 @@ function clearOrdersByStatus(status) {
                 const initialLength = orders.length;
                 orders = [];
                 localStorage.setItem('orders', JSON.stringify(orders));
+                
+                // ВАЖНО: Синхронизируем очистку заказов с сервером
+                if (window.userDataManager && window.userDataManager.updateUserData) {
+                    window.userDataManager.updateUserData({ orders: [] }).catch(err => {
+                        console.error('Ошибка синхронизации очистки заказов:', err);
+                    });
+                }
                 
                 const deletedCount = initialLength;
                 showToast(`Удалено заказов: ${deletedCount}`, 'success', 3000);
@@ -10662,6 +10710,13 @@ function clearOrdersByStatus(status) {
                 orders = orders.filter(o => o.status !== status);
                 localStorage.setItem('orders', JSON.stringify(orders));
                 
+                // ВАЖНО: Синхронизируем очистку заказов с сервером
+                if (window.userDataManager && window.userDataManager.updateUserData) {
+                    window.userDataManager.updateUserData({ orders: orders }).catch(err => {
+                        console.error('Ошибка синхронизации очистки заказов:', err);
+                    });
+                }
+                
                 const deletedCount = initialLength - orders.length;
                 showToast(`Удалено заказов: ${deletedCount}`, 'success', 3000);
                 
@@ -10674,6 +10729,13 @@ function clearOrdersByStatus(status) {
             const initialLength = orders.length;
             orders = orders.filter(o => o.status !== status);
             localStorage.setItem('orders', JSON.stringify(orders));
+            
+            // ВАЖНО: Синхронизируем очистку заказов с сервером
+            if (window.userDataManager && window.userDataManager.updateUserData) {
+                window.userDataManager.updateUserData({ orders: orders }).catch(err => {
+                    console.error('Ошибка синхронизации очистки заказов:', err);
+                });
+            }
             
             const deletedCount = initialLength - orders.length;
             showToast(`Удалено заказов: ${deletedCount}`, 'success', 3000);
