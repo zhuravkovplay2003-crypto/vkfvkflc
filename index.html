@@ -1,960 +1,583 @@
-<!DOCTYPE html>
-<html lang="ru">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>VapeApp</title>
-    <script src="https://telegram.org/js/telegram-web-app.js"></script>
-    <style>
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-        }
-        
-        body {
-            background: #ffffff;
-            color: #000000;
-            padding-bottom: 70px;
-        }
-        
-        /* Splash экран */
-        .splash-screen {
-            position: fixed;
-            top: 0;
-            left: 0;
-            right: 0;
-            bottom: 0;
-            background: #ffffff;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            justify-content: center;
-            z-index: 999999;
-            opacity: 1;
-            transition: opacity 0.8s ease-out, transform 0.8s ease-out;
-        }
-        
-        .splash-screen.fade-out {
-            opacity: 0;
-            transform: scale(0.95);
-            pointer-events: none;
-        }
-        
-        .splash-content {
-            text-align: center;
-            animation: splashFadeIn 1.5s ease-out;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            justify-content: center;
-        }
-        
-        .splash-title {
-            font-size: 48px;
-            font-weight: 800;
-            color: #007AFF;
-            margin-bottom: 8px;
-            letter-spacing: -1px;
-            animation: pulse 2s ease-in-out infinite;
-            text-shadow: 0 2px 10px rgba(0, 122, 255, 0.2);
-        }
-        
-        .splash-subtitle {
-            font-size: 16px;
-            font-weight: 300;
-            color: rgba(0, 122, 255, 0.7);
-            letter-spacing: 2px;
-            text-transform: lowercase;
-            animation: pulse 2s ease-in-out infinite 0.5s;
-            margin-top: auto;
-            margin-bottom: 40px;
-        }
-        
-        .splash-loader {
-            margin-top: 60px;
-            width: 40px;
-            height: 40px;
-            border: 3px solid rgba(0, 122, 255, 0.2);
-            border-top: 3px solid #007AFF;
-            border-radius: 50%;
-            animation: spin 1s linear infinite;
-        }
-        
-        @keyframes splashFadeIn {
-            from {
-                opacity: 0;
-                transform: translateY(30px);
-            }
-            to {
-                opacity: 1;
-                transform: translateY(0);
-            }
-        }
-        
-        @keyframes pulse {
-            0%, 100% {
-                opacity: 1;
-                transform: scale(1);
-            }
-            50% {
-                opacity: 0.8;
-                transform: scale(1.05);
-            }
-        }
-        
-        @keyframes spin {
-            0% { transform: rotate(0deg); }
-            100% { transform: rotate(360deg); }
-        }
+// userData.js - Управление данными пользователей с синхронизацией с сервером
 
-        /* Проверка мобильного устройства */
-        .mobile-only-overlay {
-            position: fixed;
-            top: 0;
-            left: 0;
-            right: 0;
-            bottom: 0;
-            background: rgba(248, 249, 250, 0.98);
-            backdrop-filter: blur(8px);
-            display: none !important;
-            align-items: center;
-            justify-content: center;
-            z-index: 999999;
-            pointer-events: auto;
-        }
-        
-        .mobile-only-overlay.show {
-            display: flex !important;
-            animation: fadeIn 0.3s ease;
-        }
-        
-        .mobile-only-modal {
-            background: #ffffff;
-            padding: 40px 30px;
-            border-radius: 20px;
-            text-align: center;
-            max-width: 400px;
-            width: 90%;
-            box-shadow: 0 8px 32px rgba(0,0,0,0.12);
-            border: 1px solid #e5e5e5;
-            position: relative;
-            z-index: 1000000;
-            pointer-events: auto;
-            animation: slideUp 0.4s ease;
-        }
-        
-        .mobile-only-icon {
-            width: 80px;
-            height: 80px;
-            background: linear-gradient(135deg, #E1BEE7 0%, #CE93D8 100%);
-            border-radius: 50%;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            margin: 0 auto 24px;
-        }
-        
-        .mobile-only-icon svg {
-            width: 48px;
-            height: 48px;
-            fill: #9C27B0;
-        }
-        
-        .mobile-only-title {
-            font-size: 24px;
-            font-weight: 700;
-            color: #333333;
-            margin-bottom: 16px;
-        }
-        
-        .mobile-only-text {
-            font-size: 16px;
-            color: #666666;
-            line-height: 1.6;
-            margin-bottom: 8px;
-        }
-        
-        .mobile-only-hint {
-            font-size: 14px;
-            color: #999999;
-            line-height: 1.5;
-            margin-top: 16px;
-        }
-        
-        .mobile-only-footer {
-            display: flex;
-            align-items: center;
-            justify-content: flex-start;
-            gap: 8px;
-            margin-top: 24px;
-            padding-top: 20px;
-            border-top: 1px solid #e5e5e5;
-        }
-        
-        .mobile-only-footer-icon {
-            width: 20px;
-            height: 20px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-        }
-        
-        .mobile-only-footer-icon svg {
-            width: 20px;
-            height: 20px;
-            fill: #666666;
-        }
-        
-        .mobile-only-footer-text {
-            font-size: 14px;
-            color: #666666;
-        }
-        
-        /* Проверка возраста */
-        .age-verification {
-            position: fixed;
-            top: 0;
-            left: 0;
-            right: 0;
-            bottom: 0;
-            background: rgba(248, 249, 250, 0.98);
-            backdrop-filter: blur(8px);
-            display: none;
-            align-items: center;
-            justify-content: center;
-            z-index: 99999;
-            pointer-events: auto;
-        }
-        
-        .age-verification.show {
-            display: flex;
-            animation: fadeIn 0.3s ease;
-        }
-        
-        @keyframes fadeIn {
-            from {
-                opacity: 0;
-            }
-            to {
-                opacity: 1;
-            }
-        }
-        
-        .age-modal {
-            background: #ffffff;
-            padding: 40px 30px;
-            border-radius: 16px;
-            text-align: center;
-            max-width: 400px;
-            box-shadow: 0 4px 20px rgba(0,0,0,0.1);
-            border: 1px solid #e5e5e5;
-            position: relative;
-            z-index: 10001;
-            pointer-events: auto;
-            animation: slideUp 0.4s ease;
-        }
-        
-        @keyframes slideUp {
-            from {
-                transform: translateY(30px);
-                opacity: 0;
-            }
-            to {
-                transform: translateY(0);
-                opacity: 1;
-            }
-        }
-        
-        .age-modal h2 {
-            margin-bottom: 20px;
-            font-size: 24px;
-            font-weight: 600;
-            color: #333333;
-        }
-        
-        .age-modal p {
-            margin-bottom: 30px;
-            color: #666;
-            line-height: 1.5;
-        }
-        
-        .age-buttons {
-            display: flex;
-            gap: 15px;
-        }
-        
-        .age-btn {
-            flex: 1;
-            padding: 14px 20px;
-            border: none;
-            border-radius: 12px;
-            font-size: 15px;
-            font-weight: 600;
-            cursor: pointer;
-            transition: all 0.2s ease;
-            position: relative;
-            z-index: 10000;
-            box-shadow: 0 2px 8px rgba(0,0,0,0.08);
-            -webkit-tap-highlight-color: rgba(0, 0, 0, 0.1);
-            touch-action: manipulation;
-            user-select: none;
-            -webkit-user-select: none;
-        }
-        
-        .age-btn:active {
-            transform: scale(0.98);
-            box-shadow: 0 1px 4px rgba(0,0,0,0.1);
-        }
-        
-        .age-btn.yes {
-            background: #007AFF;
-            color: white;
-        }
-        
-        .age-btn.yes:hover {
-            background: #0066CC;
-            box-shadow: 0 3px 10px rgba(0, 122, 255, 0.25);
-        }
-        
-        .age-btn.no {
-            background: #f5f5f5;
-            color: #666666;
-            border: 1px solid #e0e0e0;
-        }
-        
-        .age-btn.no:hover {
-            background: #eeeeee;
-            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
-        }
-        
-        /* Заголовок приложения */
-        .app-header {
-            background: #ffffff;
-            padding: 12px 16px;
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            border-bottom: 1px solid #e5e5e5;
-        }
-        
-        .app-header-left {
-            color: #007AFF;
-            font-size: 16px;
-            font-weight: 500;
-            display: flex;
-            align-items: center;
-            gap: 6px;
-            cursor: pointer;
-        }
-        
-        .app-header-center {
-            text-align: center;
-            flex: 1;
-        }
-        
-        .app-header-center h1 {
-            font-size: 18px;
-            font-weight: 700;
-            color: #000;
-            margin-bottom: 2px;
-        }
-        
-        .app-header-center p {
-            font-size: 12px;
-            color: #999;
-        }
-        
-        .app-header-right {
-            width: 32px;
-            height: 32px;
-            border-radius: 50%;
-            background: #f0f0f0;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-size: 18px;
-            cursor: pointer;
-        }
-        
-        /* Навигация и локация */
-        .main-nav {
-            background: #007AFF;
-            padding: 16px;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-        }
-        
-        .nav-title {
-            font-size: 24px;
-            font-weight: 700;
-            color: #ffffff;
-        }
-        
-        /* Исправление для клавиатуры */
-        body.keyboard-open {
-            padding-bottom: 0;
-        }
-        
-        body.keyboard-open .bottom-nav {
-            position: fixed;
-            bottom: 0;
-            transform: translateY(0);
-            z-index: 1000;
-        }
-        
-        /* Отключение двойного клика для масштабирования */
-        html, body {
-            touch-action: pan-y pinch-zoom;
-            -ms-touch-action: pan-y pinch-zoom;
-        }
-        
-        * {
-            -webkit-tap-highlight-color: transparent;
-            -webkit-touch-callout: none;
-        }
-        
-        /* Отключаем масштабирование двойным тапом */
-        * {
-            touch-action: manipulation;
-        }
-        
-        input, textarea {
-            -webkit-user-select: text;
-            user-select: text;
-            touch-action: auto;
-        }
-        
-        button, .product-card, .nav-item, .category-btn {
-            touch-action: manipulation;
-        }
-        
-        .location-selector {
-            display: flex;
-            align-items: center;
-            gap: 6px;
-            color: #ffffff;
-            font-size: 14px;
-            cursor: pointer;
-        }
-        
-        .location-icon {
-            font-size: 16px;
-        }
-        
-        /* Поиск и фильтр */
-        .search-section {
-            padding: 16px;
-            background: #ffffff;
-            display: flex;
-            gap: 12px;
-            align-items: center;
-        }
-        
-        .search-input-wrapper {
-            flex: 1;
-            position: relative;
-        }
-        
-        .search-input {
-            width: 100%;
-            padding: 12px 16px 12px 40px;
-            border: 1px solid #e5e5e5;
-            border-radius: 12px;
-            background: #ffffff;
-            color: #000;
-            font-size: 16px;
-        }
-        
-        .search-icon {
-            position: absolute;
-            left: 12px;
-            top: 50%;
-            transform: translateY(-50%);
-            color: #999;
-            font-size: 18px;
-        }
-        
-        .filter-btn {
-            width: 44px;
-            height: 44px;
-            border: 1px solid #e5e5e5;
-            border-radius: 12px;
-            font-size: 20px;
-            background: #ffffff;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            cursor: pointer;
-            padding: 0;
-            font-size: 20px;
-        }
-        
-        /* Категории */
-        .categories {
-            display: flex;
-            gap: 12px;
-            padding: 16px;
-            overflow-x: auto;
-            background: #ffffff;
-            border-bottom: 1px solid #e5e5e5;
-        }
-        
-        .categories::-webkit-scrollbar {
-            display: none;
-        }
-        
-        .category-btn {
-            background: #ffffff;
-            color: #000;
-            border: none;
-            padding: 10px 20px;
-            border-radius: 20px;
-            white-space: nowrap;
-            cursor: pointer;
-            transition: all 0.3s;
-            font-size: 14px;
-            font-weight: 500;
-            border: 1px solid #e5e5e5;
-        }
-        
-        .category-btn.active {
-            background: linear-gradient(135deg, #007AFF 0%, #0056b3 100%);
-            color: #ffffff;
-            border-color: #007AFF;
-            box-shadow: 0 2px 8px rgba(0, 122, 255, 0.3);
-            font-weight: 600;
-        }
-        
-        /* Сетка товаров */
-        .products-grid {
-            display: grid;
-            grid-template-columns: repeat(2, 1fr);
-            gap: 12px;
-            padding: 16px;
-            background: #f5f5f5;
-        }
-        
-        .product-card {
-            background: #ffffff;
-            border-radius: 12px;
-            overflow: hidden;
-            transition: transform 0.2s, box-shadow 0.2s;
-            box-shadow: 0 2px 8px rgba(0,0,0,0.05);
-            cursor: pointer;
-        }
-        
-        .product-card:active {
-            transform: scale(0.98);
-        }
-        
-        .product-image {
-            width: 100%;
-            height: 160px;
-            background: #f8f8f8;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-size: 50px;
-            overflow: hidden;
-            position: relative;
-        }
-        
-        .product-image img {
-            width: 100%;
-            height: 100%;
-            object-fit: cover;
-        }
-        
-        .product-info {
-            padding: 12px;
-        }
-        
-        .product-name {
-            font-weight: 600;
-            font-size: 14px;
-            margin-bottom: 8px;
-            color: #000;
-            line-height: 1.3;
-            min-height: 36px;
-        }
-        
-        .product-price {
-            color: #007AFF;
-            font-size: 16px;
-            font-weight: 700;
-        }
-        
-        /* Нижняя навигация */
-        .bottom-nav {
-            position: fixed !important;
-            transform: translateY(0) !important;
-            bottom: 0 !important;
-            left: 0;
-            right: 0;
-            background: #ffffff;
-            display: flex;
-            justify-content: space-around;
-            padding: 8px 0;
-            border-top: 1px solid #e5e5e5;
-            z-index: 100;
-        }
-        
-        .nav-item {
-            background: none;
-            border: none;
-            color: #999;
-            padding: 8px 12px;
-            cursor: pointer;
-            transition: color 0.3s;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            gap: 4px;
-            position: relative;
-        }
-        
-        .nav-item.active {
-            color: #007AFF;
-        }
-        
-        .nav-item span {
-            font-size: 24px;
-            line-height: 1;
-        }
-        
-        .nav-icon {
-            display: inline-flex;
-            align-items: center;
-            justify-content: center;
-            width: 24px;
-            height: 24px;
-        }
-        
-        .nav-icon svg {
-            width: 100%;
-            height: 100%;
-        }
-        
-        .search-icon {
-            display: inline-flex;
-            align-items: center;
-            justify-content: center;
-            width: 18px;
-            height: 18px;
-        }
-        
-        .search-icon svg {
-            width: 100%;
-            height: 100%;
-        }
-        
-        .location-icon {
-            display: inline-flex;
-            align-items: center;
-            justify-content: center;
-            width: 16px;
-            height: 16px;
-        }
-        
-        .location-icon svg {
-            width: 100%;
-            height: 100%;
-        }
-        
-        .filter-btn {
-            display: flex;
-            align-items: center;
-            justify-content: center;
-        }
-        
-        .filter-btn svg {
-            width: 20px;
-            height: 20px;
-        }
-        
-        .nav-item p {
-            font-size: 11px;
-            font-weight: 500;
-        }
-        
-        /* Корзина badge */
-        .cart-badge {
-            position: absolute;
-            top: 4px;
-            right: 8px;
-            background: #007AFF;
-            color: white;
-            border-radius: 10px;
-            padding: 2px 6px;
-            font-size: 10px;
-            font-weight: 700;
-            min-width: 18px;
-            text-align: center;
-            line-height: 14px;
-        }
-        
-        .hidden {
-            display: none !important;
-        }
-        
-        /* Модальные окна */
-        .modal-overlay {
-            position: fixed;
-            top: 0;
-            left: 0;
-            right: 0;
-            bottom: 0;
-            background: rgba(0,0,0,0.5);
-            z-index: 1000;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-        }
-        
-        .modal-content {
-            background: #ffffff;
-            border-radius: 20px;
-            padding: 24px;
-            max-width: 90%;
-            max-height: 80vh;
-            overflow-y: auto;
-            position: relative;
-        }
-        
-        .modal-header {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            margin-bottom: 20px;
-        }
-        
-        .modal-title {
-            font-size: 20px;
-            font-weight: 700;
-            color: #000;
-        }
-        
-        .modal-close {
-            width: 32px;
-            height: 32px;
-            border-radius: 50%;
-            background: #f0f0f0;
-            border: none;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            cursor: pointer;
-            font-size: 18px;
-            color: #007AFF;
-        }
-    </style>
-</head>
-<body>
-    <!-- Проверка мобильного устройства -->
-    <div id="mobile-only-overlay" class="mobile-only-overlay">
-        <div class="mobile-only-modal">
-            <div class="mobile-only-icon">
-                <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-                    <path d="M17 1.01L7 1c-1.1 0-2 .9-2 2v18c0 1.1.9 2 2 2h10c1.1 0 2-.9 2-2V3c0-1.1-.9-1.99-2-1.99zM17 19H7V5h10v14z"/>
-                </svg>
-            </div>
-            <div class="mobile-only-title">Только для мобильных</div>
-            <div class="mobile-only-text">Пожалуйста, откройте приложение с вашего мобильного телефона для продолжения.</div>
-            <div class="mobile-only-hint">Это приложение оптимизировано для мобильных устройств и недоступно на компьютерах.</div>
-            <div class="mobile-only-footer">
-                <div class="mobile-only-footer-icon">
-                    <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-                        <path d="M17 1.01L7 1c-1.1 0-2 .9-2 2v18c0 1.1.9 2 2 2h10c1.1 0 2-.9 2-2V3c0-1.1-.9-1.99-2-1.99zM17 19H7V5h10v14z"/>
-                    </svg>
-                </div>
-                <div class="mobile-only-footer-text">Используйте смартфон или планшет</div>
-            </div>
-        </div>
-    </div>
+console.log('📦 userData.js загружается...');
+
+// Получить URL API сервера
+function getApiUrl() {
+    // ВАЖНО: Используем правильный URL сервера (Render.com)
+    // Если есть переменная окружения или настройка, используем её
+    if (window.API_URL) {
+        return window.API_URL;
+    }
+    // Используем URL сервера из app.js (если определен)
+    if (window.SERVER_URL) {
+        return window.SERVER_URL;
+    }
+    // По умолчанию используем Render.com сервер
+    return 'https://vkfvkflc.onrender.com';
+}
+
+// Получить ID пользователя
+function getUserId() {
+    // Проверяем разные способы получения userId
+    let userId = null;
     
-    <!-- Splash экран -->
-    <div id="splash-screen" class="splash-screen">
-        <div class="splash-content">
-            <div class="splash-title">Vape Shop</div>
-            <div class="splash-loader"></div>
-        </div>
-    </div>
+    if (window.tg?.initDataUnsafe?.user?.id) {
+        userId = window.tg.initDataUnsafe.user.id.toString();
+        console.log('✅ userId получен из window.tg.initDataUnsafe.user.id:', userId);
+    } else if (window.tg?.initData?.user?.id) {
+        userId = window.tg.initData.user.id.toString();
+        console.log('✅ userId получен из window.tg.initData.user.id:', userId);
+    } else {
+        console.error('❌ Telegram user data not available');
+        console.error('window.tg:', window.tg);
+        console.error('window.tg?.initDataUnsafe:', window.tg?.initDataUnsafe);
+        console.error('window.tg?.initData:', window.tg?.initData);
+        return null;
+    }
+    
+    return userId;
+}
 
-    <!-- Проверка возраста -->
-    <div id="age-verification" class="age-verification">
-        <div class="age-modal">
-            <div style="width: 64px; height: 64px; margin: 0 auto 20px; background: #f5f5f5; border-radius: 50%; display: flex; align-items: center; justify-content: center; border: 2px solid #e0e0e0;">
-                <span style="font-size: 32px;">⚠️</span>
-            </div>
-            <h2 style="margin-bottom: 16px; font-size: 22px; font-weight: 600; color: #333333;">Внимание!</h2>
-            <p style="margin-bottom: 12px; color: #666666; font-size: 15px; line-height: 1.6;">Данный сайт предназначен для лиц старше 18 лет. Продажа никотинсодержащей продукции несовершеннолетним запрещена.</p>
-            <p style="margin-bottom: 24px; font-size: 16px; font-weight: 500; color: #333333;"><strong>Вам есть 18 лет?</strong></p>
-            <div class="age-buttons">
-                <button class="age-btn yes" type="button" id="age-yes-btn" onclick="if(window.verifyAge){window.verifyAge(true);}else{setTimeout(()=>window.verifyAge(true),100);}">Да, мне есть 18</button>
-                <button class="age-btn no" type="button" id="age-no-btn" onclick="if(window.verifyAge){window.verifyAge(false);}else{setTimeout(()=>window.verifyAge(false),100);}">Нет</button>
-            </div>
-        </div>
-    </div>
+// Стандартные данные пользователя
+function getDefaultData(userId) {
+    return {
+        id: userId,
+        username: window.tg.initDataUnsafe.user.username || `user_${userId}`,
+        firstName: window.tg.initDataUnsafe.user.first_name || '',
+        lastName: window.tg.initDataUnsafe.user.last_name || '',
+        languageCode: window.tg.initDataUnsafe.user.language_code || 'ru',
+        
+        // Основные данные
+        orders: [],
+        vapeCoins: 0,
+        stamps: 0,
+        referrals: 0,
+        rating: 10,
+        
+        // Настройки
+        settings: {
+            notifications: true,
+            theme: 'light',
+            language: 'ru'
+        },
+        
+        // Дополнительные данные
+        viewedProducts: [],
+        favorites: [],
+        cart: [],
+        transactions: [],
+        
+        // Метаданные
+        createdAt: new Date().toISOString(),
+        lastActive: new Date().toISOString()
+    };
+}
 
-    <!-- Основной контент -->
-    <div id="main-content" class="hidden">
-        <!-- Навигация -->
-        <div class="main-nav">
-            <div class="nav-title" id="page-title">Ассортимент</div>
-            <div style="font-size: 16px; font-weight: 800; color: #ffffff; letter-spacing: 2px; 
-                text-transform: uppercase; background: linear-gradient(135deg, rgba(255,255,255,0.25) 0%, rgba(255,255,255,0.15) 100%); 
-                padding: 6px 14px; border-radius: 20px; border: 1px solid rgba(255,255,255,0.3); 
-                backdrop-filter: blur(10px); box-shadow: 0 2px 8px rgba(0,0,0,0.1);">
-                vapeshop
-            </div>
-        </div>
+// Загрузить данные пользователя с сервера
+async function loadUserDataFromServer(userId) {
+    try {
+        const apiUrl = getApiUrl();
+        const url = `${apiUrl}/api/user/${userId}`;
+        console.log('📡 Запрос к серверу:', url);
         
-        <!-- Поиск и фильтр -->
-        <div id="search-section" class="search-section">
-            <div class="search-input-wrapper">
-                <span class="search-icon" id="search-icon-svg"></span>
-                <input type="text" class="search-input" id="search-input" placeholder="Поиск товаров..." 
-                       oninput="searchProducts(this.value)" 
-                       onkeypress="if(event.key==='Enter'){event.preventDefault(); hideKeyboard();}">
-            </div>
-            <button class="filter-btn" onclick="showSortMenu()" id="filter-btn-icon"></button>
-        </div>
-        
-        <!-- Категории -->
-        <div id="categories-section" class="categories">
-            <button class="category-btn active" onclick="filterCategory('all')">Все товары</button>
-            <button class="category-btn" onclick="filterCategory('liquids')">Жидкость</button>
-            <button class="category-btn" onclick="filterCategory('accessories')">Расходник</button>
-            <button class="category-btn" onclick="filterCategory('disposable')">Одноразка</button>
-            <button class="category-btn" onclick="filterCategory('vape')">Устройства</button>
-        </div>
-        
-        <!-- Вкладки избранного (скрыты по умолчанию) -->
-        <div id="favorites-tabs-section" class="categories" style="display: none;">
-            <button id="favorites-tab-all" class="category-btn active" onclick="setFavoritesCategory('all')">Все товары</button>
-            <button id="favorites-tab-liquids" class="category-btn" onclick="setFavoritesCategory('liquids')">Жидкость</button>
-            <button id="favorites-tab-accessories" class="category-btn" onclick="setFavoritesCategory('accessories')">Расходник</button>
-            <button id="favorites-tab-disposable" class="category-btn" onclick="setFavoritesCategory('disposable')">Одноразки</button>
-            <button id="favorites-tab-vape" class="category-btn" onclick="setFavoritesCategory('vape')">Устройства</button>
-        </div>
-        
-        <!-- Контент страниц -->
-        <div id="page-content">
-            <!-- Товары загружаются через JS -->
-        </div>
-        
-        <!-- Нижняя навигация -->
-        <div class="bottom-nav">
-            <button class="nav-item active" onclick="showPage('catalog')">
-                <span class="nav-icon" id="nav-catalog-icon"></span>
-                <p>Ассортимент</p>
-            </button>
-            <button class="nav-item" onclick="showPage('promotions')">
-                <span class="nav-icon" id="nav-promotions-icon"></span>
-                <p>Акции</p>
-            </button>
-            <button class="nav-item" onclick="showPage('cart')" style="position: relative;">
-                <span class="nav-icon" id="nav-cart-icon"></span>
-                <p>Корзина</p>
-                <span id="cart-badge" class="cart-badge hidden">0</span>
-            </button>
-            <button class="nav-item" onclick="showPage('favorites')">
-                <span class="nav-icon" id="nav-favorites-icon"></span>
-                <p>Избранное</p>
-            </button>
-            <button class="nav-item" onclick="showPage('profile')">
-                <span class="nav-icon" id="nav-profile-icon"></span>
-                <p>Профиль</p>
-            </button>
-        </div>
-    </div>
-
-    <script>
-        // Проверка устройства сразу при загрузке страницы (до загрузки app.js)
-        (function() {
-            function isMobileDevice() {
-                // Проверяем, запущено ли в Telegram WebApp (всегда мобильное)
-                if (typeof window.Telegram !== 'undefined' && window.Telegram.WebApp) {
-                    return true;
-                }
-                
-                const userAgent = navigator.userAgent || navigator.vendor || window.opera || '';
-                const ua = userAgent.toLowerCase();
-                
-                // Явно мобильные устройства
-                const mobileDevices = /android|webos|iphone|ipad|ipod|blackberry|iemobile|opera mini|mobile|tablet/i;
-                if (mobileDevices.test(ua)) {
-                    return true;
-                }
-                
-                // Явно десктопные платформы
-                const desktopPlatforms = /windows|win32|win64|macintosh|mac os x|linux|ubuntu|fedora/i;
-                if (desktopPlatforms.test(ua)) {
-                    // Если это десктопная платформа И нет признаков мобильного - это десктоп
-                    return false;
-                }
-                
-                // Проверяем размер экрана
-                const screenWidth = window.innerWidth || screen.width;
-                if (screenWidth > 1024) {
-                    return false; // Большой экран = десктоп
-                }
-                
-                // Если маленький экран И есть touch - вероятно мобильное
-                if (screenWidth <= 768 && ('ontouchstart' in window || navigator.maxTouchPoints > 0)) {
-                    return true;
-                }
-                
-                // По умолчанию считаем десктопом
-                return false;
+        const response = await fetch(url, {
+            method: 'GET',
+            headers: {
+                'Content-Type': 'application/json'
             }
-            
-            function showMobileOnlyMessage() {
-                const overlay = document.getElementById('mobile-only-overlay');
-                if (overlay) {
-                    overlay.style.display = 'flex';
-                    overlay.classList.add('show');
-                    console.log('Показываем окно для десктопов');
-                } else {
-                    console.error('Элемент mobile-only-overlay не найден');
-                }
-            }
-            
-            // Проверяем устройство сразу
-            const isMobile = isMobileDevice();
-            console.log('Проверка устройства:', {
-                userAgent: navigator.userAgent,
-                screenWidth: window.innerWidth || screen.width,
-                isMobile: isMobile
-            });
-            
-            if (!isMobile) {
-                // Показываем окно сразу, не дожидаясь загрузки app.js
-                if (document.readyState === 'loading') {
-                    document.addEventListener('DOMContentLoaded', function() {
-                        showMobileOnlyMessage();
-                    });
-                } else {
-                    // DOM уже готов
-                    showMobileOnlyMessage();
-                }
-                
-                // Дублируем проверку после задержки для надежности
-                setTimeout(function() {
-                    showMobileOnlyMessage();
-                }, 200);
-                
-                // Еще одна проверка после полной загрузки
-                window.addEventListener('load', function() {
-                    showMobileOnlyMessage();
+        });
+        
+        console.log('📡 Ответ сервера:', response.status, response.statusText);
+        
+        if (response.ok) {
+            const data = await response.json();
+            console.log('📡 Данные от сервера:', data);
+            if (data.success && data.userData) {
+                console.log('✅ Данные пользователя получены с сервера:', {
+                    userId: data.userData.id,
+                    vapeCoins: data.userData.vapeCoins,
+                    stamps: data.userData.stamps,
+                    cart: data.userData.cart?.length || 0,
+                    favorites: data.userData.favorites?.length || 0
                 });
+                return data.userData;
             }
-        })();
-    </script>
-    <script src="userData.js"></script>
-    <script src="app.js"></script>
-</body>
-</html>
+        } else if (response.status === 404) {
+            // Пользователь не найден - создадим нового
+            console.log('⚠️ Пользователь не найден на сервере (404)');
+            return null;
+        } else {
+            const errorText = await response.text();
+            console.error('❌ Ошибка ответа сервера:', response.status, errorText);
+        }
+    } catch (error) {
+        console.error('❌ Ошибка при загрузке данных с сервера:', error);
+        console.error('❌ Детали ошибки:', error.message, error.stack);
+    }
+    return null;
+}
+
+// Сохранить данные пользователя на сервер
+async function saveUserDataToServer(userData) {
+    const userId = getUserId();
+    if (!userId || !userData) return false;
+    
+    try {
+        const apiUrl = getApiUrl();
+        const response = await fetch(`${apiUrl}/api/user/${userId}`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify(userData)
+        });
+        
+        if (response.ok) {
+            const data = await response.json();
+            return data.success;
+        }
+    } catch (error) {
+        console.error('Ошибка при сохранении данных на сервер:', error);
+    }
+    return false;
+}
+
+// Обновить данные пользователя на сервере (частичное обновление)
+async function updateUserDataOnServer(updates) {
+    const userId = getUserId();
+    if (!userId || !updates) {
+        console.error('❌ updateUserDataOnServer: userId или updates отсутствуют', { userId, updates });
+        return false;
+    }
+    
+    try {
+        const apiUrl = getApiUrl();
+        console.log('📡 Отправляем обновление на сервер:', `${apiUrl}/api/user/${userId}`, updates);
+        const response = await fetch(`${apiUrl}/api/user/${userId}`, {
+            method: 'PATCH',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify(updates)
+        });
+        
+        if (response.ok) {
+            const data = await response.json();
+            console.log('✅ Данные обновлены на сервере:', data);
+            return data.success;
+        } else {
+            const errorText = await response.text();
+            console.error('❌ Ошибка ответа сервера:', response.status, errorText);
+        }
+    } catch (error) {
+        console.error('❌ Ошибка при обновлении данных на сервере:', error);
+    }
+    return false;
+}
+
+// Получить данные пользователя (с синхронизацией с сервером)
+async function getUserData() {
+    const userId = getUserId();
+    if (!userId) {
+        console.error('❌ userId не определен!');
+        return null;
+    }
+    
+    console.log('🔍 Загружаем данные пользователя, userId:', userId);
+    const storageKey = `user_${userId}`;
+    const defaultData = getDefaultData(userId);
+    
+    // Сначала пытаемся загрузить с сервера
+    try {
+        console.log('📡 Запрос данных с сервера для userId:', userId);
+        const serverData = await loadUserDataFromServer(userId);
+        
+        if (serverData) {
+            console.log('✅ Данные получены с сервера:', serverData);
+            // Сохраняем в localStorage как кеш
+            localStorage.setItem(storageKey, JSON.stringify(serverData));
+            return serverData;
+        } else {
+            console.log('⚠️ Пользователь не найден на сервере, создаем нового');
+            // Пользователь не найден на сервере - создаем нового
+            // Сохраняем на сервер
+            const saved = await saveUserDataToServer(defaultData);
+            if (saved) {
+                console.log('✅ Новый пользователь создан на сервере');
+            } else {
+                console.error('❌ Ошибка создания пользователя на сервере');
+            }
+            localStorage.setItem(storageKey, JSON.stringify(defaultData));
+            return defaultData;
+        }
+    } catch (error) {
+        console.error('❌ Ошибка при синхронизации с сервером:', error);
+        // Если сервер недоступен, используем локальные данные
+        try {
+            const savedData = localStorage.getItem(storageKey);
+            if (savedData) {
+                const parsedData = JSON.parse(savedData);
+                parsedData.lastActive = new Date().toISOString();
+                console.log('📦 Используем локальные данные из localStorage');
+                return parsedData;
+            }
+        } catch (e) {
+            console.error('❌ Ошибка при чтении локальных данных:', e);
+        }
+        console.log('📦 Используем данные по умолчанию');
+        return defaultData;
+    }
+}
+
+// Синхронная версия (для обратной совместимости, использует кеш)
+function getUserDataSync() {
+    const userId = getUserId();
+    if (!userId) return null;
+    
+    const storageKey = `user_${userId}`;
+    const defaultData = getDefaultData(userId);
+    
+    try {
+        const savedData = localStorage.getItem(storageKey);
+        if (savedData) {
+            return JSON.parse(savedData);
+        }
+    } catch (e) {
+        console.error('Ошибка при чтении локальных данных:', e);
+    }
+    return defaultData;
+}
+
+// Сохранить данные пользователя (с синхронизацией на сервер)
+function saveUserData(userData) {
+    if (!userData?.id) {
+        console.error('Не удалось сохранить: отсутствует ID пользователя');
+        return false;
+    }
+    
+    // Сохраняем в localStorage как кеш
+    try {
+        const storageKey = `user_${userData.id}`;
+        localStorage.setItem(storageKey, JSON.stringify(userData));
+    } catch (e) {
+        console.error('Ошибка при сохранении в localStorage:', e);
+    }
+    
+    // Синхронизируем с сервером (в фоне, не блокируем)
+    saveUserDataToServer(userData).catch(err => {
+        console.error('Ошибка при синхронизации на сервер:', err);
+    });
+    
+    return true;
+}
+
+// Обновить данные пользователя (с синхронизацией на сервер)
+async function updateUserData(updates) {
+    // ВАЖНО: Сначала получаем userId напрямую, чтобы убедиться что он определен
+    const userId = getUserId();
+    if (!userId) {
+        console.error('❌ userId не определен! Не могу обновить данные.');
+        return null;
+    }
+    
+    console.log('💾 Обновляем данные пользователя, userId:', userId, 'updates:', updates);
+    
+    const userData = await getUserData();
+    if (!userData) {
+        console.error('❌ Не удалось получить данные пользователя для обновления');
+        // Создаем новые данные если их нет
+        const defaultData = getDefaultData(userId);
+        const updatedData = { 
+            ...defaultData, 
+            ...updates,
+            lastActive: new Date().toISOString()
+        };
+        
+        // Сохраняем локально
+        const storageKey = `user_${userId}`;
+        localStorage.setItem(storageKey, JSON.stringify(updatedData));
+        
+        // Синхронизируем с сервером
+        try {
+            await saveUserDataToServer(updatedData);
+            console.log('✅ Новые данные пользователя созданы и синхронизированы с сервером');
+        } catch (err) {
+            console.error('❌ Ошибка при синхронизации новых данных на сервер:', err);
+        }
+        
+        return updatedData;
+    }
+    
+    const updatedData = { 
+        ...userData, 
+        ...updates,
+        lastActive: new Date().toISOString()
+    };
+    
+    // Сохраняем локально
+    const storageKey = `user_${userId}`;
+    try {
+        localStorage.setItem(storageKey, JSON.stringify(updatedData));
+        console.log('✅ Данные сохранены в localStorage');
+    } catch (e) {
+        console.error('❌ Ошибка при сохранении в localStorage:', e);
+    }
+    
+    // Синхронизируем с сервером (ВАЖНО: ждем результат)
+    try {
+        const success = await updateUserDataOnServer(updates);
+        if (success) {
+            console.log('✅ Данные синхронизированы с сервером');
+        } else {
+            console.error('❌ Ошибка синхронизации с сервером - данные не сохранены на сервере!');
+            // Пытаемся сохранить полные данные через POST
+            try {
+                await saveUserDataToServer(updatedData);
+                console.log('✅ Данные сохранены на сервер через POST');
+            } catch (err2) {
+                console.error('❌ Критическая ошибка: данные не сохранены на сервер:', err2);
+            }
+        }
+    } catch (err) {
+        console.error('❌ Ошибка при синхронизации на сервер:', err);
+        // Пытаемся сохранить полные данные через POST
+        try {
+            await saveUserDataToServer(updatedData);
+            console.log('✅ Данные сохранены на сервер через POST (fallback)');
+        } catch (err2) {
+            console.error('❌ Критическая ошибка: данные не сохранены на сервер:', err2);
+        }
+    }
+    
+    return updatedData;
+}
+
+// Добавить заказ
+async function addOrder(orderData) {
+    const userData = await getUserData();
+    if (!userData) return null;
+
+    const order = {
+        id: orderData.id || `order_${Date.now()}`,
+        date: new Date().toISOString(),
+        status: orderData.status || 'new',
+        ...orderData,
+        items: orderData.items ? orderData.items.map(item => ({
+            ...item,
+            id: item.id || `item_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
+        })) : []
+    };
+
+    userData.orders = [order, ...(userData.orders || [])];
+    await updateUserData({ orders: userData.orders });
+    return order;
+}
+
+// Обновить статус заказа
+async function updateOrderStatus(orderId, newStatus) {
+    const userData = await getUserData();
+    if (!userData) return false;
+
+    const orderIndex = userData.orders.findIndex(o => o.id === orderId);
+    if (orderIndex === -1) return false;
+
+    userData.orders[orderIndex].status = newStatus;
+    userData.orders[orderIndex].updatedAt = new Date().toISOString();
+    
+    await updateUserData({ orders: userData.orders });
+    return true;
+}
+
+// Добавить Vape Coins (с синхронизацией на сервер)
+async function addVapeCoins(amount, reason = '') {
+    const userId = getUserId();
+    if (!userId) return 0;
+    
+    try {
+        const apiUrl = getApiUrl();
+        const response = await fetch(`${apiUrl}/api/user/${userId}/coins`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ amount, reason })
+        });
+        
+        if (response.ok) {
+            const data = await response.json();
+            if (data.success) {
+                // Обновляем локальный кеш
+                const userData = getUserDataSync();
+                if (userData) {
+                    userData.vapeCoins = data.balance;
+                    const storageKey = `user_${userId}`;
+                    localStorage.setItem(storageKey, JSON.stringify(userData));
+                }
+                return data.balance;
+            }
+        }
+    } catch (error) {
+        console.error('Ошибка при добавлении коинов на сервер:', error);
+        // Fallback на локальное сохранение
+        const userData = getUserDataSync();
+        if (userData) {
+            const newBalance = (userData.vapeCoins || 0) + Number(amount);
+            userData.vapeCoins = newBalance;
+            const storageKey = `user_${userId}`;
+            localStorage.setItem(storageKey, JSON.stringify(userData));
+            return newBalance;
+        }
+    }
+    return 0;
+}
+
+// Добавить в историю просмотров
+function addToViewed(productId) {
+    const userData = getUserDataSync();
+    if (!userData || !productId) return;
+
+    // Удаляем дубликаты и оставляем только последние 20 просмотренных
+    userData.viewedProducts = [
+        productId,
+        ...(userData.viewedProducts || []).filter(id => id !== productId)
+    ].slice(0, 20);
+    
+    saveUserData(userData);
+}
+
+// Добавить в избранное (с синхронизацией на сервер)
+async function toggleFavorite(productId) {
+    const userId = getUserId();
+    if (!userId) return false;
+    
+    const userData = getUserDataSync();
+    if (!userData) return false;
+
+    userData.favorites = userData.favorites || [];
+    
+    const index = userData.favorites.indexOf(productId);
+    if (index === -1) {
+        userData.favorites.push(productId);
+    } else {
+        userData.favorites.splice(index, 1);
+    }
+    
+    // Сохраняем локально
+    const storageKey = `user_${userId}`;
+    localStorage.setItem(storageKey, JSON.stringify(userData));
+    
+    // Синхронизируем с сервером
+    try {
+        const apiUrl = getApiUrl();
+        await fetch(`${apiUrl}/api/user/${userId}/favorites`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ favorites: userData.favorites })
+        });
+    } catch (error) {
+        console.error('Ошибка при синхронизации избранного:', error);
+    }
+    
+    return true;
+}
+
+// Проверить, есть ли товар в избранном
+function isFavorite(productId) {
+    const userData = getUserDataSync();
+    return userData?.favorites?.includes(productId) || false;
+}
+
+// Получить настройки пользователя
+function getUserSettings() {
+    return getUserDataSync()?.settings || {
+        notifications: true,
+        theme: 'light',
+        language: 'ru'
+    };
+}
+
+// Обновить настройки
+async function updateUserSettings(newSettings) {
+    const userData = await getUserData();
+    if (!userData) return null;
+    
+    userData.settings = {
+        ...userData.settings,
+        ...newSettings
+    };
+    
+    await updateUserData({ settings: userData.settings });
+    return userData.settings;
+}
+
+// Функция для синхронизации корзины с сервером
+async function syncCart(cart) {
+    const userId = getUserId();
+    if (!userId) {
+        console.error('❌ syncCart: userId не определен');
+        return false;
+    }
+    
+    console.log('🛒 Синхронизируем корзину с сервером, userId:', userId, 'cart:', cart);
+    
+    // Сохраняем локально
+    const userData = getUserDataSync();
+    if (userData) {
+        userData.cart = cart;
+        const storageKey = `user_${userId}`;
+        localStorage.setItem(storageKey, JSON.stringify(userData));
+    }
+    
+    // Синхронизируем с сервером
+    try {
+        const apiUrl = getApiUrl();
+        console.log('📡 Отправляем корзину на сервер:', `${apiUrl}/api/user/${userId}/cart`);
+        const response = await fetch(`${apiUrl}/api/user/${userId}/cart`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ cart })
+        });
+        
+        if (response.ok) {
+            console.log('✅ Корзина синхронизирована с сервером');
+            return true;
+        } else {
+            const errorText = await response.text();
+            console.error('❌ Ошибка синхронизации корзины:', response.status, errorText);
+            return false;
+        }
+    } catch (error) {
+        console.error('❌ Ошибка при синхронизации корзины:', error);
+        return false;
+    }
+}
+
+// Экспортируем все функции
+console.log('📦 Создаем window.userDataManager...');
+window.userDataManager = {
+    getUserData,
+    getUserDataSync,
+    saveUserData,
+    updateUserData,
+    addOrder,
+    updateOrderStatus,
+    addVapeCoins,
+    addToViewed,
+    toggleFavorite,
+    isFavorite,
+    getUserSettings,
+    updateUserSettings,
+    syncCart,
+    getUserId
+};
+
+console.log('✅ window.userDataManager создан:', {
+    exists: typeof window.userDataManager !== 'undefined',
+    getUserData: typeof window.userDataManager.getUserData === 'function',
+    getUserId: typeof window.userDataManager.getUserId === 'function'
+});
