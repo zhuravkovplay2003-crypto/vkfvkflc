@@ -946,13 +946,13 @@ function init() {
                 const shortLocation = selectedPickupLocation.length > 25 
                     ? selectedPickupLocation.substring(0, 22) + '...' 
                     : selectedPickupLocation;
-                navRightContent.innerHTML = `<span style="display: inline-flex; align-items: center; gap: 4px; font-size: 13px; font-weight: 500; letter-spacing: 0;">${getLocationIcon('#ffffff').replace('width="24" height="24"', 'width="14" height="14"')}<span style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 200px;">${shortLocation}</span></span>`;
+                navRightContent.innerHTML = `<span style="display: inline-flex; align-items: center; gap: 4px; font-size: 12px; font-weight: 500; letter-spacing: 0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;">${getLocationIcon('#ffffff').replace('width="24" height="24"', 'width="14" height="14"')}<span style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 175px; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;">${shortLocation}</span></span>`;
                 navRightContent.style.cursor = 'pointer';
                 navRightContent.style.textAlign = 'center';
                 navRightContent.style.justifyContent = 'center';
                 navRightContent.style.display = 'flex';
                 navRightContent.style.minWidth = 'auto';
-                navRightContent.style.maxWidth = '240px';
+                navRightContent.style.maxWidth = '200px';
                 navRightContent.style.width = 'auto';
                 navRightContent.style.flex = '0 0 auto';
                 navRightContent.style.padding = '6px 12px';
@@ -1200,16 +1200,40 @@ function init() {
                 
                 // ВАЖНО: Загружаем заказы с сервера для синхронизации между устройствами
                 if (userData.orders && Array.isArray(userData.orders)) {
-                    // Объединяем заказы с сервера с локальными (приоритет серверным)
+                    // ВАЖНО: Объединяем заказы с сервера с локальными (приоритет серверным)
+                    // Убираем дубликаты по ID для предотвращения дублирования
                     const serverOrderIds = new Set(userData.orders.map(o => o.id));
-                    const localOrdersNotOnServer = orders.filter(o => !serverOrderIds.has(o.id));
-                    orders = [...userData.orders, ...localOrdersNotOnServer].sort((a, b) => {
+                    const localOrdersNotOnServer = orders.filter(o => o.id && !serverOrderIds.has(o.id));
+                    
+                    // ВАЖНО: Убираем дубликаты внутри серверных заказов (на случай если они там есть)
+                    const uniqueServerOrders = [];
+                    const seenIds = new Set();
+                    for (const order of userData.orders) {
+                        if (order.id && !seenIds.has(order.id)) {
+                            seenIds.add(order.id);
+                            uniqueServerOrders.push(order);
+                        }
+                    }
+                    
+                    orders = [...uniqueServerOrders, ...localOrdersNotOnServer].sort((a, b) => {
                         const dateA = new Date(a.createdAt || a.date || 0);
                         const dateB = new Date(b.createdAt || b.date || 0);
                         return dateB - dateA; // Новые заказы первыми
                     });
+                    
+                    // ВАЖНО: Финальная проверка на дубликаты по ID
+                    const finalOrders = [];
+                    const finalSeenIds = new Set();
+                    for (const order of orders) {
+                        if (order.id && !finalSeenIds.has(order.id)) {
+                            finalSeenIds.add(order.id);
+                            finalOrders.push(order);
+                        }
+                    }
+                    orders = finalOrders;
+                    
                     localStorage.setItem('orders', JSON.stringify(orders));
-                    console.log('✅ Заказы загружены с сервера:', orders.length, 'заказов');
+                    console.log('✅ Заказы загружены с сервера:', orders.length, 'заказов (дубликаты удалены)');
                 }
             } else {
                 console.warn('Данные пользователя не найдены на сервере, используем localStorage');
@@ -1969,13 +1993,13 @@ function showPage(page, skipHistory = false, resetCatalog = false) {
                 const shortLocation = selectedPickupLocation.length > 25 
                     ? selectedPickupLocation.substring(0, 22) + '...' 
                     : selectedPickupLocation;
-                navRightContent.innerHTML = `<span style="display: inline-flex; align-items: center; gap: 4px; font-size: 13px; font-weight: 500; letter-spacing: 0;">${getLocationIcon('#ffffff').replace('width="24" height="24"', 'width="14" height="14"')}<span style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 200px;">${shortLocation}</span></span>`;
+                navRightContent.innerHTML = `<span style="display: inline-flex; align-items: center; gap: 4px; font-size: 12px; font-weight: 500; letter-spacing: 0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;">${getLocationIcon('#ffffff').replace('width="24" height="24"', 'width="14" height="14"')}<span style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 175px; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;">${shortLocation}</span></span>`;
                 navRightContent.style.cursor = 'pointer';
                 navRightContent.style.textAlign = 'center';
                 navRightContent.style.justifyContent = 'center';
                 navRightContent.style.display = 'flex';
                 navRightContent.style.minWidth = 'auto';
-                navRightContent.style.maxWidth = '240px';
+                navRightContent.style.maxWidth = '200px';
                 navRightContent.style.width = 'auto';
                 navRightContent.style.flex = '0 0 auto';
                 navRightContent.style.padding = '6px 12px';
@@ -10018,16 +10042,40 @@ async function showOrders() {
         try {
             const userData = await window.userDataManager.getUserData();
             if (userData && userData.orders && Array.isArray(userData.orders)) {
-                // Объединяем заказы с сервера с локальными (приоритет серверным)
+                // ВАЖНО: Объединяем заказы с сервера с локальными (приоритет серверным)
+                // Убираем дубликаты по ID для предотвращения дублирования
                 const serverOrderIds = new Set(userData.orders.map(o => o.id));
-                const localOrdersNotOnServer = orders.filter(o => !serverOrderIds.has(o.id));
-                orders = [...userData.orders, ...localOrdersNotOnServer].sort((a, b) => {
+                const localOrdersNotOnServer = orders.filter(o => o.id && !serverOrderIds.has(o.id));
+                
+                // ВАЖНО: Убираем дубликаты внутри серверных заказов (на случай если они там есть)
+                const uniqueServerOrders = [];
+                const seenIds = new Set();
+                for (const order of userData.orders) {
+                    if (order.id && !seenIds.has(order.id)) {
+                        seenIds.add(order.id);
+                        uniqueServerOrders.push(order);
+                    }
+                }
+                
+                orders = [...uniqueServerOrders, ...localOrdersNotOnServer].sort((a, b) => {
                     const dateA = new Date(a.createdAt || a.date || 0);
                     const dateB = new Date(b.createdAt || b.date || 0);
                     return dateB - dateA; // Новые заказы первыми
                 });
+                
+                // ВАЖНО: Финальная проверка на дубликаты по ID
+                const finalOrders = [];
+                const finalSeenIds = new Set();
+                for (const order of orders) {
+                    if (order.id && !finalSeenIds.has(order.id)) {
+                        finalSeenIds.add(order.id);
+                        finalOrders.push(order);
+                    }
+                }
+                orders = finalOrders;
+                
                 localStorage.setItem('orders', JSON.stringify(orders));
-                console.log('✅ Заказы загружены с сервера:', orders.length, 'заказов');
+                console.log('✅ Заказы загружены с сервера:', orders.length, 'заказов (дубликаты удалены)');
             }
         } catch (error) {
             console.error('Ошибка загрузки заказов с сервера:', error);
@@ -12472,8 +12520,14 @@ function buyWithVapeCoins(productId) {
                     vapeCoinsSpent: product.vapeCoinsPrice
                 };
                 
-                orders.unshift(order);
-                localStorage.setItem('orders', JSON.stringify(orders));
+                // ВАЖНО: Проверяем, нет ли уже такого заказа (предотвращаем дублирование)
+                const existingOrder = orders.find(o => o.id === orderId);
+                if (!existingOrder) {
+                    orders.unshift(order);
+                    localStorage.setItem('orders', JSON.stringify(orders));
+                } else {
+                    console.log('⚠️ Заказ уже существует, пропускаем дублирование:', orderId);
+                }
                 
                 // Добавляем в историю транзакций с orderId
                 vapeCoinsHistory.unshift({
