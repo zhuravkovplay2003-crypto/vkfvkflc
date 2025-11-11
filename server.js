@@ -647,16 +647,22 @@ app.get('/api/orders/:orderId/status', (req, res) => {
 app.get('/api/orders/booked-times', (req, res) => {
     try {
         const dateKey = req.query.date;
+        const location = req.query.location; // Опционально: точка самовывоза
         if (!dateKey) {
             return res.status(400).json({ success: false, error: 'Date parameter required' });
         }
         
-        // Фильтруем заказы по дате и статусу (pending, confirmed и transferred - все занимают время)
+        // Фильтруем заказы по дате, статусу и точке самовывоза (если указана)
+        // ВАЖНО: rejected и cancelled заказы НЕ занимают время (разблокируют слот)
         const bookedTimes = [];
         orders.forEach(order => {
             if (order.selectedDeliveryDay === dateKey && 
                 order.deliveryExactTime && 
                 (order.status === 'pending' || order.status === 'confirmed' || order.status === 'transferred')) {
+                // Если указана точка самовывоза, проверяем её
+                if (location && order.pickupLocation && order.pickupLocation !== location) {
+                    return; // Пропускаем заказы с другой точкой самовывоза
+                }
                 bookedTimes.push(order.deliveryExactTime);
             }
         });
