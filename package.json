@@ -6,7 +6,7 @@
   "scripts": {
     "start": "node server.js",
     "dev": "nodemon server.js",
-    "postinstall": "npm rebuild better-sqlite3"
+    "postinstall": "npm rebuild better-sqlite3 || echo 'Warning: better-sqlite3 rebuild failed, but continuing...'"
   },
   "engines": {
     "node": ">=18.0.0"
