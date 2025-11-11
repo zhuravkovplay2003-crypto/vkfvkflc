@@ -1,17 +1,27 @@
-// userData.js - Управление данными пользователей
+// userData.js - Управление данными пользователей с синхронизацией с сервером
 
-// Получить данные пользователя
-function getUserData() {
+// Получить URL API сервера
+function getApiUrl() {
+    // Если есть переменная окружения или настройка, используем её
+    if (window.API_URL) {
+        return window.API_URL;
+    }
+    // Иначе используем текущий домен
+    return window.location.origin;
+}
+
+// Получить ID пользователя
+function getUserId() {
     if (!window.tg?.initDataUnsafe?.user?.id) {
         console.error('Telegram user data not available');
         return null;
     }
-    
-    const userId = window.tg.initDataUnsafe.user.id;
-    const storageKey = `user_${userId}`;
-    
-    // Стандартные данные пользователя
-    const defaultData = {
+    return window.tg.initDataUnsafe.user.id.toString();
+}
+
+// Стандартные данные пользователя
+function getDefaultData(userId) {
+    return {
         id: userId,
         username: window.tg.initDataUnsafe.user.username || `user_${userId}`,
         firstName: window.tg.initDataUnsafe.user.first_name || '',
@@ -21,6 +31,7 @@ function getUserData() {
         // Основные данные
         orders: [],
         vapeCoins: 0,
+        stamps: 0,
         referrals: 0,
         rating: 10,
         
@@ -34,49 +45,171 @@ function getUserData() {
         // Дополнительные данные
         viewedProducts: [],
         favorites: [],
+        cart: [],
+        transactions: [],
         
         // Метаданные
         createdAt: new Date().toISOString(),
         lastActive: new Date().toISOString()
     };
+}
 
+// Загрузить данные пользователя с сервера
+async function loadUserDataFromServer(userId) {
     try {
-        const savedData = localStorage.getItem(storageKey);
-        if (savedData) {
-            const parsedData = JSON.parse(savedData);
-            // Обновляем время последней активности
-            parsedData.lastActive = new Date().toISOString();
-            return parsedData;
+        const apiUrl = getApiUrl();
+        const response = await fetch(`${apiUrl}/api/user/${userId}`);
+        
+        if (response.ok) {
+            const data = await response.json();
+            if (data.success && data.userData) {
+                return data.userData;
+            }
+        } else if (response.status === 404) {
+            // Пользователь не найден - создадим нового
+            return null;
         }
-        // Сохраняем данные нового пользователя
-        localStorage.setItem(storageKey, JSON.stringify(defaultData));
-        return defaultData;
-    } catch (e) {
-        console.error('Ошибка при чтении данных пользователя:', e);
+    } catch (error) {
+        console.error('Ошибка при загрузке данных с сервера:', error);
+    }
+    return null;
+}
+
+// Сохранить данные пользователя на сервер
+async function saveUserDataToServer(userData) {
+    const userId = getUserId();
+    if (!userId || !userData) return false;
+    
+    try {
+        const apiUrl = getApiUrl();
+        const response = await fetch(`${apiUrl}/api/user/${userId}`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify(userData)
+        });
+        
+        if (response.ok) {
+            const data = await response.json();
+            return data.success;
+        }
+    } catch (error) {
+        console.error('Ошибка при сохранении данных на сервер:', error);
+    }
+    return false;
+}
+
+// Обновить данные пользователя на сервере (частичное обновление)
+async function updateUserDataOnServer(updates) {
+    const userId = getUserId();
+    if (!userId || !updates) return false;
+    
+    try {
+        const apiUrl = getApiUrl();
+        const response = await fetch(`${apiUrl}/api/user/${userId}`, {
+            method: 'PATCH',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify(updates)
+        });
+        
+        if (response.ok) {
+            const data = await response.json();
+            return data.success;
+        }
+    } catch (error) {
+        console.error('Ошибка при обновлении данных на сервере:', error);
+    }
+    return false;
+}
+
+// Получить данные пользователя (с синхронизацией с сервером)
+async function getUserData() {
+    const userId = getUserId();
+    if (!userId) return null;
+    
+    const storageKey = `user_${userId}`;
+    const defaultData = getDefaultData(userId);
+    
+    // Сначала пытаемся загрузить с сервера
+    try {
+        const serverData = await loadUserDataFromServer(userId);
+        
+        if (serverData) {
+            // Сохраняем в localStorage как кеш
+            localStorage.setItem(storageKey, JSON.stringify(serverData));
+            return serverData;
+        } else {
+            // Пользователь не найден на сервере - создаем нового
+            // Сохраняем на сервер
+            await saveUserDataToServer(defaultData);
+            localStorage.setItem(storageKey, JSON.stringify(defaultData));
+            return defaultData;
+        }
+    } catch (error) {
+        console.error('Ошибка при синхронизации с сервером, используем локальные данные:', error);
+        // Если сервер недоступен, используем локальные данные
+        try {
+            const savedData = localStorage.getItem(storageKey);
+            if (savedData) {
+                const parsedData = JSON.parse(savedData);
+                parsedData.lastActive = new Date().toISOString();
+                return parsedData;
+            }
+        } catch (e) {
+            console.error('Ошибка при чтении локальных данных:', e);
+        }
         return defaultData;
     }
 }
 
-// Сохранить данные пользователя
+// Синхронная версия (для обратной совместимости, использует кеш)
+function getUserDataSync() {
+    const userId = getUserId();
+    if (!userId) return null;
+    
+    const storageKey = `user_${userId}`;
+    const defaultData = getDefaultData(userId);
+    
+    try {
+        const savedData = localStorage.getItem(storageKey);
+        if (savedData) {
+            return JSON.parse(savedData);
+        }
+    } catch (e) {
+        console.error('Ошибка при чтении локальных данных:', e);
+    }
+    return defaultData;
+}
+
+// Сохранить данные пользователя (с синхронизацией на сервер)
 function saveUserData(userData) {
     if (!userData?.id) {
         console.error('Не удалось сохранить: отсутствует ID пользователя');
         return false;
     }
     
+    // Сохраняем в localStorage как кеш
     try {
         const storageKey = `user_${userData.id}`;
         localStorage.setItem(storageKey, JSON.stringify(userData));
-        return true;
     } catch (e) {
-        console.error('Ошибка при сохранении данных пользователя:', e);
-        return false;
+        console.error('Ошибка при сохранении в localStorage:', e);
     }
+    
+    // Синхронизируем с сервером (в фоне, не блокируем)
+    saveUserDataToServer(userData).catch(err => {
+        console.error('Ошибка при синхронизации на сервер:', err);
+    });
+    
+    return true;
 }
 
-// Обновить данные пользователя
-function updateUserData(updates) {
-    const userData = getUserData();
+// Обновить данные пользователя (с синхронизацией на сервер)
+async function updateUserData(updates) {
+    const userData = await getUserData();
     if (!userData) return null;
     
     const updatedData = { 
@@ -85,32 +218,46 @@ function updateUserData(updates) {
         lastActive: new Date().toISOString()
     };
     
-    return saveUserData(updatedData) ? updatedData : null;
+    // Сохраняем локально
+    const storageKey = `user_${userData.id}`;
+    try {
+        localStorage.setItem(storageKey, JSON.stringify(updatedData));
+    } catch (e) {
+        console.error('Ошибка при сохранении в localStorage:', e);
+    }
+    
+    // Синхронизируем с сервером (в фоне)
+    updateUserDataOnServer(updates).catch(err => {
+        console.error('Ошибка при синхронизации на сервер:', err);
+    });
+    
+    return updatedData;
 }
 
 // Добавить заказ
-function addOrder(orderData) {
-    const userData = getUserData();
+async function addOrder(orderData) {
+    const userData = await getUserData();
     if (!userData) return null;
 
     const order = {
-        id: `order_${Date.now()}`,
+        id: orderData.id || `order_${Date.now()}`,
         date: new Date().toISOString(),
-        status: 'new',
+        status: orderData.status || 'new',
         ...orderData,
-        items: orderData.items.map(item => ({
+        items: orderData.items ? orderData.items.map(item => ({
             ...item,
             id: item.id || `item_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
-        }))
+        })) : []
     };
 
     userData.orders = [order, ...(userData.orders || [])];
-    return saveUserData(userData) ? order : null;
+    await updateUserData({ orders: userData.orders });
+    return order;
 }
 
 // Обновить статус заказа
-function updateOrderStatus(orderId, newStatus) {
-    const userData = getUserData();
+async function updateOrderStatus(orderId, newStatus) {
+    const userData = await getUserData();
     if (!userData) return false;
 
     const orderIndex = userData.orders.findIndex(o => o.id === orderId);
@@ -119,35 +266,56 @@ function updateOrderStatus(orderId, newStatus) {
     userData.orders[orderIndex].status = newStatus;
     userData.orders[orderIndex].updatedAt = new Date().toISOString();
     
-    return saveUserData(userData);
+    await updateUserData({ orders: userData.orders });
+    return true;
 }
 
-// Добавить Vape Coins
-function addVapeCoins(amount, reason = '') {
-    const userData = getUserData();
-    if (!userData) return 0;
-
-    const newBalance = (userData.vapeCoins || 0) + Number(amount);
+// Добавить Vape Coins (с синхронизацией на сервер)
+async function addVapeCoins(amount, reason = '') {
+    const userId = getUserId();
+    if (!userId) return 0;
     
-    const transaction = {
-        id: `tx_${Date.now()}`,
-        type: 'vape_coins',
-        amount: Number(amount),
-        balance: newBalance,
-        reason: reason,
-        date: new Date().toISOString()
-    };
-
-    userData.vapeCoins = newBalance;
-    userData.transactions = userData.transactions || [];
-    userData.transactions.unshift(transaction);
-    
-    return saveUserData(userData) ? newBalance : 0;
+    try {
+        const apiUrl = getApiUrl();
+        const response = await fetch(`${apiUrl}/api/user/${userId}/coins`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ amount, reason })
+        });
+        
+        if (response.ok) {
+            const data = await response.json();
+            if (data.success) {
+                // Обновляем локальный кеш
+                const userData = getUserDataSync();
+                if (userData) {
+                    userData.vapeCoins = data.balance;
+                    const storageKey = `user_${userId}`;
+                    localStorage.setItem(storageKey, JSON.stringify(userData));
+                }
+                return data.balance;
+            }
+        }
+    } catch (error) {
+        console.error('Ошибка при добавлении коинов на сервер:', error);
+        // Fallback на локальное сохранение
+        const userData = getUserDataSync();
+        if (userData) {
+            const newBalance = (userData.vapeCoins || 0) + Number(amount);
+            userData.vapeCoins = newBalance;
+            const storageKey = `user_${userId}`;
+            localStorage.setItem(storageKey, JSON.stringify(userData));
+            return newBalance;
+        }
+    }
+    return 0;
 }
 
 // Добавить в историю просмотров
 function addToViewed(productId) {
-    const userData = getUserData();
+    const userData = getUserDataSync();
     if (!userData || !productId) return;
 
     // Удаляем дубликаты и оставляем только последние 20 просмотренных
@@ -159,9 +327,12 @@ function addToViewed(productId) {
     saveUserData(userData);
 }
 
-// Добавить в избранное
-function toggleFavorite(productId) {
-    const userData = getUserData();
+// Добавить в избранное (с синхронизацией на сервер)
+async function toggleFavorite(productId) {
+    const userId = getUserId();
+    if (!userId) return false;
+    
+    const userData = getUserDataSync();
     if (!userData) return false;
 
     userData.favorites = userData.favorites || [];
@@ -173,18 +344,36 @@ function toggleFavorite(productId) {
         userData.favorites.splice(index, 1);
     }
     
-    return saveUserData(userData);
+    // Сохраняем локально
+    const storageKey = `user_${userId}`;
+    localStorage.setItem(storageKey, JSON.stringify(userData));
+    
+    // Синхронизируем с сервером
+    try {
+        const apiUrl = getApiUrl();
+        await fetch(`${apiUrl}/api/user/${userId}/favorites`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ favorites: userData.favorites })
+        });
+    } catch (error) {
+        console.error('Ошибка при синхронизации избранного:', error);
+    }
+    
+    return true;
 }
 
 // Проверить, есть ли товар в избранном
 function isFavorite(productId) {
-    const userData = getUserData();
+    const userData = getUserDataSync();
     return userData?.favorites?.includes(productId) || false;
 }
 
 // Получить настройки пользователя
 function getUserSettings() {
-    return getUserData()?.settings || {
+    return getUserDataSync()?.settings || {
         notifications: true,
         theme: 'light',
         language: 'ru'
@@ -192,8 +381,8 @@ function getUserSettings() {
 }
 
 // Обновить настройки
-function updateUserSettings(newSettings) {
-    const userData = getUserData();
+async function updateUserSettings(newSettings) {
+    const userData = await getUserData();
     if (!userData) return null;
     
     userData.settings = {
@@ -201,12 +390,44 @@ function updateUserSettings(newSettings) {
         ...newSettings
     };
     
-    return saveUserData(userData) ? userData.settings : null;
+    await updateUserData({ settings: userData.settings });
+    return userData.settings;
+}
+
+// Функция для синхронизации корзины с сервером
+async function syncCart(cart) {
+    const userId = getUserId();
+    if (!userId) return false;
+    
+    // Сохраняем локально
+    const userData = getUserDataSync();
+    if (userData) {
+        userData.cart = cart;
+        const storageKey = `user_${userId}`;
+        localStorage.setItem(storageKey, JSON.stringify(userData));
+    }
+    
+    // Синхронизируем с сервером
+    try {
+        const apiUrl = getApiUrl();
+        const response = await fetch(`${apiUrl}/api/user/${userId}/cart`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ cart })
+        });
+        return response.ok;
+    } catch (error) {
+        console.error('Ошибка при синхронизации корзины:', error);
+        return false;
+    }
 }
 
 // Экспортируем все функции
 window.userDataManager = {
     getUserData,
+    getUserDataSync,
     saveUserData,
     updateUserData,
     addOrder,
@@ -216,5 +437,7 @@ window.userDataManager = {
     toggleFavorite,
     isFavorite,
     getUserSettings,
-    updateUserSettings
+    updateUserSettings,
+    syncCart,
+    getUserId
 };
