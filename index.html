@@ -6,74 +6,6 @@
     <title>VapeApp</title>
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
     <style>
-        /* Сообщение для десктопа */
-        .desktop-message {
-            display: none;
-            position: fixed;
-            top: 0;
-            left: 0;
-            right: 0;
-            bottom: 0;
-            background: #ffffff;
-            z-index: 999999;
-            flex-direction: column;
-            align-items: center;
-            justify-content: center;
-            padding: 40px 20px;
-            text-align: center;
-        }
-        
-        .desktop-message.show {
-            display: flex;
-        }
-        
-        .desktop-icon {
-            width: 120px;
-            height: 120px;
-            border-radius: 50%;
-            background: linear-gradient(135deg, #9C27B0 0%, #7B1FA2 100%);
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            margin-bottom: 30px;
-        }
-        
-        .desktop-icon svg {
-            width: 60px;
-            height: 60px;
-            fill: #ffffff;
-        }
-        
-        .desktop-title {
-            font-size: 32px;
-            font-weight: 700;
-            color: #333333;
-            margin-bottom: 20px;
-        }
-        
-        .desktop-text {
-            font-size: 16px;
-            color: #666666;
-            line-height: 1.6;
-            max-width: 500px;
-            margin-bottom: 15px;
-        }
-        
-        .desktop-hint {
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            gap: 8px;
-            font-size: 14px;
-            color: #666666;
-            margin-top: 30px;
-        }
-        
-        .desktop-hint svg {
-            width: 20px;
-            height: 20px;
-            fill: #666666;
-        }
         * {
             margin: 0;
             padding: 0;
@@ -177,6 +109,109 @@
             100% { transform: rotate(360deg); }
         }
 
+        /* Проверка мобильного устройства */
+        .mobile-only-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(248, 249, 250, 0.98);
+            backdrop-filter: blur(8px);
+            display: none !important;
+            align-items: center;
+            justify-content: center;
+            z-index: 999999;
+            pointer-events: auto;
+        }
+        
+        .mobile-only-overlay.show {
+            display: flex !important;
+            animation: fadeIn 0.3s ease;
+        }
+        
+        .mobile-only-modal {
+            background: #ffffff;
+            padding: 40px 30px;
+            border-radius: 20px;
+            text-align: center;
+            max-width: 400px;
+            width: 90%;
+            box-shadow: 0 8px 32px rgba(0,0,0,0.12);
+            border: 1px solid #e5e5e5;
+            position: relative;
+            z-index: 1000000;
+            pointer-events: auto;
+            animation: slideUp 0.4s ease;
+        }
+        
+        .mobile-only-icon {
+            width: 80px;
+            height: 80px;
+            background: linear-gradient(135deg, #E1BEE7 0%, #CE93D8 100%);
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin: 0 auto 24px;
+        }
+        
+        .mobile-only-icon svg {
+            width: 48px;
+            height: 48px;
+            fill: #9C27B0;
+        }
+        
+        .mobile-only-title {
+            font-size: 24px;
+            font-weight: 700;
+            color: #333333;
+            margin-bottom: 16px;
+        }
+        
+        .mobile-only-text {
+            font-size: 16px;
+            color: #666666;
+            line-height: 1.6;
+            margin-bottom: 8px;
+        }
+        
+        .mobile-only-hint {
+            font-size: 14px;
+            color: #999999;
+            line-height: 1.5;
+            margin-top: 16px;
+        }
+        
+        .mobile-only-footer {
+            display: flex;
+            align-items: center;
+            justify-content: flex-start;
+            gap: 8px;
+            margin-top: 24px;
+            padding-top: 20px;
+            border-top: 1px solid #e5e5e5;
+        }
+        
+        .mobile-only-footer-icon {
+            width: 20px;
+            height: 20px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        
+        .mobile-only-footer-icon svg {
+            width: 20px;
+            height: 20px;
+            fill: #666666;
+        }
+        
+        .mobile-only-footer-text {
+            font-size: 14px;
+            color: #666666;
+        }
+        
         /* Проверка возраста */
         .age-verification {
             position: fixed;
@@ -509,15 +544,11 @@
             transition: transform 0.2s, box-shadow 0.2s;
             box-shadow: 0 2px 8px rgba(0,0,0,0.05);
             cursor: pointer;
-            will-change: transform;
-            backface-visibility: hidden;
-            -webkit-backface-visibility: hidden;
         }
         
-        /* Убираем :active чтобы избежать конфликтов с JavaScript обработчиками */
-        /* .product-card:active {
+        .product-card:active {
             transform: scale(0.98);
-        } */
+        }
         
         .product-image {
             width: 100%;
@@ -529,20 +560,12 @@
             font-size: 50px;
             overflow: hidden;
             position: relative;
-            transform: translateZ(0);
-            -webkit-transform: translateZ(0);
-            backface-visibility: hidden;
-            -webkit-backface-visibility: hidden;
         }
         
         .product-image img {
             width: 100%;
             height: 100%;
             object-fit: cover;
-            transform: translateZ(0);
-            -webkit-transform: translateZ(0);
-            backface-visibility: hidden;
-            -webkit-backface-visibility: hidden;
         }
         
         .product-info {
@@ -562,31 +585,6 @@
             color: #007AFF;
             font-size: 16px;
             font-weight: 700;
-        }
-        
-        /* Скрываем скроллбар для вкусов */
-        .flavors-scroll-container::-webkit-scrollbar {
-            display: none;
-            width: 0;
-            height: 0;
-            background: transparent;
-        }
-        
-        .flavors-scroll-container {
-            scrollbar-width: none;
-            -ms-overflow-style: none;
-        }
-        
-        .flavors-modal-container::-webkit-scrollbar {
-            display: none;
-            width: 0;
-            height: 0;
-            background: transparent;
-        }
-        
-        .flavors-modal-container {
-            scrollbar-width: none;
-            -ms-overflow-style: none;
         }
         
         /* Нижняя навигация */
@@ -755,6 +753,28 @@
     </style>
 </head>
 <body>
+    <!-- Проверка мобильного устройства -->
+    <div id="mobile-only-overlay" class="mobile-only-overlay">
+        <div class="mobile-only-modal">
+            <div class="mobile-only-icon">
+                <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                    <path d="M17 1.01L7 1c-1.1 0-2 .9-2 2v18c0 1.1.9 2 2 2h10c1.1 0 2-.9 2-2V3c0-1.1-.9-1.99-2-1.99zM17 19H7V5h10v14z"/>
+                </svg>
+            </div>
+            <div class="mobile-only-title">Только для мобильных</div>
+            <div class="mobile-only-text">Пожалуйста, откройте приложение с вашего мобильного телефона для продолжения.</div>
+            <div class="mobile-only-hint">Это приложение оптимизировано для мобильных устройств и недоступно на компьютерах.</div>
+            <div class="mobile-only-footer">
+                <div class="mobile-only-footer-icon">
+                    <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                        <path d="M17 1.01L7 1c-1.1 0-2 .9-2 2v18c0 1.1.9 2 2 2h10c1.1 0 2-.9 2-2V3c0-1.1-.9-1.99-2-1.99zM17 19H7V5h10v14z"/>
+                    </svg>
+                </div>
+                <div class="mobile-only-footer-text">Используйте смартфон или планшет</div>
+            </div>
+        </div>
+    </div>
+    
     <!-- Splash экран -->
     <div id="splash-screen" class="splash-screen">
         <div class="splash-content">
@@ -784,14 +804,12 @@
         <!-- Навигация -->
         <div class="main-nav">
             <div class="nav-title" id="page-title">Ассортимент</div>
-           <div id="nav-right-content" style="font-size: 14px; font-weight: 600; color: #ffffff;
-               background: linear-gradient(135deg, rgba(255,255,255,0.25) 0%, rgba(255,255,255,0.15) 100%);
-               padding: 6px 12px; border-radius: 20px; border: 1px solid rgba(255,255,255,0.3);
-               backdrop-filter: blur(10px); box-shadow: 0 2px 8px rgba(0,0,0,0.1); cursor: pointer;
-               max-width: 300px; min-width: 150px; flex: 1; display: flex; align-items: center; justify-content: center;"
-               onclick="if(currentPage === 'catalog') { selectPickupLocation(); }">
-               Выберите точку
-           </div>
+            <div style="font-size: 16px; font-weight: 800; color: #ffffff; letter-spacing: 2px; 
+                text-transform: uppercase; background: linear-gradient(135deg, rgba(255,255,255,0.25) 0%, rgba(255,255,255,0.15) 100%); 
+                padding: 6px 14px; border-radius: 20px; border: 1px solid rgba(255,255,255,0.3); 
+                backdrop-filter: blur(10px); box-shadow: 0 2px 8px rgba(0,0,0,0.1);">
+                vapeshop
+            </div>
         </div>
         
         <!-- Поиск и фильтр -->
@@ -853,95 +871,89 @@
             </button>
         </div>
     </div>
-    
-    <!-- Сообщение для десктопа -->
-    <div id="desktop-message" class="desktop-message">
-        <div class="desktop-icon">
-            <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-                <path d="M17 1.01L7 1c-1.1 0-2 .9-2 2v18c0 1.1.9 2 2 2h10c1.1 0 2-.9 2-2V3c0-1.1-.9-1.99-2-1.99zM17 19H7V5h10v14z"/>
-            </svg>
-        </div>
-        <h1 class="desktop-title">Только для мобильных</h1>
-        <p class="desktop-text">Пожалуйста, откройте приложение с вашего мобильного телефона для продолжения.</p>
-        <p class="desktop-text">Это приложение оптимизировано для мобильных устройств и недоступно на компьютерах.</p>
-        <div class="desktop-hint">
-            <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-                <path d="M17 1.01L7 1c-1.1 0-2 .9-2 2v18c0 1.1.9 2 2 2h10c1.1 0 2-.9 2-2V3c0-1.1-.9-1.99-2-1.99zM17 19H7V5h10v14z"/>
-            </svg>
-            <span>Используйте смартфон или планшет</span>
-        </div>
-    </div>
 
     <script>
-        // Проверка на мобильное устройство - выполняется СРАЗУ, до загрузки контента
+        // Проверка устройства сразу при загрузке страницы (до загрузки app.js)
         (function() {
             function isMobileDevice() {
-                // Проверяем через Telegram WebApp API (самый надежный способ)
-                if (window.Telegram && window.Telegram.WebApp) {
+                // Проверяем, запущено ли в Telegram WebApp (всегда мобильное)
+                if (typeof window.Telegram !== 'undefined' && window.Telegram.WebApp) {
                     return true;
                 }
                 
-                // Проверяем через User Agent
                 const userAgent = navigator.userAgent || navigator.vendor || window.opera || '';
-                const mobileRegex = /android|webos|iphone|ipad|ipod|blackberry|iemobile|opera mini|mobile/i;
-                return mobileRegex.test(userAgent.toLowerCase());
+                const ua = userAgent.toLowerCase();
+                
+                // Явно мобильные устройства
+                const mobileDevices = /android|webos|iphone|ipad|ipod|blackberry|iemobile|opera mini|mobile|tablet/i;
+                if (mobileDevices.test(ua)) {
+                    return true;
+                }
+                
+                // Явно десктопные платформы
+                const desktopPlatforms = /windows|win32|win64|macintosh|mac os x|linux|ubuntu|fedora/i;
+                if (desktopPlatforms.test(ua)) {
+                    // Если это десктопная платформа И нет признаков мобильного - это десктоп
+                    return false;
+                }
+                
+                // Проверяем размер экрана
+                const screenWidth = window.innerWidth || screen.width;
+                if (screenWidth > 1024) {
+                    return false; // Большой экран = десктоп
+                }
+                
+                // Если маленький экран И есть touch - вероятно мобильное
+                if (screenWidth <= 768 && ('ontouchstart' in window || navigator.maxTouchPoints > 0)) {
+                    return true;
+                }
+                
+                // По умолчанию считаем десктопом
+                return false;
             }
             
-            // Проверяем размер экрана
-            function isMobileScreen() {
-                return window.innerWidth <= 768 || window.innerHeight <= 600;
-            }
-            
-            // Проверяем СРАЗУ при загрузке скрипта
-            const desktopMessage = document.getElementById('desktop-message');
-            const mainContent = document.getElementById('main-content');
-            const splashScreen = document.querySelector('.splash-screen');
-            
-            // Если это НЕ мобильное устройство И НЕ мобильный экран
-            if (!isMobileDevice() && !isMobileScreen()) {
-                // Это десктоп - показываем сообщение СРАЗУ
-                if (desktopMessage) {
-                    desktopMessage.classList.add('show');
-                }
-                if (mainContent) {
-                    mainContent.style.display = 'none';
-                }
-                if (splashScreen) {
-                    splashScreen.style.display = 'none';
-                }
-                // Блокируем дальнейшую загрузку приложения
-                return;
-            } else {
-                // Это мобильное устройство - скрываем сообщение
-                if (desktopMessage) {
-                    desktopMessage.classList.remove('show');
-                }
-                if (mainContent) {
-                    mainContent.style.display = 'block';
-                }
-            }
-            
-            // Также проверяем при изменении размера окна
-            window.addEventListener('resize', function() {
-                if (!isMobileDevice() && !isMobileScreen()) {
-                    if (desktopMessage) {
-                        desktopMessage.classList.add('show');
-                    }
-                    if (mainContent) {
-                        mainContent.style.display = 'none';
-                    }
+            function showMobileOnlyMessage() {
+                const overlay = document.getElementById('mobile-only-overlay');
+                if (overlay) {
+                    overlay.style.display = 'flex';
+                    overlay.classList.add('show');
+                    console.log('Показываем окно для десктопов');
                 } else {
-                    if (desktopMessage) {
-                        desktopMessage.classList.remove('show');
-                    }
-                    if (mainContent) {
-                        mainContent.style.display = 'block';
-                    }
+                    console.error('Элемент mobile-only-overlay не найден');
                 }
+            }
+            
+            // Проверяем устройство сразу
+            const isMobile = isMobileDevice();
+            console.log('Проверка устройства:', {
+                userAgent: navigator.userAgent,
+                screenWidth: window.innerWidth || screen.width,
+                isMobile: isMobile
             });
+            
+            if (!isMobile) {
+                // Показываем окно сразу, не дожидаясь загрузки app.js
+                if (document.readyState === 'loading') {
+                    document.addEventListener('DOMContentLoaded', function() {
+                        showMobileOnlyMessage();
+                    });
+                } else {
+                    // DOM уже готов
+                    showMobileOnlyMessage();
+                }
+                
+                // Дублируем проверку после задержки для надежности
+                setTimeout(function() {
+                    showMobileOnlyMessage();
+                }, 200);
+                
+                // Еще одна проверка после полной загрузки
+                window.addEventListener('load', function() {
+                    showMobileOnlyMessage();
+                });
+            }
         })();
     </script>
-    
     <script src="app.js"></script>
 </body>
 </html>
