@@ -1948,11 +1948,12 @@ function showPage(page, skipHistory = false, resetCatalog = false) {
     // Обновляем отображение точки самовывоза
     updatePickupLocationDisplay();
     
-    // Обновляем правую часть навигации (адрес или vapeshop)
+    // ВАЖНО: Обновляем правую часть навигации (адрес или vapeshop)
+    // Это должно быть ПОСЛЕ вызова updatePickupLocationDisplay(), чтобы перезаписать его результат
     const navRightContent = document.getElementById('nav-right-content');
     if (navRightContent) {
-        if (page === 'catalog') {
-            // Для каталога показываем адрес с SVG иконкой
+        if (page === 'catalog' || page === 'product') {
+            // Для каталога и страницы товара ВСЕГДА показываем адрес с SVG иконкой
             if (selectedPickupLocation) {
                 // Показываем адрес с ограничением ширины для статичного размера
                 navRightContent.innerHTML = `<span style="display: inline-flex; align-items: center; gap: 6px; width: 100%; justify-content: center;"><span style="width: 16px; height: 16px; display: flex; align-items: center; justify-content: center; flex-shrink: 0;">${getLocationIcon('#ffffff').replace('width="24" height="24"', 'width="16" height="16"')}</span><span style="text-align: center; flex: 1; min-width: 0; max-width: 200px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${selectedPickupLocation}</span></span>`;
@@ -1978,44 +1979,15 @@ function showPage(page, skipHistory = false, resetCatalog = false) {
                 navRightContent.style.flex = '0 0 auto';
                 navRightContent.onclick = () => selectPickupLocation();
             }
-        } else if (page === 'product') {
-            // Для страницы товара показываем адрес с SVG иконкой
-            if (selectedPickupLocation) {
-                // Показываем адрес с ограничением ширины для статичного размера
-                navRightContent.innerHTML = `<span style="display: inline-flex; align-items: center; gap: 6px; justify-content: center; width: 100%;"><span style="width: 16px; height: 16px; display: flex; align-items: center; justify-content: center; flex-shrink: 0;">${getLocationIcon('#ffffff').replace('width="24" height="24"', 'width="16" height="16"')}</span><span style="text-align: center; flex: 1; min-width: 0; max-width: 200px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${selectedPickupLocation}</span></span>`;
-                navRightContent.style.cursor = 'pointer';
-                navRightContent.style.textAlign = 'center';
-                navRightContent.style.justifyContent = 'center';
-                navRightContent.style.display = 'flex';
-                navRightContent.style.minWidth = '180px';
-                navRightContent.style.maxWidth = '220px';
-                navRightContent.style.width = 'auto';
-                navRightContent.style.flex = '0 0 auto';
-                navRightContent.onclick = () => selectPickupLocation();
-            } else {
-                // Если адрес не выбран, показываем кнопку выбора точки
-                navRightContent.innerHTML = `<span style="display: inline-flex; align-items: center; gap: 6px; justify-content: center; width: 100%;"><span style="width: 16px; height: 16px; display: flex; align-items: center; justify-content: center; flex-shrink: 0;">${getLocationIcon('#ffffff').replace('width="24" height="24"', 'width="16" height="16"')}</span><span style="text-align: center;">Выберите точку</span></span>`;
-                navRightContent.style.cursor = 'pointer';
-                navRightContent.style.textAlign = 'center';
-                navRightContent.style.justifyContent = 'center';
-                navRightContent.style.display = 'flex';
-                navRightContent.style.minWidth = '180px';
-                navRightContent.style.maxWidth = '220px';
-                navRightContent.style.width = 'auto';
-                navRightContent.style.flex = '0 0 auto';
-                navRightContent.onclick = () => selectPickupLocation();
-            }
         } else {
             // Для других страниц (НЕ каталог, НЕ товар) показываем vapeshop с улучшенным стилем
-            if (page !== 'catalog' && page !== 'product') {
-                navRightContent.innerHTML = '<span style="font-weight: 800; letter-spacing: 3px; font-size: 18px; text-transform: uppercase; background: linear-gradient(135deg, #ffffff 0%, #f0f0f0 100%); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; text-shadow: 0 2px 4px rgba(0,0,0,0.1);">VAPESHOP</span>';
-                navRightContent.style.cursor = 'default';
-                navRightContent.style.minWidth = '160px';
-                navRightContent.style.maxWidth = '180px';
-                navRightContent.style.padding = '8px 16px';
-            }
+            navRightContent.innerHTML = '<span style="font-weight: 800; letter-spacing: 3px; font-size: 18px; text-transform: uppercase; background: linear-gradient(135deg, #ffffff 0%, #f0f0f0 100%); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; text-shadow: 0 2px 4px rgba(0,0,0,0.1);">VAPESHOP</span>';
+            navRightContent.style.cursor = 'default';
+            navRightContent.style.minWidth = '160px';
+            navRightContent.style.maxWidth = '180px';
             navRightContent.style.width = '140px';
             navRightContent.style.flex = '0 0 140px';
+            navRightContent.style.padding = '8px 16px';
             navRightContent.onclick = null;
         }
     }
@@ -9793,7 +9765,7 @@ function showProfile() {
         </div>
         
         <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; margin-bottom: 12px;">
-            <div onclick="showPage('orders');" style="background: ${colors.bgCard}; padding: 20px; border-radius: 12px; text-align: center; cursor: pointer; color: ${colors.text}; transition: all 0.2s;" onmouseover="this.style.transform='scale(1.02)'; this.style.boxShadow='0 4px 12px rgba(0,0,0,0.1)'" onmouseout="this.style.transform='scale(1)'; this.style.boxShadow='none'">
+            <div onclick="event.stopPropagation(); showPage('orders');" style="background: ${colors.bgCard}; padding: 20px; border-radius: 12px; text-align: center; cursor: pointer; color: ${colors.text}; transition: all 0.2s;" onmouseover="this.style.transform='scale(1.02)'; this.style.boxShadow='0 4px 12px rgba(0,0,0,0.1)'" onmouseout="this.style.transform='scale(1)'; this.style.boxShadow='none'">
                 <div style="width: 40px; height: 40px; margin: 0 auto 8px; display: flex; align-items: center; justify-content: center;">${getCartIcon('#007AFF')}</div>
                 <div style="font-weight: 600; margin-bottom: 8px; color: ${colors.text};">Заказы</div>
                 <div style="padding: 4px 12px; background: #4CAF50; color: white; 
