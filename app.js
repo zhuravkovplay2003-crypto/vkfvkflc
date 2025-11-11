@@ -4983,8 +4983,41 @@ function selectPickupLocation() {
                     
                 }
                 
+                // ВАЖНО: Форматируем адрес - только первая буква заглавная
+                const formatLocation = (location) => {
+                    return location.split(', ').map(part => {
+                        return part.split(' ').map(word => {
+                            // Первая буква заглавная, остальные строчные
+                            return word.charAt(0).toUpperCase() + word.slice(1).toLowerCase();
+                        }).join(' ');
+                    }).join(', ');
+                };
+                selectedPickupLocation = formatLocation(fullLocation);
+                localStorage.setItem('selectedPickupLocation', selectedPickupLocation);
+                
                 // Обновляем отображение точки в шапке
                 updatePickupLocationDisplay();
+                
+                // ВАЖНО: Обновляем nav-right-content если мы на странице каталога или товара
+                if (currentPage === 'catalog' || currentPage === 'product') {
+                    const navRightContent = document.getElementById('nav-right-content');
+                    if (navRightContent) {
+                        const shortLocation = selectedPickupLocation.length > 25 
+                            ? selectedPickupLocation.substring(0, 22) + '...' 
+                            : selectedPickupLocation;
+                        navRightContent.innerHTML = `<span style="display: inline-flex; align-items: center; gap: 4px; font-size: 12px; font-weight: 500; letter-spacing: 0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;">${getLocationIcon('#ffffff').replace('width="24" height="24"', 'width="14" height="14"')}<span style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 175px; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;">${shortLocation}</span></span>`;
+                        navRightContent.style.cursor = 'pointer';
+                        navRightContent.style.textAlign = 'center';
+                        navRightContent.style.justifyContent = 'center';
+                        navRightContent.style.display = 'flex';
+                        navRightContent.style.minWidth = 'auto';
+                        navRightContent.style.maxWidth = '200px';
+                        navRightContent.style.width = 'auto';
+                        navRightContent.style.flex = '0 0 auto';
+                        navRightContent.style.padding = '6px 12px';
+                        navRightContent.onclick = () => selectPickupLocation();
+                    }
+                }
                 
                 // Обновляем отображение точки в корзине если мы на странице корзины
                 if (currentPage === 'cart') {
@@ -5973,7 +6006,7 @@ function getBookedTimesForDate(dateKey, pickupLocation = null) {
 }
 
 // Показать модальное окно выбора точного времени
-function showExactTimeSelectionModal(timeSlot) {
+async function showExactTimeSelectionModal(timeSlot) {
     console.log('showExactTimeSelectionModal called with:', timeSlot);
     
     // Проверяем формат timeSlot
@@ -6055,11 +6088,30 @@ function showExactTimeSelectionModal(timeSlot) {
             '23:00', '23:10', '23:20', '23:30', '23:40', '23:50'
         ];
         
-        // Получаем занятые времена для этой даты (локально)
+        // ВАЖНО: Получаем занятые времена для этой даты с сервера и локально
         // Только для самовывоза проверяем занятость времени
         let bookedTimes = [];
         if (deliveryType === 'selfPickup') {
+            // Сначала получаем локальные заказы
             bookedTimes = getBookedTimesForDate(dateKey, selectedPickupLocation);
+            
+            // ВАЖНО: Сразу загружаем занятые времена с сервера синхронно (через await)
+            // Это нужно для того, чтобы занятые времена отображались серым сразу при открытии модального окна
+            if (selectedPickupLocation) {
+                const currentPickupLocation = encodeURIComponent(selectedPickupLocation);
+                try {
+                    const response = await fetch(`${SERVER_URL}/api/orders/booked-times?date=${dateKey}&location=${currentPickupLocation}`);
+                    const data = await response.json();
+                    if (data.success && Array.isArray(data.bookedTimes)) {
+                        // Объединяем с локальными заказами
+                        const serverBookedTimes = data.bookedTimes;
+                        bookedTimes = [...new Set([...bookedTimes, ...serverBookedTimes])];
+                    }
+                } catch (error) {
+                    console.error('Ошибка загрузки занятых времен с сервера:', error);
+                    // Продолжаем работу с локальными данными
+                }
+            }
         }
         
         timeSlots.forEach(timeStr => {
@@ -6072,7 +6124,7 @@ function showExactTimeSelectionModal(timeSlot) {
             exactTimes.push(`
                 <button ${isBooked ? 'disabled' : `onclick="setDeliveryExactTime('${timeStr}')"`}
                     style="${buttonStyle}">
-                    ${timeStr}
+                    ${timeStr}${isBooked ? ' (занято)' : ''}
                 </button>
             `);
         });
@@ -6164,6 +6216,24 @@ function showExactTimeSelectionModal(timeSlot) {
         if (deliveryType === 'selfPickup') {
             // Сначала получаем локальные заказы
             bookedTimes = getBookedTimesForDate(dateKey, selectedPickupLocation);
+            
+            // ВАЖНО: Сразу загружаем занятые времена с сервера синхронно (через await)
+            // Это нужно для того, чтобы занятые времена отображались серым сразу при открытии модального окна
+            if (selectedPickupLocation) {
+                const currentPickupLocation = encodeURIComponent(selectedPickupLocation);
+                try {
+                    const response = await fetch(`${SERVER_URL}/api/orders/booked-times?date=${dateKey}&location=${currentPickupLocation}`);
+                    const data = await response.json();
+                    if (data.success && Array.isArray(data.bookedTimes)) {
+                        // Объединяем с локальными заказами
+                        const serverBookedTimes = data.bookedTimes;
+                        bookedTimes = [...new Set([...bookedTimes, ...serverBookedTimes])];
+                    }
+                } catch (error) {
+                    console.error('Ошибка загрузки занятых времен с сервера:', error);
+                    // Продолжаем работу с локальными данными
+                }
+            }
         }
         
         timeSlots.forEach(timeStr => {
@@ -6176,7 +6246,7 @@ function showExactTimeSelectionModal(timeSlot) {
             exactTimes.push(`
                 <button ${isBooked ? 'disabled' : `onclick="setDeliveryExactTime('${timeStr}')"`}
                     style="${buttonStyle}">
-                    ${timeStr}
+                    ${timeStr}${isBooked ? ' (занято)' : ''}
                 </button>
             `);
         });
@@ -12714,7 +12784,42 @@ function showVapeCoinsOrderDetails(orderIdOrTransactionId) {
         }
     };
     
-    const currentStatus = statusInfo[order.status] || statusInfo['processing'];
+    // ВАЖНО: Правильно определяем статус заказа
+    // Для заказов за Vape Coins статус обычно 'received', но проверяем все возможные варианты
+    let orderStatus = order.status;
+    if (!orderStatus || orderStatus === 'pending' || orderStatus === 'processing') {
+        // Если статус не указан или в обработке, но заказ за коины - значит получен
+        if (order.vapeCoinsSpent && order.vapeCoinsSpent > 0) {
+            orderStatus = 'received';
+        }
+    }
+    
+    const currentStatus = statusInfo[orderStatus] || statusInfo['received'];
+    
+    // ВАЖНО: Определяем точку самовывоза или адрес доставки
+    let locationText = 'Не указано';
+    let locationType = 'Точка самовывоза';
+    let showLocation = false;
+    
+    if (order.deliveryType === 'delivery') {
+        locationType = 'Доставка';
+        if (order.deliveryAddress) {
+            locationText = order.deliveryAddress;
+            showLocation = true;
+        } else if (order.location) {
+            locationText = order.location;
+            showLocation = true;
+        }
+    } else {
+        // Для самовывоза
+        if (order.pickupLocation) {
+            locationText = order.pickupLocation;
+            showLocation = true;
+        } else if (order.location) {
+            locationText = order.location;
+            showLocation = true;
+        }
+    }
     
     // Информация о заказе
     const orderInfo = document.createElement('div');
@@ -12741,13 +12846,14 @@ function showVapeCoinsOrderDetails(orderIdOrTransactionId) {
                 </div>
             </div>
             
+            ${showLocation ? `
             <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 12px;">
                 <span style="width: 24px; height: 24px; display: flex; align-items: center; justify-content: center;">${order.deliveryType === 'delivery' ? getPackageIcon('#007AFF') : getLocationIcon('#007AFF')}</span>
                 <div style="flex: 1;">
                     <div style="font-size: 12px; color: #666; margin-bottom: 4px;">
-                        ${order.deliveryType === 'delivery' ? 'Доставка' : 'Точка самовывоза'}
+                        ${locationType}
                     </div>
-                    <div style="font-weight: 600; color: #000;">${order.deliveryType === 'selfPickup' ? (order.pickupLocation || 'Не указано') : (order.deliveryAddress || 'Не указано')}</div>
+                    <div style="font-weight: 600; color: #000;">${locationText}</div>
                     ${order.deliveryTime ? `
                         <div style="font-size: 12px; color: #666; margin-top: 4px; display: flex; align-items: center; gap: 4px;">
                             <span style="width: 14px; height: 14px; display: flex; align-items: center; justify-content: center;">${getClockIcon('#666')}</span>
@@ -12756,6 +12862,7 @@ function showVapeCoinsOrderDetails(orderIdOrTransactionId) {
                     ` : ''}
                 </div>
             </div>
+            ` : ''}
             
             ${order.vapeCoinsSpent ? `
                 <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 12px;">
