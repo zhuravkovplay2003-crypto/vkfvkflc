@@ -943,26 +943,31 @@ function init() {
         const navRightContent = document.getElementById('nav-right-content');
         if (navRightContent) {
             if (selectedPickupLocation) {
-                navRightContent.innerHTML = `<span style="display: inline-flex; align-items: center; gap: 6px; width: 100%; justify-content: center;"><span style="width: 16px; height: 16px; display: flex; align-items: center; justify-content: center; flex-shrink: 0;">${getLocationIcon('#ffffff').replace('width="24" height="24"', 'width="16" height="16"')}</span><span style="text-align: center; flex: 1; min-width: 0; max-width: 200px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${selectedPickupLocation}</span></span>`;
+                const shortLocation = selectedPickupLocation.length > 25 
+                    ? selectedPickupLocation.substring(0, 22) + '...' 
+                    : selectedPickupLocation;
+                navRightContent.innerHTML = `<span style="display: inline-flex; align-items: center; gap: 4px; font-size: 13px; font-weight: 500; letter-spacing: 0;">${getLocationIcon('#ffffff').replace('width="24" height="24"', 'width="14" height="14"')}<span style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 140px;">${shortLocation}</span></span>`;
                 navRightContent.style.cursor = 'pointer';
                 navRightContent.style.textAlign = 'center';
                 navRightContent.style.justifyContent = 'center';
                 navRightContent.style.display = 'flex';
-                navRightContent.style.minWidth = '180px';
-                navRightContent.style.maxWidth = '220px';
+                navRightContent.style.minWidth = 'auto';
+                navRightContent.style.maxWidth = '180px';
                 navRightContent.style.width = 'auto';
                 navRightContent.style.flex = '0 0 auto';
+                navRightContent.style.padding = '6px 12px';
                 navRightContent.onclick = () => selectPickupLocation();
             } else {
-                navRightContent.innerHTML = `<span style="display: inline-flex; align-items: center; gap: 6px; justify-content: center; width: 100%;"><span style="width: 16px; height: 16px; display: flex; align-items: center; justify-content: center; flex-shrink: 0;">${getLocationIcon('#ffffff').replace('width="24" height="24"', 'width="16" height="16"')}</span><span style="text-align: center;">Выберите точку</span></span>`;
+                navRightContent.innerHTML = `<span style="display: inline-flex; align-items: center; gap: 4px; font-size: 13px; font-weight: 500; letter-spacing: 0;">${getLocationIcon('#ffffff').replace('width="24" height="24"', 'width="14" height="14"')}<span>Выберите точку</span></span>`;
                 navRightContent.style.cursor = 'pointer';
                 navRightContent.style.textAlign = 'center';
                 navRightContent.style.justifyContent = 'center';
                 navRightContent.style.display = 'flex';
-                navRightContent.style.minWidth = '180px';
-                navRightContent.style.maxWidth = '220px';
+                navRightContent.style.minWidth = 'auto';
+                navRightContent.style.maxWidth = '160px';
                 navRightContent.style.width = 'auto';
                 navRightContent.style.flex = '0 0 auto';
+                navRightContent.style.padding = '6px 12px';
                 navRightContent.onclick = () => selectPickupLocation();
             }
         }
@@ -1960,28 +1965,33 @@ function showPage(page, skipHistory = false, resetCatalog = false) {
         if (page === 'catalog' || page === 'product') {
             // Для каталога и страницы товара ВСЕГДА показываем адрес с SVG иконкой
             if (selectedPickupLocation) {
-                // Показываем адрес с ограничением ширины для статичного размера
-                navRightContent.innerHTML = `<span style="display: inline-flex; align-items: center; gap: 6px; width: 100%; justify-content: center;"><span style="width: 16px; height: 16px; display: flex; align-items: center; justify-content: center; flex-shrink: 0;">${getLocationIcon('#ffffff').replace('width="24" height="24"', 'width="16" height="16"')}</span><span style="text-align: center; flex: 1; min-width: 0; max-width: 200px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${selectedPickupLocation}</span></span>`;
+                // Показываем адрес с нормальным размером шрифта
+                const shortLocation = selectedPickupLocation.length > 25 
+                    ? selectedPickupLocation.substring(0, 22) + '...' 
+                    : selectedPickupLocation;
+                navRightContent.innerHTML = `<span style="display: inline-flex; align-items: center; gap: 4px; font-size: 13px; font-weight: 500; letter-spacing: 0;">${getLocationIcon('#ffffff').replace('width="24" height="24"', 'width="14" height="14"')}<span style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 140px;">${shortLocation}</span></span>`;
                 navRightContent.style.cursor = 'pointer';
                 navRightContent.style.textAlign = 'center';
                 navRightContent.style.justifyContent = 'center';
                 navRightContent.style.display = 'flex';
-                navRightContent.style.minWidth = '180px';
-                navRightContent.style.maxWidth = '220px';
+                navRightContent.style.minWidth = 'auto';
+                navRightContent.style.maxWidth = '180px';
                 navRightContent.style.width = 'auto';
                 navRightContent.style.flex = '0 0 auto';
+                navRightContent.style.padding = '6px 12px';
                 navRightContent.onclick = () => selectPickupLocation();
             } else {
                 // Если адрес не выбран, показываем кнопку выбора точки
-                navRightContent.innerHTML = `<span style="display: inline-flex; align-items: center; gap: 6px; justify-content: center; width: 100%;"><span style="width: 16px; height: 16px; display: flex; align-items: center; justify-content: center; flex-shrink: 0;">${getLocationIcon('#ffffff').replace('width="24" height="24"', 'width="16" height="16"')}</span><span style="text-align: center;">Выберите точку</span></span>`;
+                navRightContent.innerHTML = `<span style="display: inline-flex; align-items: center; gap: 4px; font-size: 13px; font-weight: 500; letter-spacing: 0;">${getLocationIcon('#ffffff').replace('width="24" height="24"', 'width="14" height="14"')}<span>Выберите точку</span></span>`;
                 navRightContent.style.cursor = 'pointer';
                 navRightContent.style.textAlign = 'center';
                 navRightContent.style.justifyContent = 'center';
                 navRightContent.style.display = 'flex';
-                navRightContent.style.minWidth = '180px';
-                navRightContent.style.maxWidth = '220px';
+                navRightContent.style.minWidth = 'auto';
+                navRightContent.style.maxWidth = '160px';
                 navRightContent.style.width = 'auto';
                 navRightContent.style.flex = '0 0 auto';
+                navRightContent.style.padding = '6px 12px';
                 navRightContent.onclick = () => selectPickupLocation();
             }
         } else {
@@ -5580,7 +5590,24 @@ function selectDeliveryDay(dayKey) {
 }
 
 // Установить точное время доставки
-function setDeliveryExactTime(time) {
+async function setDeliveryExactTime(time) {
+    // ВАЖНО: Проверяем на сервере, не занято ли это время другим пользователем
+    if (deliveryType === 'selfPickup' && selectedPickupLocation && selectedDeliveryDay) {
+        try {
+            const currentPickupLocation = encodeURIComponent(selectedPickupLocation);
+            const response = await fetch(`${SERVER_URL}/api/orders/booked-times?date=${selectedDeliveryDay}&location=${currentPickupLocation}`);
+            const data = await response.json();
+            
+            if (data.success && Array.isArray(data.bookedTimes) && data.bookedTimes.includes(time)) {
+                showToast('Это время уже занято другим пользователем. Выберите другое время.', 'error', 3000);
+                return; // Не устанавливаем время, если оно занято
+            }
+        } catch (error) {
+            console.error('Ошибка проверки занятости времени:', error);
+            // Продолжаем выполнение даже если сервер недоступен
+        }
+    }
+    
     deliveryExactTime = time;
     localStorage.setItem('deliveryExactTime', deliveryExactTime);
     
@@ -5620,6 +5647,11 @@ function setDeliveryExactTime(time) {
     setTimeout(() => {
         const modal = document.querySelector('.exact-time-modal-overlay');
         if (modal) {
+            // Очищаем интервал обновления занятых времен
+            if (modal.dataset.bookedTimesInterval) {
+                clearInterval(parseInt(modal.dataset.bookedTimesInterval));
+            }
+            
             const modalContent = modal.querySelector('.exact-time-modal-content');
             // Плавное закрытие
             modal.style.transition = 'opacity 0.2s ease';
@@ -5954,6 +5986,11 @@ function showExactTimeSelectionModal(timeSlot) {
     modalContent.style.cssText = 'background: white !important; padding: 24px !important; border-radius: 16px !important; max-width: 90% !important; width: 100% !important; max-width: 400px !important; max-height: 80vh !important; overflow-y: auto !important; position: relative !important; transform: scale(1) !important; opacity: 1 !important; visibility: visible !important;';
     
     const closeModal = function() {
+        // Очищаем интервал обновления занятых времен
+        if (modal.dataset.bookedTimesInterval) {
+            clearInterval(parseInt(modal.dataset.bookedTimesInterval));
+        }
+        
         // Восстанавливаем кнопку "Назад"
         if (tg && tg.BackButton && originalBackButtonHandler) {
             tg.BackButton.onClick(originalBackButtonHandler);
@@ -6133,41 +6170,59 @@ function showExactTimeSelectionModal(timeSlot) {
     // ВАЖНО: Проверяем заказы на сервере через API (асинхронно)
     // Это нужно для проверки заказов других пользователей и синхронизации между устройствами
     // Только для самовывоза проверяем занятость времени
-    if (deliveryType === 'selfPickup' && selectedPickupLocation) {
-        const currentPickupLocation = encodeURIComponent(selectedPickupLocation);
-        fetch(`${SERVER_URL}/api/orders/booked-times?date=${dateKey}&location=${currentPickupLocation}`)
-            .then(response => response.json())
-            .then(data => {
-                if (data.success && Array.isArray(data.bookedTimes)) {
-                    // Объединяем с локальными заказами
-                    const serverBookedTimes = data.bookedTimes;
-                    const localBookedTimes = getBookedTimesForDate(dateKey, selectedPickupLocation);
-                    const allBookedTimes = [...new Set([...localBookedTimes, ...serverBookedTimes])];
-                    
-                    // ВАЖНО: Обновляем модальное окно если оно открыто
-                    const modal = document.querySelector('.exact-time-modal-overlay');
-                    if (modal) {
-                        const container = document.getElementById('exact-time-slots-container');
-                        if (container) {
-                            // Обновляем кнопки с обновленными данными
-                            const timeSlots = container.querySelectorAll('button');
-                            timeSlots.forEach(btn => {
-                                const timeStr = btn.textContent.split(' ')[0].trim(); // Берем только время без "(занято)"
-                                if (allBookedTimes.includes(timeStr) && !btn.disabled) {
-                                    btn.disabled = true;
-                                    btn.style.cssText = 'padding: 10px 16px; border: 2px solid #999; border-radius: 10px; background: #e0e0e0; cursor: not-allowed; font-size: 14px; font-weight: 600; color: #999; transition: all 0.3s; white-space: nowrap; margin-right: 8px; margin-bottom: 8px; opacity: 0.5;';
-                                    btn.textContent = timeStr;
-                                    btn.removeAttribute('onclick');
-                                }
-                            });
+    const updateBookedTimes = () => {
+        if (deliveryType === 'selfPickup' && selectedPickupLocation) {
+            const currentPickupLocation = encodeURIComponent(selectedPickupLocation);
+            fetch(`${SERVER_URL}/api/orders/booked-times?date=${dateKey}&location=${currentPickupLocation}`)
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success && Array.isArray(data.bookedTimes)) {
+                        // Объединяем с локальными заказами
+                        const serverBookedTimes = data.bookedTimes;
+                        const localBookedTimes = getBookedTimesForDate(dateKey, selectedPickupLocation);
+                        const allBookedTimes = [...new Set([...localBookedTimes, ...serverBookedTimes])];
+                        
+                        // ВАЖНО: Обновляем модальное окно если оно открыто
+                        const modal = document.querySelector('.exact-time-modal-overlay');
+                        if (modal) {
+                            const container = document.getElementById('exact-time-slots-container');
+                            if (container) {
+                                // Обновляем кнопки с обновленными данными
+                                const timeSlots = container.querySelectorAll('button');
+                                timeSlots.forEach(btn => {
+                                    const timeStr = btn.textContent.split(' ')[0].trim(); // Берем только время без "(занято)"
+                                    if (allBookedTimes.includes(timeStr) && !btn.disabled && !btn.textContent.includes('(занято)')) {
+                                        btn.disabled = true;
+                                        btn.style.cssText = 'padding: 10px 16px; border: 2px solid #999; border-radius: 10px; background: #e0e0e0; cursor: not-allowed; font-size: 14px; font-weight: 600; color: #999; transition: all 0.3s; white-space: nowrap; margin-right: 8px; margin-bottom: 8px; opacity: 0.5;';
+                                        btn.textContent = timeStr + ' (занято)';
+                                        btn.removeAttribute('onclick');
+                                    }
+                                });
+                            }
                         }
                     }
-                }
-            })
-            .catch(err => {
-                console.error('Error fetching booked times from server:', err);
-            });
-    }
+                })
+                .catch(err => {
+                    console.error('Error fetching booked times from server:', err);
+                });
+        }
+    };
+    
+    // Первая проверка сразу
+    updateBookedTimes();
+    
+    // Обновляем каждые 3 секунды для синхронизации в реальном времени
+    const bookedTimesInterval = setInterval(() => {
+        const modal = document.querySelector('.exact-time-modal-overlay');
+        if (!modal) {
+            clearInterval(bookedTimesInterval);
+            return;
+        }
+        updateBookedTimes();
+    }, 3000);
+    
+    // Сохраняем интервал для очистки при закрытии модального окна
+    modal.dataset.bookedTimesInterval = bookedTimesInterval;
     
     // Устанавливаем обработчик BackButton после создания closeModal
     if (tg && tg.BackButton) {
@@ -7953,16 +8008,29 @@ function checkOrderStatus(orderId) {
                                 vapeCoins = parseFloat(savedCoins) || 0;
                             }
                             
-                            vapeCoins += coinsEarned;
-                            localStorage.setItem('vapeCoins', vapeCoins.toString());
-                            
-                            // Синхронизируем коины с сервером
-                            syncVapeCoinsToServer(coinsEarned, `Заказ #${orderId.slice(-6)}`).catch(err => {
-                                console.error('Ошибка синхронизации коинов:', err);
-                            });
-                            
+                            // Загружаем историю транзакций перед проверкой
                             const savedHistory = localStorage.getItem('vapeCoinsHistory');
                             let history = savedHistory ? JSON.parse(savedHistory) : [];
+                            
+                            // ВАЖНО: Проверяем, что коины еще не были начислены на сервере
+                            // Если на сервере уже есть транзакция за этот заказ, не начисляем повторно
+                            const existingTransaction = history.find(t => t.orderId === orderId && !t.cancelled && !t.isRefund);
+                            if (!existingTransaction) {
+                                vapeCoins += coinsEarned;
+                                localStorage.setItem('vapeCoins', vapeCoins.toString());
+                                
+                                // Синхронизируем коины с сервером
+                                syncVapeCoinsToServer(coinsEarned, `Заказ #${orderId.slice(-6)}`).catch(err => {
+                                    console.error('Ошибка синхронизации коинов:', err);
+                                });
+                            } else {
+                                console.log('⚠️ Коины уже начислены за этот заказ, пропускаем');
+                                // Обновляем баланс из истории
+                                vapeCoins = parseFloat(savedCoins) || 0;
+                                // Устанавливаем флаг, чтобы не проверять снова
+                                localStorage.setItem(`coins_added_${orderId}`, 'true');
+                                return; // Выходим, не добавляя транзакцию в историю
+                            }
                             history.unshift({
                                 id: `vc_${Date.now()}`,
                                 date: new Date().toISOString(),
@@ -9805,7 +9873,7 @@ function showProfile() {
         </div>
         
         <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; margin-bottom: 12px;">
-            <div onclick="showPage('orders');" style="background: ${colors.bgCard}; padding: 20px; border-radius: 12px; text-align: center; cursor: pointer; color: ${colors.text}; transition: all 0.2s;" onmouseover="this.style.transform='scale(1.02)'; this.style.boxShadow='0 4px 12px rgba(0,0,0,0.1)'" onmouseout="this.style.transform='scale(1)'; this.style.boxShadow='none'">
+            <div onclick="event.stopPropagation(); event.preventDefault(); showPage('orders');" style="background: ${colors.bgCard}; padding: 20px; border-radius: 12px; text-align: center; cursor: pointer; color: ${colors.text}; transition: all 0.2s; position: relative; z-index: 10;" onmouseover="this.style.transform='scale(1.02)'; this.style.boxShadow='0 4px 12px rgba(0,0,0,0.1)'" onmouseout="this.style.transform='scale(1)'; this.style.boxShadow='none'">
                 <div style="width: 40px; height: 40px; margin: 0 auto 8px; display: flex; align-items: center; justify-content: center;">${getCartIcon('#007AFF')}</div>
                 <div style="font-weight: 600; margin-bottom: 8px; color: ${colors.text};">Заказы</div>
                 <div style="padding: 4px 12px; background: #4CAF50; color: white; 
@@ -9888,7 +9956,7 @@ function showProfile() {
 let isUpdatingOrders = false;
 
 // Показать заказы
-function showOrders() {
+async function showOrders() {
     // ВАЖНО: Предотвращаем бесконечные циклы обновления
     if (isUpdatingOrders) {
         console.log('⚠️ showOrders уже выполняется, пропускаем');
@@ -9911,16 +9979,39 @@ function showOrders() {
     
     isUpdatingOrders = true;
     
-    // Загружаем заказы из localStorage перед отображением
-    const savedOrders = localStorage.getItem('orders');
-    if (savedOrders) {
+    // ВАЖНО: Сначала загружаем заказы с сервера для синхронизации между устройствами
+    if (window.userDataManager && window.userDataManager.getUserData) {
         try {
-            const parsedOrders = JSON.parse(savedOrders);
-            if (Array.isArray(parsedOrders)) {
-                orders = parsedOrders;
+            const userData = await window.userDataManager.getUserData();
+            if (userData && userData.orders && Array.isArray(userData.orders)) {
+                // Объединяем заказы с сервера с локальными (приоритет серверным)
+                const serverOrderIds = new Set(userData.orders.map(o => o.id));
+                const localOrdersNotOnServer = orders.filter(o => !serverOrderIds.has(o.id));
+                orders = [...userData.orders, ...localOrdersNotOnServer].sort((a, b) => {
+                    const dateA = new Date(a.createdAt || a.date || 0);
+                    const dateB = new Date(b.createdAt || b.date || 0);
+                    return dateB - dateA; // Новые заказы первыми
+                });
+                localStorage.setItem('orders', JSON.stringify(orders));
+                console.log('✅ Заказы загружены с сервера:', orders.length, 'заказов');
             }
-        } catch (e) {
-            console.error('Error loading orders from localStorage:', e);
+        } catch (error) {
+            console.error('Ошибка загрузки заказов с сервера:', error);
+        }
+    }
+    
+    // Если сервер недоступен или userDataManager не загружен, загружаем из localStorage
+    if (orders.length === 0) {
+        const savedOrders = localStorage.getItem('orders');
+        if (savedOrders) {
+            try {
+                const parsedOrders = JSON.parse(savedOrders);
+                if (Array.isArray(parsedOrders)) {
+                    orders = parsedOrders;
+                }
+            } catch (e) {
+                console.error('Error loading orders from localStorage:', e);
+            }
         }
     }
     
@@ -10752,8 +10843,10 @@ function cancelOrder(orderId) {
                 order.status = 'cancelled';
                 localStorage.setItem('orders', JSON.stringify(orders));
                 
-                // Обновляем отображение
-        showOrders();
+                // Переключаемся на вкладку "Отмененные" и обновляем отображение
+                ordersTab = 'cancelled';
+                localStorage.setItem('ordersTab', 'cancelled');
+                showOrders();
                 
                 // Обновляем профиль если открыт
                 if (currentPage === 'profile') {
