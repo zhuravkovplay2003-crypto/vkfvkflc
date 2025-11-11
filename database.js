@@ -4,92 +4,138 @@ const path = require('path');
 const fs = require('fs');
 
 // Путь к файлу базы данных
-const DB_PATH = path.join(__dirname, 'users.db');
+// На Render используем /tmp для временных файлов или текущую директорию
+const DB_PATH = process.env.DATABASE_PATH || path.join(__dirname, 'users.db');
 
-// Создаем подключение к БД
-const db = new Database(DB_PATH);
-
-// Включаем WAL режим для лучшей производительности при параллельных запросах
-db.pragma('journal_mode = WAL');
+// Создаем подключение к БД с обработкой ошибок
+let db;
+try {
+    // Убеждаемся, что директория существует
+    const dbDir = path.dirname(DB_PATH);
+    if (!fs.existsSync(dbDir)) {
+        fs.mkdirSync(dbDir, { recursive: true });
+    }
+    
+    db = new Database(DB_PATH);
+    
+    // Включаем WAL режим для лучшей производительности при параллельных запросах
+    db.pragma('journal_mode = WAL');
+    
+    console.log(`✅ База данных подключена: ${DB_PATH}`);
+} catch (error) {
+    console.error('❌ Ошибка подключения к базе данных:', error);
+    console.error('Попытка использовать альтернативный путь...');
+    
+    // Пробуем альтернативный путь (для Render может быть /tmp)
+    try {
+        const altPath = path.join(process.cwd(), 'users.db');
+        db = new Database(altPath);
+        db.pragma('journal_mode = WAL');
+        console.log(`✅ База данных подключена (альтернативный путь): ${altPath}`);
+    } catch (altError) {
+        console.error('❌ Критическая ошибка: не удалось подключиться к базе данных:', altError);
+        throw new Error('Не удалось инициализировать базу данных. Проверьте права доступа и наличие better-sqlite3.');
+    }
+}
 
 // Создаем таблицу пользователей, если её нет
 function initDatabase() {
-    db.exec(`
-        CREATE TABLE IF NOT EXISTS users (
-            user_id TEXT PRIMARY KEY,
-            username TEXT,
-            first_name TEXT,
-            last_name TEXT,
-            language_code TEXT DEFAULT 'ru',
+    try {
+        db.exec(`
+            CREATE TABLE IF NOT EXISTS users (
+                user_id TEXT PRIMARY KEY,
+                username TEXT,
+                first_name TEXT,
+                last_name TEXT,
+                language_code TEXT DEFAULT 'ru',
+                
+                -- Основные данные
+                vape_coins REAL DEFAULT 0,
+                stamps INTEGER DEFAULT 0,
+                rating INTEGER DEFAULT 10,
+                referrals INTEGER DEFAULT 0,
+                
+                -- Данные приложения (храним как JSON)
+                cart TEXT DEFAULT '[]',
+                favorites TEXT DEFAULT '[]',
+                viewed_products TEXT DEFAULT '[]',
+                orders TEXT DEFAULT '[]',
+                transactions TEXT DEFAULT '[]',
+                
+                -- Настройки (храним как JSON)
+                settings TEXT DEFAULT '{"notifications":true,"theme":"light","language":"ru"}',
+                
+                -- Метаданные
+                created_at TEXT DEFAULT (datetime('now')),
+                last_active TEXT DEFAULT (datetime('now'))
+            );
             
-            -- Основные данные
-            vape_coins REAL DEFAULT 0,
-            stamps INTEGER DEFAULT 0,
-            rating INTEGER DEFAULT 10,
-            referrals INTEGER DEFAULT 0,
+            CREATE TABLE IF NOT EXISTS managers (
+                telegram_id TEXT PRIMARY KEY,
+                city TEXT NOT NULL,
+                created_at TEXT DEFAULT (datetime('now')),
+                last_active TEXT DEFAULT (datetime('now'))
+            );
             
-            -- Данные приложения (храним как JSON)
-            cart TEXT DEFAULT '[]',
-            favorites TEXT DEFAULT '[]',
-            viewed_products TEXT DEFAULT '[]',
-            orders TEXT DEFAULT '[]',
-            transactions TEXT DEFAULT '[]',
-            
-            -- Настройки (храним как JSON)
-            settings TEXT DEFAULT '{"notifications":true,"theme":"light","language":"ru"}',
-            
-            -- Метаданные
-            created_at TEXT DEFAULT (datetime('now')),
-            last_active TEXT DEFAULT (datetime('now'))
-        );
+            CREATE INDEX IF NOT EXISTS idx_user_id ON users(user_id);
+            CREATE INDEX IF NOT EXISTS idx_last_active ON users(last_active);
+            CREATE INDEX IF NOT EXISTS idx_manager_city ON managers(city);
+        `);
         
-        CREATE TABLE IF NOT EXISTS managers (
-            telegram_id TEXT PRIMARY KEY,
-            city TEXT NOT NULL,
-            created_at TEXT DEFAULT (datetime('now')),
-            last_active TEXT DEFAULT (datetime('now'))
-        );
-        
-        CREATE INDEX IF NOT EXISTS idx_user_id ON users(user_id);
-        CREATE INDEX IF NOT EXISTS idx_last_active ON users(last_active);
-        CREATE INDEX IF NOT EXISTS idx_manager_city ON managers(city);
-    `);
-    
-    console.log('✅ База данных инициализирована');
+        console.log('✅ База данных инициализирована');
+    } catch (error) {
+        console.error('❌ Ошибка инициализации базы данных:', error);
+        throw error;
+    }
 }
 
 // Инициализируем БД при загрузке модуля
-initDatabase();
+try {
+    initDatabase();
+} catch (error) {
+    console.error('❌ Критическая ошибка при инициализации БД:', error);
+    // Не прерываем выполнение, но логируем ошибку
+}
 
 // Получить данные пользователя
 function getUserData(userId) {
-    const stmt = db.prepare('SELECT * FROM users WHERE user_id = ?');
-    const row = stmt.get(userId);
-    
-    if (!row) {
+    if (!db) {
+        console.error('База данных не инициализирована');
         return null;
     }
     
-    // Парсим JSON поля
-    return {
-        id: row.user_id,
-        username: row.username,
-        firstName: row.first_name,
-        lastName: row.last_name,
-        languageCode: row.language_code,
-        vapeCoins: row.vape_coins || 0,
-        stamps: row.stamps || 0,
-        rating: row.rating || 10,
-        referrals: row.referrals || 0,
-        cart: JSON.parse(row.cart || '[]'),
-        favorites: JSON.parse(row.favorites || '[]'),
-        viewedProducts: JSON.parse(row.viewed_products || '[]'),
-        orders: JSON.parse(row.orders || '[]'),
-        transactions: JSON.parse(row.transactions || '[]'),
-        settings: JSON.parse(row.settings || '{"notifications":true,"theme":"light","language":"ru"}'),
-        createdAt: row.created_at,
-        lastActive: row.last_active
-    };
+    try {
+        const stmt = db.prepare('SELECT * FROM users WHERE user_id = ?');
+        const row = stmt.get(userId);
+    
+        if (!row) {
+            return null;
+        }
+        
+        // Парсим JSON поля
+        return {
+            id: row.user_id,
+            username: row.username,
+            firstName: row.first_name,
+            lastName: row.last_name,
+            languageCode: row.language_code,
+            vapeCoins: row.vape_coins || 0,
+            stamps: row.stamps || 0,
+            rating: row.rating || 10,
+            referrals: row.referrals || 0,
+            cart: JSON.parse(row.cart || '[]'),
+            favorites: JSON.parse(row.favorites || '[]'),
+            viewedProducts: JSON.parse(row.viewed_products || '[]'),
+            orders: JSON.parse(row.orders || '[]'),
+            transactions: JSON.parse(row.transactions || '[]'),
+            settings: JSON.parse(row.settings || '{"notifications":true,"theme":"light","language":"ru"}'),
+            createdAt: row.created_at,
+            lastActive: row.last_active
+        };
+    } catch (error) {
+        console.error('Ошибка получения данных пользователя:', error);
+        return null;
+    }
 }
 
 // Создать или обновить данные пользователя
@@ -306,7 +352,15 @@ function getStats() {
 
 // Закрыть соединение с БД (при завершении приложения)
 function closeDatabase() {
-    db.close();
+    try {
+        if (db) {
+            db.close();
+            console.log('✅ Соединение с базой данных закрыто');
+            db = null;
+        }
+    } catch (error) {
+        console.error('Ошибка при закрытии БД:', error);
+    }
 }
 
 // Экспортируем функции
