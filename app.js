@@ -47,6 +47,9 @@ let backButtonPressCount = 0; // Счетчик нажатий кнопки "Н�
 // const SERVER_URL = 'http://localhost:3000'; // Для разработки
 const SERVER_URL = 'https://vkfvkflc.onrender.com'; // Render.com сервер
 
+// Делаем SERVER_URL доступным глобально для userData.js
+window.SERVER_URL = SERVER_URL;
+
 // Функция для синхронизации корзины с сервером
 async function syncCartToServer() {
     if (!window.userDataManager || !window.userDataManager.syncCart) {
@@ -90,30 +93,48 @@ async function syncVapeCoinsToServer(amount, reason = '') {
 
 // Функция для синхронизации штампов с сервером
 async function syncStampsToServer(newStamps) {
+    console.log('🔄 Синхронизируем штампы с сервером, newStamps:', newStamps);
+    
     if (window.userDataManager && window.userDataManager.getUserId) {
         const userId = window.userDataManager.getUserId();
         if (userId) {
             try {
-                const apiUrl = window.location.origin;
-                await fetch(`${apiUrl}/api/user/${userId}/stamps`, {
+                // ВАЖНО: Используем правильный URL сервера (не window.location.origin)
+                const apiUrl = SERVER_URL || 'https://vkfvkflc.onrender.com';
+                console.log('📡 Отправляем штампы на сервер:', `${apiUrl}/api/user/${userId}/stamps`);
+                const response = await fetch(`${apiUrl}/api/user/${userId}/stamps`, {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json'
                     },
                     body: JSON.stringify({ stamps: newStamps })
                 });
-                stamps = newStamps % 10;
-                completedStampSets = Math.floor(newStamps / 10);
-                localStorage.setItem('stamps', newStamps.toString());
+                
+                if (response.ok) {
+                    console.log('✅ Штампы синхронизированы с сервером');
+                    stamps = newStamps % 10;
+                    completedStampSets = Math.floor(newStamps / 10);
+                    localStorage.setItem('stamps', newStamps.toString());
+                } else {
+                    const errorText = await response.text();
+                    console.error('❌ Ошибка синхронизации штампов:', response.status, errorText);
+                    // Fallback на локальное сохранение
+                    stamps = newStamps % 10;
+                    completedStampSets = Math.floor(newStamps / 10);
+                    localStorage.setItem('stamps', newStamps.toString());
+                }
             } catch (error) {
-                console.error('Ошибка синхронизации штампов:', error);
+                console.error('❌ Ошибка синхронизации штампов:', error);
                 // Fallback на локальное сохранение
                 stamps = newStamps % 10;
                 completedStampSets = Math.floor(newStamps / 10);
                 localStorage.setItem('stamps', newStamps.toString());
             }
+        } else {
+            console.error('❌ userId не определен для синхронизации штампов');
         }
     } else {
+        console.warn('⚠️ userDataManager не доступен, сохраняем локально');
         // Fallback на локальное сохранение
         stamps = newStamps % 10;
         completedStampSets = Math.floor(newStamps / 10);
