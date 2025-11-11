@@ -4983,12 +4983,13 @@ function selectPickupLocation() {
                     
                 }
                 
-                // ВАЖНО: Форматируем адрес - только первая буква заглавная
+                // ВАЖНО: Форматируем адрес - только первая буква каждого слова заглавная
                 const formatLocation = (location) => {
                     return location.split(', ').map(part => {
                         return part.split(' ').map(word => {
-                            // Первая буква заглавная, остальные строчные
-                            return word.charAt(0).toUpperCase() + word.slice(1).toLowerCase();
+                            // Только первая буква заглавная, остальные остаются как есть
+                            if (!word) return word;
+                            return word.charAt(0).toUpperCase() + word.slice(1);
                         }).join(' ');
                     }).join(', ');
                 };
@@ -5019,29 +5020,51 @@ function selectPickupLocation() {
                     }
                 }
                 
-                // Обновляем отображение точки в корзине если мы на странице корзины
+                // ВАЖНО: Если мы на странице корзины, проверяем наличие товаров на новом адресе
                 if (currentPage === 'cart') {
-                    const locationDisplay = document.getElementById('selected-pickup-location-display');
-                    if (locationDisplay) {
-                        locationDisplay.textContent = selectedPickupLocation;
+                    // Проверяем наличие всех товаров в корзине на новом адресе
+                    const unavailableItems = [];
+                    cart.forEach(item => {
+                        const product = products.find(p => p.id === item.id);
+                        if (!product) {
+                            unavailableItems.push({ name: item.name || 'Неизвестный товар', reason: 'Товар не найден' });
+                            return;
+                        }
+                        
+                        let isInStock = false;
+                        if (item.flavor) {
+                            // Проверяем наличие конкретного вкуса
+                            isInStock = deliveryType === 'selfPickup' && selectedPickupLocation
+                                ? isFlavorInStockAtLocation(product, item.flavor, selectedPickupLocation)
+                                : (product.inStock !== false && (product.quantity === undefined || product.quantity > 0));
+                        } else {
+                            // Проверяем общее наличие товара
+                            isInStock = deliveryType === 'selfPickup' && selectedPickupLocation
+                                ? isProductInStockAtLocation(product, selectedPickupLocation)
+                                : (product.inStock !== false && (product.quantity === undefined || product.quantity > 0));
+                        }
+                        
+                        if (!isInStock) {
+                            const itemName = item.flavor ? `${item.name}, ${item.flavor}` : item.name;
+                            unavailableItems.push({ name: itemName, reason: 'На данном адресе этого товара нет' });
+                        }
+                    });
+                    
+                    // Если есть недоступные товары, показываем предупреждение
+                    if (unavailableItems.length > 0) {
+                        const itemsList = unavailableItems.map(item => `• ${item.name}`).join('\n');
+                        const message = `Внимание! Некоторые товары недоступны на новом адресе:\n${itemsList}\n\nОни будут выделены серым цветом. Удалите их перед оформлением заказа.`;
+                        showToast(message, 'warning', 6000);
                     }
+                    
+                    // Обновляем корзину чтобы показать недоступные товары
+                    showCart();
                 }
                 
                 // Всегда обновляем отображение товаров на странице каталога
                 // Это важно, особенно при первом выборе точки после подтверждения возраста
                 if (currentPage === 'catalog' || !currentPage) {
                     displayProducts();
-                }
-                
-                // Если мы на странице корзины, обновляем корзину плавно
-                // Используем requestAnimationFrame для плавного обновления
-                if (currentPage === 'cart') {
-                    // Сначала обновляем переменную из localStorage
-                    selectedPickupLocation = fullLocation;
-                    // Используем requestAnimationFrame для плавного обновления без дерганья
-                    requestAnimationFrame(() => {
-                        updateCartItemsDisplay();
-                    });
                 }
                 
                 // Плавно закрываем модальное окно
@@ -6124,7 +6147,7 @@ async function showExactTimeSelectionModal(timeSlot) {
             exactTimes.push(`
                 <button ${isBooked ? 'disabled' : `onclick="setDeliveryExactTime('${timeStr}')"`}
                     style="${buttonStyle}">
-                    ${timeStr}${isBooked ? ' (занято)' : ''}
+                    ${timeStr}
                 </button>
             `);
         });
@@ -6246,7 +6269,7 @@ async function showExactTimeSelectionModal(timeSlot) {
             exactTimes.push(`
                 <button ${isBooked ? 'disabled' : `onclick="setDeliveryExactTime('${timeStr}')"`}
                     style="${buttonStyle}">
-                    ${timeStr}${isBooked ? ' (занято)' : ''}
+                    ${timeStr}
                 </button>
             `);
         });
@@ -6628,9 +6651,10 @@ function showCart() {
     }
     // При обновлении корзины сохраняем позицию скролла (уже сохранена выше в scrollPosition)
     
-    // Начальное состояние для анимации
-    container.style.opacity = '0';
-    container.style.transform = 'translateY(20px)';
+    // Убираем анимацию для быстрого открытия корзины
+    container.style.opacity = '1';
+    container.style.transform = 'translateY(0)';
+    container.style.transition = 'none';
     
     if (cart.length === 0) {
         container.innerHTML = `
@@ -6640,11 +6664,6 @@ function showCart() {
                 <p style="color: ${colors.textSecondary};">Добавьте товары из каталога</p>
             </div>
         `;
-        setTimeout(() => {
-            container.style.opacity = '1';
-            container.style.transform = 'translateY(0)';
-            container.style.transition = 'opacity 0.4s ease, transform 0.4s ease';
-        }, 10);
         return;
     }
     
@@ -7100,12 +7119,8 @@ function showCart() {
         }
     }, 100);
     
-    // Анимация появления контейнера
-    setTimeout(() => {
-        container.style.opacity = '1';
-        container.style.transform = 'translateY(0)';
-        container.style.transition = 'opacity 0.4s ease, transform 0.4s ease';
-    }, 10);
+    // Убираем анимацию для быстрого открытия корзины
+    // Контейнер уже видимый (opacity: 1) установлен выше
 }
 
 // Изменить количество
@@ -7701,10 +7716,11 @@ function checkout() {
     }
     
     if (hasErrors) {
+        isCreatingOrder = false; // Сбрасываем флаг при ошибке
         return;
     }
     
-    // Проверяем наличие всех товаров в корзине на выбранной точке
+    // ВАЖНО: Проверяем наличие всех товаров в корзине на выбранной точке
     const unavailableItems = [];
     cart.forEach(item => {
         const product = products.find(p => p.id === item.id);
@@ -7734,9 +7750,14 @@ function checkout() {
     });
     
     if (unavailableItems.length > 0) {
+        isCreatingOrder = false; // Сбрасываем флаг при ошибке
         const itemsList = unavailableItems.map(item => `• ${item.name}: ${item.reason}`).join('\n');
-        const message = `Некоторые товары недоступны на данном адресе:\n${itemsList}`;
-        showToast(message, 'error', 5000);
+        const message = `Некоторые товары недоступны на данном адресе:\n${itemsList}\n\nПожалуйста, удалите недоступные товары из корзины или выберите другой адрес.`;
+        showToast(message, 'error', 6000);
+        // Обновляем корзину чтобы показать недоступные товары
+        if (currentPage === 'cart') {
+            showCart();
+        }
         return;
     }
     
