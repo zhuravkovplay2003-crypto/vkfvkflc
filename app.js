@@ -4395,9 +4395,11 @@ function addToCart(productId, strength = null, flavor = null) {
         updateCartBadge();
         showToast('Количество товара увеличено', 'success', 2000);
         
-        // Если пользователь на странице корзины, обновляем её сразу
+        // Если пользователь на странице корзины, обновляем итого сразу
         if (currentPage === 'cart') {
-            showCart();
+            // Обновляем количество товаров и итого без полной перерисовки
+            updateCartItemsDisplay();
+            updateCartTotals();
         }
         
         isAddingToCart = false; // Снимаем блокировку
@@ -4446,6 +4448,18 @@ function addToCart(productId, strength = null, flavor = null) {
                 if (cardImage) startElement = cardImage;
             }
         }
+    }
+    
+    // ВАЖНО: Проверяем общее количество позиций одного товара (все варианты вкуса/крепости)
+    const totalQuantityOfProduct = cart
+        .filter(item => item.id === productId)
+        .reduce((sum, item) => sum + (item.quantity || 1), 0);
+    
+    // Если уже есть 9 или больше позиций этого товара (всех вариантов), не добавляем
+    if (totalQuantityOfProduct >= 9) {
+        showToast('Максимальное количество товара одного вида: 9 шт.', 'error', 3000);
+        isAddingToCart = false;
+        return;
     }
     
     // Запускаем анимацию, затем добавляем в корзину
@@ -7336,8 +7350,18 @@ function updateCartTotals() {
             }
         }
         
-        // Ищем строку с товарами
+        // Ищем строку с товарами и обновляем количество
         if (text.includes('Товары') && text.includes('шт.')) {
+            // Рассчитываем общее количество товаров
+            const totalItemsCount = cart.reduce((sum, item) => sum + (item.quantity || 1), 0);
+            
+            // Обновляем количество товаров в тексте
+            const match = text.match(/Товары\s*\((\d+)\s*шт\.\)/);
+            if (match) {
+                div.textContent = `Товары (${totalItemsCount} шт.)`;
+            }
+            
+            // Обновляем сумму
             const nextSpan = div.nextElementSibling;
             if (nextSpan) {
                 let sumText = '';
@@ -8251,19 +8275,21 @@ function checkOrderStatus(orderId) {
                             
                             // Определяем текст для штампов (с учетом 0.5)
                             let stampsText = '';
+                            // ВАЖНО: Проверяем, были ли начислены штампы (stampsToAdd > 0) или есть частичный прогресс
                             if (stampsToAdd > 0) {
                                 stampsText = `+ ${stampsToAdd} ${stampsToAdd === 1 ? 'штамп' : stampsToAdd < 5 ? 'штампа' : 'штампов'}`;
-                            } else if (currentPartialProgress > 0) {
-                                // Если добавился только частичный прогресс (0.5 штампа)
+                            } else if (currentPartialProgress > 0 && !stampsAlreadyAdded) {
+                                // Если добавился только частичный прогресс (0.5 штампа) и штампы еще не начислялись
                                 stampsText = `+ 0.5 штампа`;
                             }
                             
-                            if (coinsEarnedValue > 0 && stampsText) {
+                            // ВАЖНО: Правильно формируем сообщение - сначала штампы, потом коины
+                            if (stampsText && coinsEarnedValue > 0) {
                                 toastMessage = `Заказ передан!\n${stampsText}\n+ ${coinsEarnedValue.toFixed(1)} коинов`;
                             } else if (stampsText) {
                                 toastMessage = `Заказ передан!\n${stampsText}`;
                             } else if (coinsEarnedValue > 0) {
-                                toastMessage = `Заказ передан! Начислено ${coinsEarnedValue.toFixed(1)} Vape Coins`;
+                                toastMessage = `Заказ передан! Начислено ${coinsEarnedValue.toFixed(1)} коинов`;
                             } else {
                                 toastMessage = 'Заказ передан клиенту';
                             }
