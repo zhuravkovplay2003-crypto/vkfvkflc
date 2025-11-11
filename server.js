@@ -1270,7 +1270,7 @@ bot.command('start', async (ctx) => {
         '🚀 Нажмите кнопку ниже, чтобы открыть каталог!';
     
     // URL мини-приложения (всегда используем правильный URL)
-    const WEB_APP_URL = 'https://marvelous-kashata-6b0214.netlify.app';
+    const WEB_APP_URL = 'https://funny-churros-0055dc.netlify.app';
     
     // Логируем какой URL используется для отладки
     console.log('Using WEB_APP_URL:', WEB_APP_URL);
