@@ -896,37 +896,9 @@ function init() {
         showAgeVerification();
     }, 2000); // Показываем splash 2 секунды
     
-    // Загружаем корзину с сервера (или из localStorage, если сервер недоступен)
-    loadCartFromServer().then(() => {
-        updateCartBadge();
-    }).catch(err => {
-        console.error('Ошибка при загрузке корзины:', err);
-        // В случае ошибки загружаем из localStorage
-        const savedCart = localStorage.getItem('cart');
-        if (savedCart) {
-            try {
-                cart = JSON.parse(savedCart);
-                updateCartBadge();
-            } catch (e) {
-                cart = [];
-            }
-        }
-    });
-    
-    // Загружаем избранное с сервера (или из localStorage, если сервер недоступен)
-    // ВАЖНО: Сначала пытаемся загрузить с сервера, чтобы синхронизировать между устройствами
-    // Это будет обработано в блоке загрузки данных пользователя выше (строки 1027-1065)
-    // Здесь загружаем только если userDataManager еще не загружен
-    if (!window.userDataManager || !window.userDataManager.getUserData) {
-        const savedFavorites = localStorage.getItem('favorites');
-        if (savedFavorites) {
-            try {
-                favorites = JSON.parse(savedFavorites);
-            } catch (e) {
-                favorites = [];
-            }
-        }
-    }
+    // ВАЖНО: НЕ загружаем корзину и избранное здесь!
+    // Они будут загружены с сервера в loadUserDataFromServer() (строки 1064-1123)
+    // Это нужно для правильной синхронизации между устройствами
     
     const savedViewed = localStorage.getItem('viewedProducts');
     if (savedViewed) {
@@ -1122,27 +1094,39 @@ function init() {
         }
     }
     
-    // Пытаемся загрузить данные с сервера
-    loadUserDataFromServer();
-    
+    // ВАЖНО: Пытаемся загрузить данные с сервера
     // Если userDataManager еще не загружен, ждем и пробуем снова
     if (!window.userDataManager || !window.userDataManager.getUserData) {
-        console.warn('userDataManager еще не загружен, ждем...');
+        console.warn('⚠️ userDataManager еще не загружен, ждем...');
         // Пытаемся синхронизировать с сервером после загрузки userDataManager
         let attempts = 0;
-        const maxAttempts = 10;
+        const maxAttempts = 15; // Увеличиваем количество попыток
         const checkInterval = setInterval(() => {
             attempts++;
             if (window.userDataManager && window.userDataManager.getUserData) {
                 clearInterval(checkInterval);
                 console.log('✅ userDataManager загружен, загружаем данные с сервера');
-                loadUserDataFromServer();
+                loadUserDataFromServer().then(() => {
+                    console.log('✅ Инициализация завершена, данные загружены с сервера');
+                }).catch(err => {
+                    console.error('❌ Ошибка загрузки данных:', err);
+                    loadUserDataFromLocalStorage();
+                });
             } else if (attempts >= maxAttempts) {
                 clearInterval(checkInterval);
-                console.warn('userDataManager не загрузился после', maxAttempts, 'попыток, используем localStorage');
+                console.warn('⚠️ userDataManager не загрузился после', maxAttempts, 'попыток, используем localStorage');
                 loadUserDataFromLocalStorage();
             }
         }, 200);
+    } else {
+        // userDataManager уже загружен, загружаем данные сразу
+        console.log('✅ userDataManager уже загружен, загружаем данные с сервера');
+        loadUserDataFromServer().then(() => {
+            console.log('✅ Инициализация завершена, данные загружены с сервера');
+        }).catch(err => {
+            console.error('❌ Ошибка загрузки данных:', err);
+            loadUserDataFromLocalStorage();
+        });
     }
 }
 
@@ -6970,6 +6954,7 @@ function showRemoveLastItemConfirmation(index) {
         closeModal();
         cart.splice(index, 1);
         localStorage.setItem('cart', JSON.stringify(cart));
+        syncCartToServer(); // Синхронизируем с сервером
         updateCartBadge();
         showCart();
         
