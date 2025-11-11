@@ -4,6 +4,7 @@ const cors = require('cors');
 const fs = require('fs');
 const path = require('path');
 const db = require('./database');
+const { google } = require('googleapis');
 
 const app = express();
 app.use(cors());
@@ -757,6 +758,303 @@ app.post('/api/orders/:orderId/cancel', (req, res) => {
 });
 
 // API для добавления менеджера (только для администраторов)
+// Endpoint для обновления Google таблицы после заказа
+app.post('/api/orders/update-stock', async (req, res) => {
+    try {
+        const { orderId, items } = req.body;
+        
+        if (!items || !Array.isArray(items) || items.length === 0) {
+            return res.status(400).json({ success: false, error: 'Не указаны товары для обновления' });
+        }
+        
+        // Конфигурация Google таблицы (из app.js)
+        const GOOGLE_SHEETS_CONFIG = {
+            sheetId: '16IWmjfm__yJ2Ryqhm97vjJx-gKVcfkTANdq2lkojmvw',
+            productsGid: '0',
+            variantsGid: '1804830457',
+            apiKey: 'AIzaSyAJaShY7Th_2yrG4jXEUS2xIkfl3Glx6x8'
+        };
+        
+        // Загружаем данные из таблицы для поиска товаров
+        // Используем встроенный модуль https для Node.js
+        const https = require('https');
+        const url = require('url');
+        
+        const fetchCSV = (csvUrl) => {
+            return new Promise((resolve, reject) => {
+                const parsedUrl = url.parse(csvUrl);
+                https.get(parsedUrl, (res) => {
+                    let data = '';
+                    res.on('data', (chunk) => { data += chunk; });
+                    res.on('end', () => {
+                        if (res.statusCode === 200) {
+                            resolve(data);
+                        } else {
+                            reject(new Error(`HTTP ${res.statusCode}`));
+                        }
+                    });
+                }).on('error', reject);
+            });
+        };
+        
+        const productsUrl = `https://docs.google.com/spreadsheets/d/${GOOGLE_SHEETS_CONFIG.sheetId}/export?format=csv&gid=${GOOGLE_SHEETS_CONFIG.productsGid}`;
+        const variantsUrl = `https://docs.google.com/spreadsheets/d/${GOOGLE_SHEETS_CONFIG.sheetId}/export?format=csv&gid=${GOOGLE_SHEETS_CONFIG.variantsGid}`;
+        
+        let productsText, variantsText;
+        try {
+            productsText = await fetchCSV(productsUrl);
+            try {
+                variantsText = await fetchCSV(variantsUrl);
+            } catch (err) {
+                console.log('Ошибка загрузки вариантов (продолжаем):', err.message);
+                variantsText = '';
+            }
+        } catch (error) {
+            throw new Error(`Ошибка загрузки таблицы товаров: ${error.message}`);
+        }
+        
+        // Парсим CSV
+        const parseCSV = (csvText) => {
+            const lines = csvText.split('\n').filter(line => line.trim());
+            if (lines.length === 0) return [];
+            
+            const headers = lines[0].split(',').map(h => h.trim().replace(/^"|"$/g, ''));
+            return lines.slice(1).map(line => {
+                const values = line.split(',').map(v => v.trim().replace(/^"|"$/g, ''));
+                const obj = {};
+                headers.forEach((header, index) => {
+                    obj[header] = values[index] || '';
+                });
+                return obj;
+            });
+        };
+        
+        const productsData = parseCSV(productsText);
+        const variantsData = variantsText ? parseCSV(variantsText) : [];
+        
+        // Объединяем данные товаров и вариантов
+        const allProducts = productsData.map(product => {
+            const productVariants = variantsData.filter(v => v.productId === product.id || v['ID товара'] === product.id);
+            return { ...product, variants: productVariants };
+        });
+        
+        // Обновляем количество для каждого товара
+        const updates = [];
+        
+        for (const item of items) {
+            const productId = item.productId?.toString() || '';
+            const quantity = parseInt(item.quantity) || 0;
+            const flavor = item.flavor || null;
+            const location = item.location || null;
+            
+            if (!productId || quantity <= 0) continue;
+            
+            // Находим товар в таблице
+            const product = allProducts.find(p => 
+                p.id === productId || 
+                p['ID'] === productId ||
+                p['id'] === productId
+            );
+            
+            if (!product) {
+                console.log(`Товар с ID ${productId} не найден в таблице`);
+                continue;
+            }
+            
+            // Находим строку товара (нумерация с 2, так как первая строка - заголовки)
+            const productRowIndex = productsData.findIndex(p => 
+                (p.id === productId || p['ID'] === productId || p['id'] === productId)
+            ) + 2; // +2 потому что первая строка - заголовки, и индексация с 1 в Google Sheets
+            
+            if (productRowIndex < 2) continue;
+            
+            // Определяем колонки для обновления
+            // Предполагаем структуру: ID, Название, Количество, Продано шт, и т.д.
+            // Нужно найти индексы колонок по заголовкам
+            const headers = productsText.split('\n')[0].split(',').map(h => h.trim().replace(/^"|"$/g, ''));
+            
+            // Ищем колонки
+            const quantityColIndex = headers.findIndex(h => 
+                h.toLowerCase().includes('количество') || 
+                h.toLowerCase().includes('quantity') ||
+                h.toLowerCase().includes('остаток')
+            );
+            
+            const soldColIndex = headers.findIndex(h => 
+                h.toLowerCase().includes('продано') || 
+                h.toLowerCase().includes('sold') ||
+                h.toLowerCase().includes('продаж')
+            );
+            
+            // Если есть данные по адресу и вкусу, нужно обновить в вариантах
+            if (flavor && location && variantsData.length > 0) {
+                // Ищем вариант в таблице вариантов
+                const variant = variantsData.find(v => 
+                    (v.productId === productId || v['ID товара'] === productId) &&
+                    (v.flavor === flavor || v['Вкус'] === flavor || v['вкус'] === flavor)
+                );
+                
+                if (variant) {
+                    const variantRowIndex = variantsData.findIndex(v => 
+                        (v.productId === productId || v['ID товара'] === productId) &&
+                        (v.flavor === flavor || v['Вкус'] === flavor || v['вкус'] === flavor)
+                    ) + 2;
+                    
+                    const variantHeaders = variantsText.split('\n')[0].split(',').map(h => h.trim().replace(/^"|"$/g, ''));
+                    
+                    // Ищем колонку с количеством для конкретного адреса
+                    // Формат может быть: "Минск, ст. м. Грушевка" или просто название адреса
+                    const locationColIndex = variantHeaders.findIndex(h => {
+                        const hLower = h.toLowerCase();
+                        const locLower = location.toLowerCase();
+                        return hLower.includes(locLower) || locLower.includes(hLower);
+                    });
+                    
+                    if (locationColIndex >= 0 && variantRowIndex >= 2) {
+                        // Обновляем количество на адресе
+                        const currentQuantity = parseInt(variant[variantHeaders[locationColIndex]] || '0');
+                        const newQuantity = Math.max(0, currentQuantity - quantity);
+                        
+                        updates.push({
+                            sheetId: GOOGLE_SHEETS_CONFIG.variantsGid,
+                            range: `${String.fromCharCode(65 + locationColIndex)}${variantRowIndex}`,
+                            value: newQuantity.toString()
+                        });
+                    }
+                }
+            }
+            
+            // Обновляем общее количество товара (если есть колонка)
+            if (quantityColIndex >= 0) {
+                const currentQuantity = parseInt(product[headers[quantityColIndex]] || '0');
+                const newQuantity = Math.max(0, currentQuantity - quantity);
+                
+                updates.push({
+                    sheetId: GOOGLE_SHEETS_CONFIG.productsGid,
+                    range: `${String.fromCharCode(65 + quantityColIndex)}${productRowIndex}`,
+                    value: newQuantity.toString()
+                });
+            }
+            
+            // Обновляем графу "продано шт" (если есть колонка)
+            if (soldColIndex >= 0) {
+                const currentSold = parseInt(product[headers[soldColIndex]] || '0');
+                const newSold = currentSold + quantity;
+                
+                updates.push({
+                    sheetId: GOOGLE_SHEETS_CONFIG.productsGid,
+                    range: `${String.fromCharCode(65 + soldColIndex)}${productRowIndex}`,
+                    value: newSold.toString()
+                });
+            }
+        }
+        
+        // Пытаемся обновить таблицу через Google Sheets API
+        let updatedCount = 0;
+        
+        try {
+            // Проверяем наличие credentials
+            const credentialsPath = path.join(__dirname, 'credentials.json');
+            
+            if (fs.existsSync(credentialsPath)) {
+                // Используем Service Account для аутентификации
+                const credentials = JSON.parse(fs.readFileSync(credentialsPath, 'utf8'));
+                const auth = new google.auth.GoogleAuth({
+                    credentials: credentials,
+                    scopes: ['https://www.googleapis.com/auth/spreadsheets']
+                });
+                
+                const sheets = google.sheets({ version: 'v4', auth });
+                
+                // Получаем информацию о листах для определения имен и соответствия GID -> sheetId
+                const spreadsheet = await sheets.spreadsheets.get({
+                    spreadsheetId: GOOGLE_SHEETS_CONFIG.sheetId
+                });
+                
+                const sheetNameMap = {};
+                const gidToSheetIdMap = {};
+                spreadsheet.data.sheets.forEach(sheet => {
+                    const sheetId = sheet.properties.sheetId;
+                    const title = sheet.properties.title;
+                    sheetNameMap[sheetId.toString()] = title;
+                    // Создаем обратное соответствие: ищем лист по названию для определения sheetId
+                    if (title === 'Товары' || title.toLowerCase().includes('товар')) {
+                        gidToSheetIdMap[GOOGLE_SHEETS_CONFIG.productsGid] = sheetId;
+                    }
+                    if (title === 'Варианты товаров' || title.toLowerCase().includes('вариант')) {
+                        gidToSheetIdMap[GOOGLE_SHEETS_CONFIG.variantsGid] = sheetId;
+                    }
+                });
+                
+                // Группируем обновления по листам (используем sheetId вместо GID)
+                const updatesBySheet = {};
+                updates.forEach(update => {
+                    // Конвертируем GID в sheetId
+                    const sheetId = gidToSheetIdMap[update.sheetId] || update.sheetId;
+                    const sheetIdStr = sheetId.toString();
+                    
+                    if (!updatesBySheet[sheetIdStr]) {
+                        updatesBySheet[sheetIdStr] = [];
+                    }
+                    updatesBySheet[sheetIdStr].push({
+                        range: update.range,
+                        values: [[update.value]]
+                    });
+                });
+                
+                // Выполняем обновления для каждого листа
+                for (const [sheetIdStr, sheetUpdates] of Object.entries(updatesBySheet)) {
+                    try {
+                        // Получаем имя листа по sheetId
+                        const sheetName = sheetNameMap[sheetIdStr] || 'Лист1';
+                        
+                        await sheets.spreadsheets.values.batchUpdate({
+                            spreadsheetId: GOOGLE_SHEETS_CONFIG.sheetId,
+                            requestBody: {
+                                valueInputOption: 'USER_ENTERED',
+                                data: sheetUpdates.map(update => ({
+                                    range: `${sheetName}!${update.range}`,
+                                    values: update.values
+                                }))
+                            }
+                        });
+                        
+                        updatedCount += sheetUpdates.length;
+                        console.log(`✅ Обновлено ${sheetUpdates.length} ячеек в листе "${sheetName}"`);
+                    } catch (error) {
+                        console.error(`Ошибка обновления листа ${sheetGid}:`, error.message);
+                    }
+                }
+            } else {
+                console.log('⚠️ Файл credentials.json не найден. Обновления не выполнены.');
+                console.log('Для работы обновления нужно:');
+                console.log('1. Создать Service Account в Google Cloud Console');
+                console.log('2. Скачать JSON ключ и сохранить как credentials.json');
+                console.log('3. Дать доступ Service Account к таблице');
+            }
+        } catch (error) {
+            console.error('Ошибка при обновлении через Google Sheets API:', error.message);
+        }
+        
+        console.log(`Заказ ${orderId}: подготовлено ${updates.length} обновлений, выполнено ${updatedCount}`);
+        
+        res.json({ 
+            success: true, 
+            message: `Подготовлено ${updates.length} обновлений, выполнено ${updatedCount}`,
+            updates: updates.length,
+            updated: updatedCount,
+            note: updatedCount === 0 ? 'Для работы обновления нужно настроить Google Sheets API (credentials.json)' : 'Обновления выполнены успешно'
+        });
+        
+    } catch (error) {
+        console.error('Ошибка обновления Google таблицы:', error);
+        res.status(500).json({ 
+            success: false, 
+            error: error.message || 'Ошибка обновления таблицы' 
+        });
+    }
+});
+
 app.post('/api/managers', (req, res) => {
     try {
         const { city, telegramId, adminId } = req.body;
