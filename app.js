@@ -138,12 +138,14 @@ async function loadCartFromServer() {
     
     try {
         const userData = await window.userDataManager.getUserData();
-        if (userData && userData.cart) {
-            cart = userData.cart;
+        // ВАЖНО: Загружаем корзину с сервера даже если она пустая, чтобы синхронизировать состояние
+        if (userData && userData.cart !== undefined) {
+            // Если cart есть в данных пользователя (даже если пустой массив), используем его
+            cart = Array.isArray(userData.cart) ? userData.cart : [];
             localStorage.setItem('cart', JSON.stringify(cart));
             updateCartBadge();
         } else {
-            // Если данных нет, загружаем из localStorage
+            // Если данных нет на сервере, загружаем из localStorage и синхронизируем на сервер
             const savedCart = localStorage.getItem('cart');
             if (savedCart) {
                 try {
@@ -152,7 +154,13 @@ async function loadCartFromServer() {
                     await syncCartToServer();
                 } catch (e) {
                     cart = [];
+                    // Синхронизируем пустую корзину на сервер
+                    await syncCartToServer();
                 }
+            } else {
+                // Если нет данных ни на сервере, ни в localStorage, создаем пустую корзину и синхронизируем
+                cart = [];
+                await syncCartToServer();
             }
         }
     } catch (error) {
@@ -1031,13 +1039,24 @@ function init() {
     }
     
     // ВАЖНО: Загружаем данные пользователя с сервера в первую очередь для синхронизации между устройствами
-    if (window.userDataManager && window.userDataManager.getUserData) {
-        window.userDataManager.getUserData().then(userData => {
+    // Функция для загрузки данных с сервера
+    async function loadUserDataFromServer() {
+        if (!window.userDataManager || !window.userDataManager.getUserData) {
+            console.warn('userDataManager не загружен, используем localStorage');
+            loadUserDataFromLocalStorage();
+            return;
+        }
+        
+        try {
+            const userData = await window.userDataManager.getUserData();
             if (userData) {
+                console.log('✅ Данные пользователя загружены с сервера:', userData);
+                
                 // Загружаем коины с сервера (приоритет серверным данным)
                 if (userData.vapeCoins !== undefined) {
                     vapeCoins = userData.vapeCoins || 0;
                     localStorage.setItem('vapeCoins', vapeCoins.toString());
+                    console.log('✅ Коины загружены с сервера:', vapeCoins);
                 }
                 
                 // Загружаем штампы с сервера (приоритет серверным данным)
@@ -1046,68 +1065,63 @@ function init() {
                     completedStampSets = Math.floor(totalStamps / 10);
                     stamps = totalStamps % 10;
                     localStorage.setItem('stamps', totalStamps.toString());
+                    console.log('✅ Штампы загружены с сервера:', totalStamps);
                 }
                 
                 // Загружаем избранное с сервера (приоритет серверным данным)
                 if (userData.favorites) {
                     favorites = userData.favorites;
                     localStorage.setItem('favorites', JSON.stringify(favorites));
+                    console.log('✅ Избранное загружено с сервера:', favorites.length, 'товаров');
                 }
                 
                 // Загружаем корзину с сервера (приоритет серверным данным)
-                if (userData.cart && Array.isArray(userData.cart) && userData.cart.length > 0) {
+                // ВАЖНО: Загружаем корзину даже если она пустая, чтобы синхронизировать состояние
+                if (userData.cart !== undefined && Array.isArray(userData.cart)) {
                     cart = userData.cart;
                     localStorage.setItem('cart', JSON.stringify(cart));
                     updateCartBadge();
+                    console.log('✅ Корзина загружена с сервера:', cart.length, 'товаров');
                 }
                 
                 // Загружаем историю транзакций с сервера
                 if (userData.transactions) {
                     vapeCoinsHistory = userData.transactions;
                     localStorage.setItem('vapeCoinsHistory', JSON.stringify(vapeCoinsHistory));
+                    console.log('✅ История транзакций загружена с сервера');
                 }
+            } else {
+                console.warn('Данные пользователя не найдены на сервере, используем localStorage');
+                loadUserDataFromLocalStorage();
             }
-        }).catch(err => {
-            console.error('Ошибка загрузки данных пользователя:', err);
+        } catch (err) {
+            console.error('❌ Ошибка загрузки данных пользователя с сервера:', err);
             // Fallback на localStorage только если сервер недоступен
             loadUserDataFromLocalStorage();
-        });
-    } else {
-        // Если userDataManager еще не загружен, загружаем из localStorage
-        // Но потом попробуем синхронизировать с сервером
-        loadUserDataFromLocalStorage();
-        
+        }
+    }
+    
+    // Пытаемся загрузить данные с сервера
+    loadUserDataFromServer();
+    
+    // Если userDataManager еще не загружен, ждем и пробуем снова
+    if (!window.userDataManager || !window.userDataManager.getUserData) {
+        console.warn('userDataManager еще не загружен, ждем...');
         // Пытаемся синхронизировать с сервером после загрузки userDataManager
-        setTimeout(() => {
+        let attempts = 0;
+        const maxAttempts = 10;
+        const checkInterval = setInterval(() => {
+            attempts++;
             if (window.userDataManager && window.userDataManager.getUserData) {
-                window.userDataManager.getUserData().then(userData => {
-                    if (userData) {
-                        // Обновляем данные из сервера
-                        if (userData.vapeCoins !== undefined) {
-                            vapeCoins = userData.vapeCoins || 0;
-                            localStorage.setItem('vapeCoins', vapeCoins.toString());
-                        }
-                        if (userData.stamps !== undefined) {
-                            const totalStamps = userData.stamps || 0;
-                            completedStampSets = Math.floor(totalStamps / 10);
-                            stamps = totalStamps % 10;
-                            localStorage.setItem('stamps', totalStamps.toString());
-                        }
-                        if (userData.favorites) {
-                            favorites = userData.favorites;
-                            localStorage.setItem('favorites', JSON.stringify(favorites));
-                        }
-                        if (userData.cart && Array.isArray(userData.cart) && userData.cart.length > 0) {
-                            cart = userData.cart;
-                            localStorage.setItem('cart', JSON.stringify(cart));
-                            updateCartBadge();
-                        }
-                    }
-                }).catch(err => {
-                    console.error('Ошибка синхронизации данных:', err);
-                });
+                clearInterval(checkInterval);
+                console.log('✅ userDataManager загружен, загружаем данные с сервера');
+                loadUserDataFromServer();
+            } else if (attempts >= maxAttempts) {
+                clearInterval(checkInterval);
+                console.warn('userDataManager не загрузился после', maxAttempts, 'попыток, используем localStorage');
+                loadUserDataFromLocalStorage();
             }
-        }, 1000);
+        }, 200);
     }
 }
 
@@ -7464,6 +7478,9 @@ function checkout() {
             vapeCoins -= totalCoinsNeeded;
             localStorage.setItem('vapeCoins', vapeCoins.toString());
             
+            // Синхронизируем с сервером
+            await syncVapeCoinsToServer(-totalCoinsNeeded, `Заказ: ${cart.length} товар(ов)`);
+            
             // Добавляем транзакцию в историю
             vapeCoinsHistory.unshift({
                 id: `vc_${Date.now()}`,
@@ -7474,6 +7491,13 @@ function checkout() {
                 orderId: orderId
             });
             localStorage.setItem('vapeCoinsHistory', JSON.stringify(vapeCoinsHistory));
+            
+            // Синхронизируем историю транзакций с сервером
+            if (window.userDataManager && window.userDataManager.updateUserData) {
+                window.userDataManager.updateUserData({ transactions: vapeCoinsHistory }).catch(err => {
+                    console.error('Ошибка синхронизации истории транзакций:', err);
+                });
+            }
         }
         // Определяем дату заказа: приоритет selectedDeliveryDay, иначе из deliveryTime, иначе московское время
         let orderDate;
@@ -7742,6 +7766,9 @@ function checkOrderStatus(orderId) {
                                     stamps = totalStampsValue % 10;
                                     partialItemsProgress = newPartialProgress;
                                     
+                                    // ВАЖНО: Синхронизируем штампы с сервером
+                                    await syncStampsToServer(totalStampsValue);
+                                    
                                     // Проверяем бонусы за штампы (5 и 10)
                                     // Проверяем бонус за 5 штампов (только если перешли порог 5)
                                     const oldStampsMod10 = oldTotalStamps % 10;
@@ -7980,6 +8007,9 @@ function checkOrderStatus(orderId) {
                                     completedStampSets = Math.floor(totalStampsValue / 10);
                                     stamps = totalStampsValue % 10;
                                     partialItemsProgress = newPartialProgress;
+                                    
+                                    // ВАЖНО: Синхронизируем штампы с сервером
+                                    await syncStampsToServer(totalStampsValue);
                                     
                                     // Проверяем бонусы за штампы (5 и 10)
                                     // Проверяем бонус за 5 штампов (только если перешли порог 5)
