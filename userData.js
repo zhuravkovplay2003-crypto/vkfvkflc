@@ -19,6 +19,11 @@ function getApiUrl() {
 
 // Получить ID пользователя
 function getUserId() {
+    // Проверяем, что мы в браузерном окружении (не на сервере)
+    if (typeof window === 'undefined') {
+        return null;
+    }
+    
     // Проверяем разные способы получения userId
     let userId = null;
     
@@ -64,16 +69,23 @@ function getUserId() {
     
     // Если ничего не сработало
     console.error('❌ Telegram user data not available');
-    console.error('window.tg:', window.tg);
-    console.error('window.tg?.initDataUnsafe:', window.tg?.initDataUnsafe);
-    console.error('window.tg?.initData:', window.tg?.initData);
-    console.error('window.Telegram:', window.Telegram);
+    if (typeof window !== 'undefined') {
+        console.error('window.tg:', window.tg);
+        console.error('window.tg?.initDataUnsafe:', window.tg?.initDataUnsafe);
+        console.error('window.tg?.initData:', window.tg?.initData);
+        console.error('window.Telegram:', window.Telegram);
+    }
     
     return null;
 }
 
 // Получить данные пользователя из Telegram (универсальная функция)
 function getTelegramUser() {
+    // Проверяем, что мы в браузерном окружении (не на сервере)
+    if (typeof window === 'undefined') {
+        return null;
+    }
+    
     // Пытаемся получить данные пользователя разными способами
     if (window.tg?.initDataUnsafe?.user) {
         return window.tg.initDataUnsafe.user;
