@@ -106,16 +106,45 @@ function saveOrders(orders) {
     }
 }
 
-// Загружаем менеджеров из файла
+// Загружаем менеджеров из БД (приоритет) или из файла (fallback)
 function loadManagers() {
+    try {
+        // Пытаемся загрузить из БД
+        const managersFromDB = db.getManagersStructure();
+        if (managersFromDB && Object.keys(managersFromDB).length > 0) {
+            console.log('✅ Менеджеры загружены из БД');
+            return managersFromDB;
+        }
+    } catch (error) {
+        console.error('Ошибка загрузки менеджеров из БД:', error);
+    }
+    
+    // Fallback: загружаем из файла (для совместимости)
     try {
         if (fs.existsSync(MANAGERS_FILE)) {
             const data = fs.readFileSync(MANAGERS_FILE, 'utf8');
-            return JSON.parse(data);
+            const managersFromFile = JSON.parse(data);
+            // Мигрируем менеджеров из файла в БД
+            if (managersFromFile && typeof managersFromFile === 'object') {
+                Object.keys(managersFromFile).forEach(city => {
+                    if (Array.isArray(managersFromFile[city])) {
+                        managersFromFile[city].forEach(telegramId => {
+                            try {
+                                db.addManager(telegramId, city);
+                            } catch (e) {
+                                console.error(`Ошибка миграции менеджера ${telegramId} для города ${city}:`, e);
+                            }
+                        });
+                    }
+                });
+                console.log('✅ Менеджеры мигрированы из файла в БД');
+                return db.getManagersStructure();
+            }
         }
     } catch (error) {
-        console.error('Error loading managers:', error);
+        console.error('Ошибка загрузки менеджеров из файла:', error);
     }
+    
     // Структура по умолчанию
     return {
         'mogilev': [],
@@ -124,12 +153,31 @@ function loadManagers() {
     };
 }
 
-// Сохраняем менеджеров в файл
+// Сохраняем менеджеров в БД
 function saveManagers(managers) {
     try {
-        fs.writeFileSync(MANAGERS_FILE, JSON.stringify(managers, null, 2));
+        // Сохраняем каждого менеджера в БД
+        Object.keys(managers).forEach(city => {
+            if (Array.isArray(managers[city])) {
+                managers[city].forEach(telegramId => {
+                    try {
+                        db.addManager(telegramId, city);
+                    } catch (e) {
+                        console.error(`Ошибка сохранения менеджера ${telegramId} для города ${city}:`, e);
+                    }
+                });
+            }
+        });
+        console.log('✅ Менеджеры сохранены в БД');
+        
+        // Также сохраняем в файл для совместимости
+        try {
+            fs.writeFileSync(MANAGERS_FILE, JSON.stringify(managers, null, 2));
+        } catch (fileError) {
+            console.warn('Не удалось сохранить менеджеров в файл (не критично):', fileError);
+        }
     } catch (error) {
-        console.error('Error saving managers:', error);
+        console.error('Ошибка сохранения менеджеров:', error);
     }
 }
 
@@ -219,18 +267,35 @@ async function notifyClient(order, status, message) {
 }
 
 function formatOrderForManager(order) {
-    const itemsText = order.items.map(item => {
-        let text = `  • ${item.name}`;
-        if (item.flavor) text += ` (${item.flavor})`;
-        if (item.strength) text += ` ${item.strength}`;
-        text += ` x${item.quantity}`;
-        if (item.paymentMethod === 'coins') {
-            text += ` = ${(item.vapeCoinsPrice * item.quantity).toFixed(1)} 🪙`;
-        } else {
-            text += ` = ${(item.price * item.quantity).toFixed(2)} BYN`;
+    // Форматируем список товаров с подробной информацией
+    const itemsText = order.items.map((item, index) => {
+        let text = `${index + 1}. <b>${item.name || 'Товар'}</b>`;
+        
+        // Добавляем информацию о параметрах товара
+        if (item.flavor) {
+            text += `\n   🍬 Вкус: ${item.flavor}`;
         }
+        if (item.strength) {
+            text += `\n   💪 Крепость: ${item.strength}`;
+        }
+        if (item.color) {
+            text += `\n   🎨 Цвет: ${item.color}`;
+        }
+        if (item.resistance) {
+            text += `\n   ⚡ Сопротивление: ${item.resistance}`;
+        }
+        
+        text += `\n   📦 Количество: ${item.quantity || 1} шт.`;
+        
+        // Показываем цену в зависимости от способа оплаты
+        if (item.paymentMethod === 'coins') {
+            text += `\n   💰 Цена: ${(item.vapeCoinsPrice * (item.quantity || 1)).toFixed(1)} 🪙 (коины)`;
+        } else {
+            text += `\n   💰 Цена: ${(item.price * (item.quantity || 1)).toFixed(2)} BYN`;
+        }
+        
         return text;
-    }).join('\n');
+    }).join('\n\n');
     
     const totalText = order.vapeCoinsSpent > 0 
         ? `${order.total.toFixed(2)} BYN + ${order.vapeCoinsSpent.toFixed(1)} 🪙`
@@ -316,6 +381,23 @@ app.patch('/api/user/:userId', (req, res) => {
         res.json({ success: true, message: 'User data updated' });
     } catch (error) {
         console.error('Error updating user data:', error);
+        res.status(500).json({ success: false, error: error.message });
+    }
+});
+
+// GET: Получить список всех пользователей (только для администраторов)
+app.get('/api/users', (req, res) => {
+    try {
+        // ВАЖНО: Добавьте проверку на администратора для безопасности
+        // const adminId = req.query.adminId;
+        // if (!adminId || !ADMIN_IDS.includes(adminId)) {
+        //     return res.status(403).json({ success: false, error: 'Access denied' });
+        // }
+        
+        const allUsers = db.getAllUsers();
+        res.json({ success: true, users: allUsers, count: allUsers.length });
+    } catch (error) {
+        console.error('Error getting all users:', error);
         res.status(500).json({ success: false, error: error.message });
     }
 });
@@ -441,6 +523,31 @@ app.post('/api/orders', (req, res) => {
         
         orders.push(order);
         saveOrders(orders);
+        
+        // ВАЖНО: Сохраняем заказ в БД пользователя
+        if (order.userId && order.userId !== 'unknown') {
+            try {
+                db.addOrder(order.userId, {
+                    id: order.id,
+                    date: order.date,
+                    createdAt: order.createdAt,
+                    status: 'pending',
+                    items: order.items,
+                    location: order.location,
+                    deliveryType: order.deliveryType,
+                    deliveryTime: order.deliveryTime,
+                    deliveryExactTime: order.deliveryExactTime,
+                    selectedDeliveryDay: order.selectedDeliveryDay,
+                    deliveryAddress: order.deliveryAddress,
+                    pickupLocation: order.pickupLocation,
+                    total: order.total,
+                    vapeCoinsSpent: order.vapeCoinsSpent || 0
+                });
+                console.log(`✅ Заказ ${order.id} сохранен в БД пользователя ${order.userId}`);
+            } catch (error) {
+                console.error('Ошибка сохранения заказа в БД пользователя:', error);
+            }
+        }
         
         // Определяем город и отправляем заказ менеджерам
         const city = getCityFromLocation(order.location);
@@ -738,6 +845,17 @@ bot.on('callback_query', async (ctx) => {
             order.confirmedAt = new Date().toISOString();
             
             saveOrders(orders);
+            
+            // ВАЖНО: Обновляем заказ в БД пользователя
+            if (order.userId && order.userId !== 'unknown') {
+                try {
+                    db.updateOrderStatus(order.userId, order.id, 'confirmed');
+                    console.log(`✅ Статус заказа ${order.id} обновлен в БД пользователя ${order.userId}`);
+                } catch (error) {
+                    console.error('Ошибка обновления статуса заказа в БД:', error);
+                }
+            }
+            
             console.log(`Order ${order.id} confirmed. Status: ${order.status}`);
             
             ctx.answerCbQuery('✅ Заказ подтвержден');
@@ -896,11 +1014,21 @@ bot.on('callback_query', async (ctx) => {
             // Формируем текст для обновления всех сообщений
             const moscowTime = getMoscowTime();
             const userInfo = order.userId ? `👤 Клиент ID: ${order.userId}${order.userUsername ? ` (@${order.userUsername})` : ''}` : '👤 Клиент ID: не указан';
+            // Формируем список товаров для уведомления менеджерам
+            const itemsListForManager = order.items.map((item, index) => {
+                let itemText = `${index + 1}. ${item.name || 'Товар'}`;
+                if (item.flavor) itemText += ` (${item.flavor})`;
+                if (item.strength) itemText += ` ${item.strength}`;
+                itemText += ` - ${item.quantity || 1} шт.`;
+                return itemText;
+            }).join('\n');
+            
             const transferMessage = `<b>📦 Заказ #${order.id.slice(-6)} передан клиенту</b>\n\n` +
+                `<b>Товары:</b>\n${itemsListForManager}\n\n` +
                 `${userInfo}\n` +
                 `Передал: ${ctx.from.first_name}${ctx.from.username ? ` (@${ctx.from.username})` : ''}\n` +
                 `Время: ${moscowTime.toLocaleString('ru-RU', { timeZone: 'Europe/Moscow' })}\n\n` +
-                `💰 Начислено Vape Coins: ${coinsToAdd} 🪙`;
+                `💰 Начислено Vape Coins: ${coinsToAdd.toFixed(1)} 🪙`;
             
             // Обновляем все сообщения для всех менеджеров
             // Только подтвердивший менеджер может управлять заказом
@@ -918,13 +1046,23 @@ bot.on('callback_query', async (ctx) => {
                 ? `Точка самовывоза: ${order.pickupLocation || order.location}`
                 : `Адрес доставки: ${order.deliveryAddress || order.location}`;
             
-            const coinsMessage = coinsToAdd > 0 ? `💰 Вам начислено ${coinsToAdd.toFixed(1)} Vape Coins за заказ!\n\n` : '';
+            // Формируем список товаров для уведомления клиенту
+            const itemsList = order.items.map((item, index) => {
+                let itemText = `${index + 1}. ${item.name || 'Товар'}`;
+                if (item.flavor) itemText += ` (${item.flavor})`;
+                if (item.strength) itemText += ` ${item.strength}`;
+                itemText += ` - ${item.quantity || 1} шт.`;
+                return itemText;
+            }).join('\n');
+            
+            const coinsMessage = coinsToAdd > 0 ? `\n💰 Вам начислено ${coinsToAdd.toFixed(1)} Vape Coins за заказ!\n` : '';
             const clientNotification = `📦 <b>Ваш заказ #${order.id.slice(-6)} передан!</b>\n\n` +
+                `<b>Товары:</b>\n${itemsList}\n\n` +
                 `📅 Дата: ${deliveryDateText}\n` +
                 `⏰ Время: ${deliveryTimeText}${exactTimeText}\n` +
-                `📍 ${locationText}\n\n` +
+                `📍 ${locationText}` +
                 coinsMessage +
-                `Спасибо за покупку! 🎉`;
+                `\n\nСпасибо за покупку! 🎉`;
             
             await notifyClient(order, 'transferred', clientNotification);
         } else if (action === 'details') {
