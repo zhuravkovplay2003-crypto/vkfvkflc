@@ -1184,6 +1184,20 @@ function init() {
                     localStorage.setItem('vapeCoinsHistory', JSON.stringify(vapeCoinsHistory));
                     console.log('✅ История транзакций загружена с сервера');
                 }
+                
+                // ВАЖНО: Загружаем заказы с сервера для синхронизации между устройствами
+                if (userData.orders && Array.isArray(userData.orders)) {
+                    // Объединяем заказы с сервера с локальными (приоритет серверным)
+                    const serverOrderIds = new Set(userData.orders.map(o => o.id));
+                    const localOrdersNotOnServer = orders.filter(o => !serverOrderIds.has(o.id));
+                    orders = [...userData.orders, ...localOrdersNotOnServer].sort((a, b) => {
+                        const dateA = new Date(a.createdAt || a.date || 0);
+                        const dateB = new Date(b.createdAt || b.date || 0);
+                        return dateB - dateA; // Новые заказы первыми
+                    });
+                    localStorage.setItem('orders', JSON.stringify(orders));
+                    console.log('✅ Заказы загружены с сервера:', orders.length, 'заказов');
+                }
             } else {
                 console.warn('Данные пользователя не найдены на сервере, используем localStorage');
                 loadUserDataFromLocalStorage();
@@ -4451,6 +4465,7 @@ function addToCart(productId, strength = null, flavor = null) {
     }
     
     // ВАЖНО: Проверяем общее количество позиций одного товара (все варианты вкуса/крепости)
+    // Делаем это ДО анимации, чтобы не тратить время на анимацию если товар не добавится
     const totalQuantityOfProduct = cart
         .filter(item => item.id === productId)
         .reduce((sum, item) => sum + (item.quantity || 1), 0);
@@ -4470,9 +4485,11 @@ function addToCart(productId, strength = null, flavor = null) {
         updateCartBadge();
         showToast('Товар добавлен в корзину', 'success', 2000);
         
-        // Если пользователь на странице корзины, обновляем её сразу
+        // Если пользователь на странице корзины, обновляем итого сразу
         if (currentPage === 'cart') {
-            showCart();
+            // Обновляем количество товаров и итого без полной перерисовки
+            updateCartItemsDisplay();
+            updateCartTotals();
         }
         
         // Снимаем блокировку после небольшой задержки
@@ -5406,7 +5423,7 @@ function generateTimeSlots() {
     // Только для самовывоза проверяем занятость времени
     if (deliveryType === 'selfPickup' && selectedPickupLocation) {
         const currentPickupLocation = encodeURIComponent(selectedPickupLocation);
-        fetch(`${SERVER_URL}/api/orders/booked-times?date=${targetDay}&pickupLocation=${currentPickupLocation}`)
+        fetch(`${SERVER_URL}/api/orders/booked-times?date=${targetDay}&location=${currentPickupLocation}`)
             .then(response => response.json())
             .then(data => {
                 if (data.success && Array.isArray(data.bookedTimes)) {
@@ -6107,7 +6124,7 @@ function showExactTimeSelectionModal(timeSlot) {
     // Только для самовывоза проверяем занятость времени
     if (deliveryType === 'selfPickup' && selectedPickupLocation) {
         const currentPickupLocation = encodeURIComponent(selectedPickupLocation);
-        fetch(`${SERVER_URL}/api/orders/booked-times?date=${dateKey}&pickupLocation=${currentPickupLocation}`)
+        fetch(`${SERVER_URL}/api/orders/booked-times?date=${dateKey}&location=${currentPickupLocation}`)
             .then(response => response.json())
             .then(data => {
                 if (data.success && Array.isArray(data.bookedTimes)) {
@@ -7312,15 +7329,16 @@ function updateCartTotals() {
     if (!pageContent) return;
     
     // Рассчитываем итоги
+    const totalItemsCount = cart.reduce((sum, item) => sum + (item.quantity || 1), 0);
     const totalMoney = cart.reduce((sum, item) => {
         if (item.paymentMethod === 'coins') return sum;
-        return sum + (item.price * item.quantity);
+        return sum + (item.price * (item.quantity || 1));
     }, 0);
     
     const totalCoins = cart.reduce((sum, item) => {
         if (item.paymentMethod === 'money') return sum;
-        const coinsPrice = calculateVapeCoinsPrice(item.price, null);
-        return sum + (coinsPrice * item.quantity);
+        const coinsPrice = item.vapeCoinsPrice || calculateVapeCoinsPrice(item.price, null);
+        return sum + (coinsPrice * (item.quantity || 1));
     }, 0);
     
     // Ищем все элементы с итоговой суммой
@@ -8219,6 +8237,16 @@ function checkOrderStatus(orderId) {
                                             orderId: orderId
                                         });
                                         localStorage.setItem('vapeCoinsHistory', JSON.stringify(vapeCoinsHistory));
+                                        
+                                        // ВАЖНО: Синхронизируем коины и транзакции с сервером
+                                        if (window.userDataManager && window.userDataManager.updateUserData) {
+                                            window.userDataManager.updateUserData({
+                                                vapeCoins: vapeCoins,
+                                                transactions: vapeCoinsHistory
+                                            }).catch(err => {
+                                                console.error('Ошибка синхронизации бонуса за 5 штампов:', err);
+                                            });
+                                        }
                                     }
                                     
                                     // Проверяем бонус за 10 штампов
@@ -8257,6 +8285,16 @@ function checkOrderStatus(orderId) {
                                             orderId: orderId
                                         });
                                         localStorage.setItem('vapeCoinsHistory', JSON.stringify(vapeCoinsHistory));
+                                        
+                                        // ВАЖНО: Синхронизируем коины и транзакции с сервером
+                                        if (window.userDataManager && window.userDataManager.updateUserData) {
+                                            window.userDataManager.updateUserData({
+                                                vapeCoins: vapeCoins,
+                                                transactions: vapeCoinsHistory
+                                            }).catch(err => {
+                                                console.error('Ошибка синхронизации бонуса за 10 штампов:', err);
+                                            });
+                                        }
                                     }
                                     
                                     // Обновляем bonusCoins для уведомления
