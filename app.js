@@ -47,6 +47,128 @@ let backButtonPressCount = 0; // Счетчик нажатий кнопки "Н�
 // const SERVER_URL = 'http://localhost:3000'; // Для разработки
 const SERVER_URL = 'https://vkfvkflc.onrender.com'; // Render.com сервер
 
+// Функция для синхронизации корзины с сервером
+async function syncCartToServer() {
+    if (!window.userDataManager || !window.userDataManager.syncCart) {
+        // Если userDataManager еще не загружен, просто сохраняем локально
+        localStorage.setItem('cart', JSON.stringify(cart));
+        return;
+    }
+    
+    try {
+        // Синхронизируем с сервером через userDataManager
+        await window.userDataManager.syncCart(cart);
+    } catch (error) {
+        console.error('Ошибка при синхронизации корзины:', error);
+        // В случае ошибки сохраняем локально
+        localStorage.setItem('cart', JSON.stringify(cart));
+    }
+}
+
+// Функция для синхронизации коинов с сервером
+async function syncVapeCoinsToServer(amount, reason = '') {
+    if (window.userDataManager && window.userDataManager.addVapeCoins) {
+        try {
+            const newBalance = await window.userDataManager.addVapeCoins(amount, reason);
+            vapeCoins = newBalance;
+            localStorage.setItem('vapeCoins', vapeCoins.toString());
+            return newBalance;
+        } catch (error) {
+            console.error('Ошибка синхронизации коинов:', error);
+            // Fallback на локальное сохранение
+            vapeCoins += amount;
+            localStorage.setItem('vapeCoins', vapeCoins.toString());
+            return vapeCoins;
+        }
+    } else {
+        // Fallback на локальное сохранение
+        vapeCoins += amount;
+        localStorage.setItem('vapeCoins', vapeCoins.toString());
+        return vapeCoins;
+    }
+}
+
+// Функция для синхронизации штампов с сервером
+async function syncStampsToServer(newStamps) {
+    if (window.userDataManager && window.userDataManager.getUserId) {
+        const userId = window.userDataManager.getUserId();
+        if (userId) {
+            try {
+                const apiUrl = window.location.origin;
+                await fetch(`${apiUrl}/api/user/${userId}/stamps`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ stamps: newStamps })
+                });
+                stamps = newStamps % 10;
+                completedStampSets = Math.floor(newStamps / 10);
+                localStorage.setItem('stamps', newStamps.toString());
+            } catch (error) {
+                console.error('Ошибка синхронизации штампов:', error);
+                // Fallback на локальное сохранение
+                stamps = newStamps % 10;
+                completedStampSets = Math.floor(newStamps / 10);
+                localStorage.setItem('stamps', newStamps.toString());
+            }
+        }
+    } else {
+        // Fallback на локальное сохранение
+        stamps = newStamps % 10;
+        completedStampSets = Math.floor(newStamps / 10);
+        localStorage.setItem('stamps', newStamps.toString());
+    }
+}
+
+// Функция для загрузки корзины с сервера при старте
+async function loadCartFromServer() {
+    if (!window.userDataManager || !window.userDataManager.getUserData) {
+        // Если userDataManager еще не загружен, загружаем из localStorage
+        const savedCart = localStorage.getItem('cart');
+        if (savedCart) {
+            try {
+                cart = JSON.parse(savedCart);
+            } catch (e) {
+                cart = [];
+            }
+        }
+        return;
+    }
+    
+    try {
+        const userData = await window.userDataManager.getUserData();
+        if (userData && userData.cart) {
+            cart = userData.cart;
+            localStorage.setItem('cart', JSON.stringify(cart));
+            updateCartBadge();
+        } else {
+            // Если данных нет, загружаем из localStorage
+            const savedCart = localStorage.getItem('cart');
+            if (savedCart) {
+                try {
+                    cart = JSON.parse(savedCart);
+                    // Синхронизируем локальную корзину на сервер
+                    await syncCartToServer();
+                } catch (e) {
+                    cart = [];
+                }
+            }
+        }
+    } catch (error) {
+        console.error('Ошибка при загрузке корзины с сервера:', error);
+        // В случае ошибки загружаем из localStorage
+        const savedCart = localStorage.getItem('cart');
+        if (savedCart) {
+            try {
+                cart = JSON.parse(savedCart);
+            } catch (e) {
+                cart = [];
+            }
+        }
+    }
+}
+
 // Получить цвета в зависимости от темы
 function getThemeColors() {
     if (darkMode) {
@@ -745,15 +867,22 @@ function init() {
         showAgeVerification();
     }, 2000); // Показываем splash 2 секунды
     
-    // Загружаем корзину и избранное
-    const savedCart = localStorage.getItem('cart');
-    if (savedCart) {
-        try {
-            cart = JSON.parse(savedCart);
-        } catch (e) {
-            cart = [];
+    // Загружаем корзину с сервера (или из localStorage, если сервер недоступен)
+    loadCartFromServer().then(() => {
+        updateCartBadge();
+    }).catch(err => {
+        console.error('Ошибка при загрузке корзины:', err);
+        // В случае ошибки загружаем из localStorage
+        const savedCart = localStorage.getItem('cart');
+        if (savedCart) {
+            try {
+                cart = JSON.parse(savedCart);
+                updateCartBadge();
+            } catch (e) {
+                cart = [];
+            }
         }
-    }
+    });
     
     const savedFavorites = localStorage.getItem('favorites');
     if (savedFavorites) {
@@ -895,6 +1024,49 @@ function init() {
         }
     }
     
+    // Загружаем данные пользователя с сервера (коины, штампы и т.д.)
+    if (window.userDataManager && window.userDataManager.getUserData) {
+        window.userDataManager.getUserData().then(userData => {
+            if (userData) {
+                // Загружаем коины
+                if (userData.vapeCoins !== undefined) {
+                    vapeCoins = userData.vapeCoins || 0;
+                    localStorage.setItem('vapeCoins', vapeCoins.toString());
+                }
+                
+                // Загружаем штампы
+                if (userData.stamps !== undefined) {
+                    const totalStamps = userData.stamps || 0;
+                    completedStampSets = Math.floor(totalStamps / 10);
+                    stamps = totalStamps % 10;
+                    localStorage.setItem('stamps', totalStamps.toString());
+                }
+                
+                // Загружаем избранное
+                if (userData.favorites) {
+                    favorites = userData.favorites;
+                    localStorage.setItem('favorites', JSON.stringify(favorites));
+                }
+                
+                // Загружаем историю транзакций
+                if (userData.transactions) {
+                    vapeCoinsHistory = userData.transactions;
+                    localStorage.setItem('vapeCoinsHistory', JSON.stringify(vapeCoinsHistory));
+                }
+            }
+        }).catch(err => {
+            console.error('Ошибка загрузки данных пользователя:', err);
+            // Fallback на localStorage
+            loadUserDataFromLocalStorage();
+        });
+    } else {
+        // Если userDataManager еще не загружен, загружаем из localStorage
+        loadUserDataFromLocalStorage();
+    }
+}
+
+// Функция для загрузки данных из localStorage (fallback)
+function loadUserDataFromLocalStorage() {
     // Загружаем штампы
     const savedStamps = localStorage.getItem('stamps');
     if (savedStamps) {
@@ -4046,6 +4218,7 @@ function addToCart(productId, strength = null, flavor = null) {
         // Если товар уже есть, увеличиваем количество
         cart[existingItemIndex].quantity += 1;
         localStorage.setItem('cart', JSON.stringify(cart));
+        syncCartToServer(); // Синхронизируем с сервером
         updateCartBadge();
         showToast('Количество товара увеличено', 'success', 2000);
         
@@ -4106,6 +4279,7 @@ function addToCart(productId, strength = null, flavor = null) {
     animateAddToCart(product, startElement, () => {
         cart.push(cartItem);
         localStorage.setItem('cart', JSON.stringify(cart));
+        syncCartToServer(); // Синхронизируем с сервером
         updateCartBadge();
         showToast('Товар добавлен в корзину', 'success', 2000);
         
@@ -6587,6 +6761,7 @@ function changeQuantity(index, change) {
     }
     
     localStorage.setItem('cart', JSON.stringify(cart));
+    syncCartToServer(); // Синхронизируем с сервером
     updateCartBadge();
     
     // Сохраняем позицию скролла перед обновлением корзины
@@ -6747,6 +6922,7 @@ function showRemoveLastItemConfirmation(index) {
 function removeFromCart(index) {
     cart.splice(index, 1);
     localStorage.setItem('cart', JSON.stringify(cart));
+    syncCartToServer(); // Синхронизируем с сервером
     updateCartBadge();
     showCart();
 }
@@ -6768,6 +6944,7 @@ function setPaymentMethod(index, method) {
     
     cart[index].paymentMethod = method;
     localStorage.setItem('cart', JSON.stringify(cart));
+    syncCartToServer(); // Синхронизируем с сервером
     
     // Находим кнопки способа оплаты для этого товара и обновляем их плавно
     const pageContent = document.getElementById('page-content');
@@ -7369,6 +7546,7 @@ function checkout() {
         // Очищаем корзину
         cart = [];
         localStorage.setItem('cart', JSON.stringify(cart));
+        syncCartToServer(); // Синхронизируем с сервером
         updateCartBadge();
         
         // Сбрасываем время доставки/самовывоза для следующего заказа
@@ -7464,11 +7642,10 @@ function checkOrderStatus(orderId) {
                         // Важно: проверяем даже если статус уже был transferred (для первого заказа)
                         if (!coinsAlreadyAdded && coinsEarned > 0) {
                             console.log('Начисляем коины за заказ (первая проверка):', orderId, 'Сумма:', coinsEarned, 'Статус:', data.status, 'Локальный статус:', order.status);
-                            const savedCoins = localStorage.getItem('vapeCoins');
-                            let currentCoins = savedCoins ? parseFloat(savedCoins) : 0;
-                            currentCoins += coinsEarned;
-                            localStorage.setItem('vapeCoins', currentCoins.toString());
-                            localStorage.setItem(`coins_added_${orderId}`, 'true');
+                            // Синхронизируем коины с сервером
+                            syncVapeCoinsToServer(coinsEarned, `Заказ #${orderId.slice(-6)}`).then(() => {
+                                localStorage.setItem(`coins_added_${orderId}`, 'true');
+                            });
                             
                             const savedHistory = localStorage.getItem('vapeCoinsHistory');
                             let history = savedHistory ? JSON.parse(savedHistory) : [];
@@ -10883,6 +11060,7 @@ function clearCart() {
             if (btnId === 'confirm') {
                 cart = [];
                 localStorage.setItem('cart', JSON.stringify(cart));
+                syncCartToServer(); // Синхронизируем с сервером
                 updateCartBadge();
                 showToast('Корзина очищена', 'success', 3000);
                 showSettings();
@@ -10892,6 +11070,7 @@ function clearCart() {
         if (confirm('Вы уверены, что хотите очистить корзину?')) {
             cart = [];
             localStorage.setItem('cart', JSON.stringify(cart));
+            syncCartToServer(); // Синхронизируем с сервером
             updateCartBadge();
             showToast('Корзина очищена', 'success', 3000);
             showSettings();
@@ -12129,6 +12308,13 @@ function toggleFavorite(productId, flavor = null, strength = null) {
         // Удаляем из избранного
         favorites.splice(existingIndex, 1);
         
+        // Синхронизируем с сервером через userDataManager
+        if (window.userDataManager && window.userDataManager.toggleFavorite) {
+            window.userDataManager.toggleFavorite(productId).catch(err => {
+                console.error('Ошибка синхронизации избранного:', err);
+            });
+        }
+        
         // Красивая анимация удаления сердечка
         if (favoriteButton && heartIcon) {
             // Шаг 1: Нажатие - уменьшаем
@@ -12174,6 +12360,13 @@ function toggleFavorite(productId, flavor = null, strength = null) {
             flavor: currentFlavor,
             strength: currentStrength
         });
+        
+        // Синхронизируем с сервером через userDataManager
+        if (window.userDataManager && window.userDataManager.toggleFavorite) {
+            window.userDataManager.toggleFavorite(productId).catch(err => {
+                console.error('Ошибка синхронизации избранного:', err);
+            });
+        }
         
         // Красивая анимация заполнения сердечка с эффектом частиц
         if (favoriteButton && heartIcon) {
