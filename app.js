@@ -578,10 +578,12 @@ function updatePickupLocationDisplay() {
     const locationText = document.getElementById('pickup-location-text');
     if (locationText) {
         if (selectedPickupLocation) {
+            // ВАЖНО: Форматируем адрес перед отображением
+            const formattedLocation = formatLocation(selectedPickupLocation);
             // Обрезаем текст если слишком длинный, но добавляем отступ справа
-            const shortLocation = selectedPickupLocation.length > 20 
-                ? selectedPickupLocation.substring(0, 17) + '...' 
-                : selectedPickupLocation;
+            const shortLocation = formattedLocation.length > 20 
+                ? formattedLocation.substring(0, 17) + '...' 
+                : formattedLocation;
             // Убираем эмодзи и добавляем правильные отступы
             locationText.textContent = shortLocation;
             locationText.style.paddingRight = '8px';
@@ -5172,12 +5174,12 @@ function selectPickupLocation() {
                             const itemName = item.flavor ? `${item.name}, ${item.flavor}` : item.name;
                             unavailableItems.push({ name: itemName, reason: 'На данном адресе этого товара нет' });
                         } else {
-                            // ВАЖНО: Если товар есть, но количество больше доступного - сбрасываем до минимума (1 или доступное количество)
-                            if (item.quantity > maxQuantity) {
+                            // ВАЖНО: При изменении адреса ВСЕГДА сбрасываем количество до 1
+                            if (item.quantity > 1) {
                                 const oldQuantity = item.quantity;
-                                item.quantity = Math.max(1, maxQuantity); // Минимум 1, но не больше доступного
+                                item.quantity = 1; // Всегда сбрасываем до 1
                                 quantityChanged = true;
-                                console.log(`Количество товара "${item.name}" сброшено с ${oldQuantity} до ${item.quantity} (доступно: ${maxQuantity})`);
+                                console.log(`Количество товара "${item.name}" сброшено с ${oldQuantity} до 1`);
                             }
                         }
                     });
@@ -8164,6 +8166,33 @@ function checkout() {
                     } catch (error) {
                         console.error('Ошибка сохранения заказа в БД:', error);
                     }
+                }
+                
+                // ВАЖНО: Обновляем Google таблицу - вычитаем проданное количество и записываем в графу "продано шт"
+                try {
+                    const updateResponse = await fetch(`${SERVER_URL}/api/orders/update-stock`, {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify({
+                            orderId: result.orderId,
+                            items: cart.map(item => ({
+                                productId: item.id || item.productId,
+                                flavor: item.flavor || null,
+                                quantity: item.quantity,
+                                location: deliveryType === 'selfPickup' ? selectedPickupLocation : null
+                            }))
+                        })
+                    });
+                    
+                    if (updateResponse.ok) {
+                        console.log('✅ Google таблица обновлена');
+                    } else {
+                        console.error('Ошибка обновления Google таблицы:', await updateResponse.text());
+                    }
+                } catch (error) {
+                    console.error('Ошибка обновления Google таблицы:', error);
                 }
                 
                 // Показываем уведомление о перемещении в заказы
