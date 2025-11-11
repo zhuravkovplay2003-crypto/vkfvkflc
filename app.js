@@ -7915,12 +7915,22 @@ function checkOrderStatus(orderId) {
                         localStorage.setItem('orders', JSON.stringify(orders));
                         
                         // Начисляем коины только если еще не начислены
-                        // ВАЖНО: Устанавливаем флаг ДО начисления, чтобы предотвратить двойное начисление
-                        if (!coinsAlreadyAdded && coinsEarned > 0) {
+                        // ВАЖНО: Проверяем флаг ЕЩЕ РАЗ перед начислением (на случай если он изменился)
+                        const coinsAlreadyAddedCheck = localStorage.getItem(`coins_added_${orderId}`);
+                        if (!coinsAlreadyAddedCheck && coinsEarned > 0) {
                             console.log('Начисляем коины за заказ (первая проверка):', orderId, 'Сумма:', coinsEarned, 'Статус:', data.status, 'Локальный статус:', order.status);
                             
-                            // ВАЖНО: Устанавливаем флаг СРАЗУ, чтобы предотвратить повторное начисление
+                            // ВАЖНО: Устанавливаем флаг СРАЗУ ПЕРЕД начислением, чтобы предотвратить повторное начисление
                             localStorage.setItem(`coins_added_${orderId}`, 'true');
+                            
+                            // Загружаем актуальный баланс коинов
+                            const savedCoins = localStorage.getItem('vapeCoins');
+                            if (savedCoins) {
+                                vapeCoins = parseFloat(savedCoins) || 0;
+                            }
+                            
+                            vapeCoins += coinsEarned;
+                            localStorage.setItem('vapeCoins', vapeCoins.toString());
                             
                             // Синхронизируем коины с сервером
                             syncVapeCoinsToServer(coinsEarned, `Заказ #${orderId.slice(-6)}`).catch(err => {
@@ -8193,7 +8203,7 @@ function checkOrderStatus(orderId) {
                             // Сохраняем coinsEarned в заказе для отображения
                             order.vapeCoinsEarned = coinsEarned;
                             
-                            // Проверяем, не начислены ли уже коины за этот заказ
+                            // ВАЖНО: Проверяем флаг ЕЩЕ РАЗ перед начислением (на случай если он изменился)
                             const coinsAlreadyAdded = localStorage.getItem(`coins_added_${orderId}`);
                             
                             // ВАЖНО: Начисляем коины только если еще не начислены
@@ -8201,7 +8211,7 @@ function checkOrderStatus(orderId) {
                             if (!coinsAlreadyAdded && coinsEarned > 0) {
                                 console.log('Начисляем коины за заказ (setInterval):', orderId, 'Сумма:', coinsEarned);
                                 
-                                // ВАЖНО: Устанавливаем флаг СРАЗУ, чтобы предотвратить повторное начисление
+                                // ВАЖНО: Устанавливаем флаг СРАЗУ ПЕРЕД начислением, чтобы предотвратить повторное начисление
                                 localStorage.setItem(`coins_added_${orderId}`, 'true');
                                 
                                 // Загружаем актуальный баланс коинов
@@ -10034,6 +10044,22 @@ function showOrders() {
                 <span style="font-size: 18px; font-weight: 700;">Мои заказы</span>
                 ${filteredOrders.length > 0 ? `<span style="font-size: 14px; font-weight: 500; color: ${colors.textSecondary};">(${filteredOrders.length})</span>` : ''}
             </div>
+        </div>
+        
+        <!-- Вкладки для заказов -->
+        <div style="display: flex; gap: 8px; margin-bottom: 20px; background: ${colors.bgSecondary || '#f5f5f5'}; padding: 4px; border-radius: 12px;">
+            <button onclick="switchOrdersTab('active')" style="flex: 1; padding: 12px 16px; border: none; border-radius: 8px; 
+                background: ${ordersTab === 'active' ? 'linear-gradient(135deg, #007AFF 0%, #0056b3 100%)' : 'transparent'}; 
+                color: ${ordersTab === 'active' ? 'white' : colors.text}; font-size: 14px; font-weight: 600; cursor: pointer; 
+                transition: all 0.3s; box-shadow: ${ordersTab === 'active' ? '0 2px 8px rgba(0,122,255,0.3)' : 'none'};">
+                Активные и завершенные
+            </button>
+            <button onclick="switchOrdersTab('cancelled')" style="flex: 1; padding: 12px 16px; border: none; border-radius: 8px; 
+                background: ${ordersTab === 'cancelled' ? 'linear-gradient(135deg, #007AFF 0%, #0056b3 100%)' : 'transparent'}; 
+                color: ${ordersTab === 'cancelled' ? 'white' : colors.text}; font-size: 14px; font-weight: 600; cursor: pointer; 
+                transition: all 0.3s; box-shadow: ${ordersTab === 'cancelled' ? '0 2px 8px rgba(0,122,255,0.3)' : 'none'};">
+                Отмененные
+            </button>
         </div>
         
         <!-- Список заказов -->
