@@ -2,12 +2,17 @@
 
 // Получить URL API сервера
 function getApiUrl() {
+    // ВАЖНО: Используем правильный URL сервера (Render.com)
     // Если есть переменная окружения или настройка, используем её
     if (window.API_URL) {
         return window.API_URL;
     }
-    // Иначе используем текущий домен
-    return window.location.origin;
+    // Используем URL сервера из app.js (если определен)
+    if (window.SERVER_URL) {
+        return window.SERVER_URL;
+    }
+    // По умолчанию используем Render.com сервер
+    return 'https://vkfvkflc.onrender.com';
 }
 
 // Получить ID пользователя
@@ -103,10 +108,14 @@ async function saveUserDataToServer(userData) {
 // Обновить данные пользователя на сервере (частичное обновление)
 async function updateUserDataOnServer(updates) {
     const userId = getUserId();
-    if (!userId || !updates) return false;
+    if (!userId || !updates) {
+        console.error('❌ updateUserDataOnServer: userId или updates отсутствуют', { userId, updates });
+        return false;
+    }
     
     try {
         const apiUrl = getApiUrl();
+        console.log('📡 Отправляем обновление на сервер:', `${apiUrl}/api/user/${userId}`, updates);
         const response = await fetch(`${apiUrl}/api/user/${userId}`, {
             method: 'PATCH',
             headers: {
@@ -117,10 +126,14 @@ async function updateUserDataOnServer(updates) {
         
         if (response.ok) {
             const data = await response.json();
+            console.log('✅ Данные обновлены на сервере:', data);
             return data.success;
+        } else {
+            const errorText = await response.text();
+            console.error('❌ Ошибка ответа сервера:', response.status, errorText);
         }
     } catch (error) {
-        console.error('Ошибка при обновлении данных на сервере:', error);
+        console.error('❌ Ошибка при обновлении данных на сервере:', error);
     }
     return false;
 }
@@ -128,39 +141,53 @@ async function updateUserDataOnServer(updates) {
 // Получить данные пользователя (с синхронизацией с сервером)
 async function getUserData() {
     const userId = getUserId();
-    if (!userId) return null;
+    if (!userId) {
+        console.error('❌ userId не определен!');
+        return null;
+    }
     
+    console.log('🔍 Загружаем данные пользователя, userId:', userId);
     const storageKey = `user_${userId}`;
     const defaultData = getDefaultData(userId);
     
     // Сначала пытаемся загрузить с сервера
     try {
+        console.log('📡 Запрос данных с сервера для userId:', userId);
         const serverData = await loadUserDataFromServer(userId);
         
         if (serverData) {
+            console.log('✅ Данные получены с сервера:', serverData);
             // Сохраняем в localStorage как кеш
             localStorage.setItem(storageKey, JSON.stringify(serverData));
             return serverData;
         } else {
+            console.log('⚠️ Пользователь не найден на сервере, создаем нового');
             // Пользователь не найден на сервере - создаем нового
             // Сохраняем на сервер
-            await saveUserDataToServer(defaultData);
+            const saved = await saveUserDataToServer(defaultData);
+            if (saved) {
+                console.log('✅ Новый пользователь создан на сервере');
+            } else {
+                console.error('❌ Ошибка создания пользователя на сервере');
+            }
             localStorage.setItem(storageKey, JSON.stringify(defaultData));
             return defaultData;
         }
     } catch (error) {
-        console.error('Ошибка при синхронизации с сервером, используем локальные данные:', error);
+        console.error('❌ Ошибка при синхронизации с сервером:', error);
         // Если сервер недоступен, используем локальные данные
         try {
             const savedData = localStorage.getItem(storageKey);
             if (savedData) {
                 const parsedData = JSON.parse(savedData);
                 parsedData.lastActive = new Date().toISOString();
+                console.log('📦 Используем локальные данные из localStorage');
                 return parsedData;
             }
         } catch (e) {
-            console.error('Ошибка при чтении локальных данных:', e);
+            console.error('❌ Ошибка при чтении локальных данных:', e);
         }
+        console.log('📦 Используем данные по умолчанию');
         return defaultData;
     }
 }
@@ -210,7 +237,13 @@ function saveUserData(userData) {
 // Обновить данные пользователя (с синхронизацией на сервер)
 async function updateUserData(updates) {
     const userData = await getUserData();
-    if (!userData) return null;
+    if (!userData) {
+        console.error('❌ Не удалось получить данные пользователя для обновления');
+        return null;
+    }
+    
+    const userId = userData.id;
+    console.log('💾 Обновляем данные пользователя, userId:', userId, 'updates:', updates);
     
     const updatedData = { 
         ...userData, 
@@ -219,17 +252,25 @@ async function updateUserData(updates) {
     };
     
     // Сохраняем локально
-    const storageKey = `user_${userData.id}`;
+    const storageKey = `user_${userId}`;
     try {
         localStorage.setItem(storageKey, JSON.stringify(updatedData));
+        console.log('✅ Данные сохранены в localStorage');
     } catch (e) {
-        console.error('Ошибка при сохранении в localStorage:', e);
+        console.error('❌ Ошибка при сохранении в localStorage:', e);
     }
     
-    // Синхронизируем с сервером (в фоне)
-    updateUserDataOnServer(updates).catch(err => {
-        console.error('Ошибка при синхронизации на сервер:', err);
-    });
+    // Синхронизируем с сервером (в фоне, но ждем результат)
+    try {
+        const success = await updateUserDataOnServer(updates);
+        if (success) {
+            console.log('✅ Данные синхронизированы с сервером');
+        } else {
+            console.error('❌ Ошибка синхронизации с сервером');
+        }
+    } catch (err) {
+        console.error('❌ Ошибка при синхронизации на сервер:', err);
+    }
     
     return updatedData;
 }
@@ -397,7 +438,12 @@ async function updateUserSettings(newSettings) {
 // Функция для синхронизации корзины с сервером
 async function syncCart(cart) {
     const userId = getUserId();
-    if (!userId) return false;
+    if (!userId) {
+        console.error('❌ syncCart: userId не определен');
+        return false;
+    }
+    
+    console.log('🛒 Синхронизируем корзину с сервером, userId:', userId, 'cart:', cart);
     
     // Сохраняем локально
     const userData = getUserDataSync();
@@ -410,6 +456,7 @@ async function syncCart(cart) {
     // Синхронизируем с сервером
     try {
         const apiUrl = getApiUrl();
+        console.log('📡 Отправляем корзину на сервер:', `${apiUrl}/api/user/${userId}/cart`);
         const response = await fetch(`${apiUrl}/api/user/${userId}/cart`, {
             method: 'POST',
             headers: {
@@ -417,9 +464,17 @@ async function syncCart(cart) {
             },
             body: JSON.stringify({ cart })
         });
-        return response.ok;
+        
+        if (response.ok) {
+            console.log('✅ Корзина синхронизирована с сервером');
+            return true;
+        } else {
+            const errorText = await response.text();
+            console.error('❌ Ошибка синхронизации корзины:', response.status, errorText);
+            return false;
+        }
     } catch (error) {
-        console.error('Ошибка при синхронизации корзины:', error);
+        console.error('❌ Ошибка при синхронизации корзины:', error);
         return false;
     }
 }
