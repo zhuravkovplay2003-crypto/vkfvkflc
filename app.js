@@ -834,15 +834,16 @@ function showDebugInfo() {
     let userId = null;
     let userIdSource = '';
     
-    if (window.tg?.initDataUnsafe?.user?.id) {
+    // ВАЖНО: Используем window.Telegram.WebApp, а не window.tg
+    if (window.Telegram?.WebApp?.initDataUnsafe?.user?.id) {
+        userId = window.Telegram.WebApp.initDataUnsafe.user.id.toString();
+        userIdSource = 'window.Telegram.WebApp.initDataUnsafe.user.id';
+    } else if (window.tg?.initDataUnsafe?.user?.id) {
         userId = window.tg.initDataUnsafe.user.id.toString();
         userIdSource = 'window.tg.initDataUnsafe.user.id';
     } else if (window.tg?.initData?.user?.id) {
         userId = window.tg.initData.user.id.toString();
         userIdSource = 'window.tg.initData.user.id';
-    } else if (window.Telegram?.WebApp?.initDataUnsafe?.user?.id) {
-        userId = window.Telegram.WebApp.initDataUnsafe.user.id.toString();
-        userIdSource = 'window.Telegram.WebApp.initDataUnsafe.user.id';
     }
     
     const userDataManagerExists = typeof window.userDataManager !== 'undefined';
@@ -853,12 +854,13 @@ function showDebugInfo() {
     
     // Проверяем Telegram Web App
     info += `📱 Telegram Web App:\n`;
-    info += `  window.tg: ${typeof window.tg !== 'undefined' ? '✅' : '❌'}\n`;
     info += `  window.Telegram: ${typeof window.Telegram !== 'undefined' ? '✅' : '❌'}\n`;
-    if (window.tg) {
-        info += `  window.tg.initDataUnsafe: ${window.tg.initDataUnsafe ? '✅' : '❌'}\n`;
-        if (window.tg.initDataUnsafe) {
-            info += `  window.tg.initDataUnsafe.user: ${window.tg.initDataUnsafe.user ? '✅' : '❌'}\n`;
+    info += `  window.Telegram.WebApp: ${window.Telegram?.WebApp ? '✅' : '❌'}\n`;
+    info += `  window.tg (локальная переменная): ${tg ? '✅' : '❌'}\n`;
+    if (window.Telegram?.WebApp) {
+        info += `  window.Telegram.WebApp.initDataUnsafe: ${window.Telegram.WebApp.initDataUnsafe ? '✅' : '❌'}\n`;
+        if (window.Telegram.WebApp.initDataUnsafe) {
+            info += `  window.Telegram.WebApp.initDataUnsafe.user: ${window.Telegram.WebApp.initDataUnsafe.user ? '✅' : '❌'}\n`;
         }
     }
     info += `\n`;
@@ -4379,7 +4381,14 @@ function addToCart(productId, strength = null, flavor = null) {
     );
     
     if (existingItemIndex !== -1) {
-        // Если товар уже есть, увеличиваем количество
+        // Если товар уже есть, проверяем ограничение на 9 товаров
+        if (cart[existingItemIndex].quantity >= 9) {
+            showToast('Максимальное количество товара одного вида: 9 шт.', 'error', 3000);
+            isAddingToCart = false;
+            return;
+        }
+        
+        // Увеличиваем количество
         cart[existingItemIndex].quantity += 1;
         localStorage.setItem('cart', JSON.stringify(cart));
         syncCartToServer(); // Синхронизируем с сервером
@@ -6912,6 +6921,12 @@ function showCart() {
 function changeQuantity(index, change) {
     if (!cart[index]) return;
     
+    // Если увеличиваем количество, проверяем ограничение на 9 товаров
+    if (change > 0 && cart[index].quantity >= 9) {
+        showToast('Максимальное количество товара одного вида: 9 шт.', 'error', 3000);
+        return;
+    }
+    
     // Если уменьшаем количество и останется 0, и это последний товар в корзине - показываем подтверждение
     if (change < 0 && cart[index].quantity === 1 && cart.length === 1) {
         showRemoveLastItemConfirmation(index);
@@ -7587,17 +7602,18 @@ function checkout() {
             await syncVapeCoinsToServer(-totalCoinsNeeded, `Заказ: ${cart.length} товар(ов)`);
             
             // Добавляем транзакцию в историю
-            vapeCoinsHistory.unshift({
+            const transaction = {
                 id: `vc_${Date.now()}`,
                 date: new Date().toISOString(),
                 type: 'spent',
                 amount: -totalCoinsNeeded,
                 description: `Заказ: ${cart.length} товар(ов)`,
                 orderId: orderId
-            });
+            };
+            vapeCoinsHistory.unshift(transaction);
             localStorage.setItem('vapeCoinsHistory', JSON.stringify(vapeCoinsHistory));
             
-            // Синхронизируем историю транзакций с сервером
+            // ВАЖНО: Синхронизируем историю транзакций с сервером
             if (window.userDataManager && window.userDataManager.updateUserData) {
                 window.userDataManager.updateUserData({ transactions: vapeCoinsHistory }).catch(err => {
                     console.error('Ошибка синхронизации истории транзакций:', err);
@@ -7676,6 +7692,31 @@ function checkout() {
                 // Сохраняем заказ локально
                 orders.unshift(order);
                 localStorage.setItem('orders', JSON.stringify(orders));
+                
+                // ВАЖНО: Сохраняем заказ в БД через userDataManager
+                if (window.userDataManager && window.userDataManager.addOrder) {
+                    try {
+                        await window.userDataManager.addOrder({
+                            id: result.orderId,
+                            date: orderDate,
+                            createdAt: createdAt,
+                            status: 'pending',
+                            items: [...cart],
+                            location: deliveryType === 'selfPickup' ? selectedPickupLocation : deliveryAddress,
+                            deliveryType: deliveryType,
+                            deliveryTime: deliveryTime,
+                            deliveryExactTime: deliveryExactTime,
+                            selectedDeliveryDay: selectedDeliveryDay,
+                            deliveryAddress: deliveryType === 'delivery' ? deliveryAddress : null,
+                            pickupLocation: deliveryType === 'selfPickup' ? selectedPickupLocation : null,
+                            total: totalMoney,
+                            vapeCoinsSpent: totalCoinsNeeded > 0 ? totalCoinsNeeded : 0
+                        });
+                        console.log('✅ Заказ сохранен в БД через userDataManager');
+                    } catch (error) {
+                        console.error('Ошибка сохранения заказа в БД:', error);
+                    }
+                }
                 
                 // Показываем уведомление о перемещении в заказы
                 showToast('Заказ оформлен!\nПеремещен в раздел "Мои заказы"', 'success', 4000);
