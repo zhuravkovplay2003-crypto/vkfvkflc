@@ -591,32 +591,8 @@ function updatePickupLocationDisplay() {
         }
     }
     
-    // Обновляем правую часть навигации для каталога и страницы товара
-    if (currentPage === 'catalog' || currentPage === 'product') {
-        const navRightContent = document.getElementById('nav-right-content');
-        if (navRightContent) {
-            if (selectedPickupLocation) {
-                // Показываем адрес с ограничением ширины для статичного размера
-                navRightContent.innerHTML = `<span style="display: inline-flex; align-items: center; gap: 6px; width: 100%; justify-content: center;"><span style="width: 16px; height: 16px; display: flex; align-items: center; justify-content: center; flex-shrink: 0;">${getLocationIcon('#ffffff').replace('width="24" height="24"', 'width="16" height="16"')}</span><span style="text-align: center; flex: 1; min-width: 0; max-width: 200px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${selectedPickupLocation}</span></span>`;
-                navRightContent.style.cursor = 'pointer';
-                navRightContent.style.textAlign = 'center';
-                navRightContent.style.justifyContent = 'center';
-                navRightContent.style.display = 'flex';
-                navRightContent.style.minWidth = '180px';
-                navRightContent.style.maxWidth = '220px';
-                navRightContent.style.width = 'auto';
-                navRightContent.style.flex = '0 0 auto';
-                navRightContent.onclick = () => selectPickupLocation();
-            } else {
-                navRightContent.innerHTML = `<span style="display: inline-flex; align-items: center; gap: 6px; justify-content: center; width: 100%;"><span style="width: 16px; height: 16px; display: flex; align-items: center; justify-content: center; flex-shrink: 0;">${getLocationIcon('#ffffff').replace('width="24" height="24"', 'width="16" height="16"')}</span><span style="text-align: center;">Выберите точку</span></span>`;
-                navRightContent.style.cursor = 'pointer';
-                navRightContent.style.textAlign = 'center';
-                navRightContent.style.justifyContent = 'center';
-                navRightContent.style.display = 'flex';
-                navRightContent.onclick = () => selectPickupLocation();
-            }
-        }
-    }
+    // НЕ обновляем nav-right-content здесь для каталога и товара, так как это делается в showPage
+    // Обновляем только для других случаев, если нужно
 }
 
 // Показ сообщения о необходимости выбора точки самовывоза
@@ -1668,7 +1644,7 @@ function showPage(page, skipHistory = false, resetCatalog = false) {
     document.body.style.scale = '';
     
     // Очищаем все модальные окна, если они остались
-    document.querySelectorAll('.modal-overlay, .order-confirmation').forEach(modal => {
+    document.querySelectorAll('.modal-overlay, .order-confirmation, .order-confirmation-overlay').forEach(modal => {
         modal.remove();
     });
     
@@ -1976,11 +1952,8 @@ function showPage(page, skipHistory = false, resetCatalog = false) {
         }
     }
     
-    // Обновляем отображение точки самовывоза
-    updatePickupLocationDisplay();
-    
-    // ВАЖНО: Обновляем правую часть навигации (адрес или vapeshop)
-    // Это должно быть ПОСЛЕ вызова updatePickupLocationDisplay(), чтобы перезаписать его результат
+    // ВАЖНО: Обновляем правую часть навигации (адрес или vapeshop) ПЕРЕД updatePickupLocationDisplay
+    // чтобы updatePickupLocationDisplay не перезаписывал наш результат
     const navRightContent = document.getElementById('nav-right-content');
     if (navRightContent) {
         if (page === 'catalog' || page === 'product') {
@@ -2021,6 +1994,15 @@ function showPage(page, skipHistory = false, resetCatalog = false) {
             navRightContent.style.padding = '8px 16px';
             navRightContent.onclick = null;
         }
+    }
+    
+    // Обновляем отображение точки самовывоза (но не nav-right-content, так как он уже обновлен выше)
+    // Для каталога и товара nav-right-content уже обновлен, поэтому updatePickupLocationDisplay не должен его трогать
+    const savedNavRightContent = navRightContent ? navRightContent.innerHTML : null;
+    updatePickupLocationDisplay();
+    // Восстанавливаем nav-right-content для каталога и товара, если он был обновлен
+    if (navRightContent && (page === 'catalog' || page === 'product') && savedNavRightContent) {
+        navRightContent.innerHTML = savedNavRightContent;
     }
     
     // Если на странице каталога и точка не выбрана, показываем сообщение
@@ -7847,9 +7829,23 @@ function checkout() {
         // Показываем сообщение об успешном создании заказа
         showToast(`Заказ оформлен!\nПеремещен в раздел "Мои заказы"\nНомер: #${finalOrderId.slice(-6)}`, 'success', 4000);
         
+        // Убеждаемся, что все модальные окна и overlay удалены
+        document.querySelectorAll('.order-confirmation-overlay, .order-confirmation').forEach(el => {
+            el.remove();
+        });
+        document.body.style.overflow = '';
+        document.body.style.pointerEvents = '';
+        
+        // Убеждаемся, что навигация кликабельна
+        const bottomNav = document.querySelector('.bottom-nav');
+        if (bottomNav) {
+            bottomNav.style.pointerEvents = 'auto';
+            bottomNav.style.zIndex = '';
+        }
+        
         // Обновляем отображение корзины (покажем пустую корзину)
         // Всегда показываем корзину после оформления заказа, даже если пользователь был на другой странице
-            showCart();
+        showCart();
         
         // Тактильная обратная связь
         if (tg && tg.HapticFeedback) {
