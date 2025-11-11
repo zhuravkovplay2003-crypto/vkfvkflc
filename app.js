@@ -960,6 +960,37 @@ function init() {
     // Обновляем отображение выбранной точки самовывоза
     updatePickupLocationDisplay();
     
+    // Явно обновляем nav-right-content при инициализации, если мы на странице каталога
+    // Это гарантирует, что кнопка выбора адреса отображается правильно
+    if (currentPage === 'catalog' || currentPage === 'product') {
+        const navRightContent = document.getElementById('nav-right-content');
+        if (navRightContent) {
+            if (selectedPickupLocation) {
+                navRightContent.innerHTML = `<span style="display: inline-flex; align-items: center; gap: 6px; width: 100%; justify-content: center;"><span style="width: 16px; height: 16px; display: flex; align-items: center; justify-content: center; flex-shrink: 0;">${getLocationIcon('#ffffff').replace('width="24" height="24"', 'width="16" height="16"')}</span><span style="text-align: center; flex: 1; min-width: 0; max-width: 200px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${selectedPickupLocation}</span></span>`;
+                navRightContent.style.cursor = 'pointer';
+                navRightContent.style.textAlign = 'center';
+                navRightContent.style.justifyContent = 'center';
+                navRightContent.style.display = 'flex';
+                navRightContent.style.minWidth = '180px';
+                navRightContent.style.maxWidth = '220px';
+                navRightContent.style.width = 'auto';
+                navRightContent.style.flex = '0 0 auto';
+                navRightContent.onclick = () => selectPickupLocation();
+            } else {
+                navRightContent.innerHTML = `<span style="display: inline-flex; align-items: center; gap: 6px; justify-content: center; width: 100%;"><span style="width: 16px; height: 16px; display: flex; align-items: center; justify-content: center; flex-shrink: 0;">${getLocationIcon('#ffffff').replace('width="24" height="24"', 'width="16" height="16"')}</span><span style="text-align: center;">Выберите точку</span></span>`;
+                navRightContent.style.cursor = 'pointer';
+                navRightContent.style.textAlign = 'center';
+                navRightContent.style.justifyContent = 'center';
+                navRightContent.style.display = 'flex';
+                navRightContent.style.minWidth = '180px';
+                navRightContent.style.maxWidth = '220px';
+                navRightContent.style.width = 'auto';
+                navRightContent.style.flex = '0 0 auto';
+                navRightContent.onclick = () => selectPickupLocation();
+            }
+        }
+    }
+    
     // Загружаем товары из Google таблиц
     loadProductsFromGoogleSheets().then((loadedProducts) => {
         console.log('✅ Товары загружены, инициализация завершена');
@@ -9765,7 +9796,7 @@ function showProfile() {
         </div>
         
         <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; margin-bottom: 12px;">
-            <div onclick="event.stopPropagation(); showPage('orders');" style="background: ${colors.bgCard}; padding: 20px; border-radius: 12px; text-align: center; cursor: pointer; color: ${colors.text}; transition: all 0.2s;" onmouseover="this.style.transform='scale(1.02)'; this.style.boxShadow='0 4px 12px rgba(0,0,0,0.1)'" onmouseout="this.style.transform='scale(1)'; this.style.boxShadow='none'">
+            <div onclick="showPage('orders');" style="background: ${colors.bgCard}; padding: 20px; border-radius: 12px; text-align: center; cursor: pointer; color: ${colors.text}; transition: all 0.2s;" onmouseover="this.style.transform='scale(1.02)'; this.style.boxShadow='0 4px 12px rgba(0,0,0,0.1)'" onmouseout="this.style.transform='scale(1)'; this.style.boxShadow='none'">
                 <div style="width: 40px; height: 40px; margin: 0 auto 8px; display: flex; align-items: center; justify-content: center;">${getCartIcon('#007AFF')}</div>
                 <div style="font-weight: 600; margin-bottom: 8px; color: ${colors.text};">Заказы</div>
                 <div style="padding: 4px 12px; background: #4CAF50; color: white; 
