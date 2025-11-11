@@ -830,7 +830,21 @@ function isTomorrow(dateString) {
 
 // Инициализация
 function init() {
-    console.log('Init function called');
+    console.log('🚀 Init function called');
+    console.log('🔍 Проверка userDataManager:', {
+        exists: typeof window.userDataManager !== 'undefined',
+        getUserData: typeof window.userDataManager?.getUserData === 'function',
+        getUserId: typeof window.userDataManager?.getUserId === 'function'
+    });
+    
+    // Проверяем userId сразу
+    if (window.tg?.initDataUnsafe?.user?.id) {
+        console.log('✅ Telegram user ID доступен:', window.tg.initDataUnsafe.user.id);
+    } else {
+        console.error('❌ Telegram user ID НЕ доступен!');
+        console.error('window.tg:', window.tg);
+        console.error('window.tg?.initDataUnsafe:', window.tg?.initDataUnsafe);
+    }
     
     if (tg) {
         tg.expand();
