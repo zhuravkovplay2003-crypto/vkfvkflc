@@ -828,6 +828,48 @@ function isTomorrow(dateString) {
     return dateString === tomorrowStr;
 }
 
+// Функция для показа информации о синхронизации (для отладки)
+function showDebugInfo() {
+    const userId = window.tg?.initDataUnsafe?.user?.id || 'НЕ ОПРЕДЕЛЕН';
+    const userDataManagerExists = typeof window.userDataManager !== 'undefined';
+    const getUserDataExists = typeof window.userDataManager?.getUserData === 'function';
+    
+    let info = '🔍 ИНФОРМАЦИЯ О СИНХРОНИЗАЦИИ\n\n';
+    info += `✅ User ID: ${userId}\n\n`;
+    info += `📦 userDataManager: ${userDataManagerExists ? '✅ Загружен' : '❌ НЕ загружен'}\n`;
+    info += `📦 getUserData: ${getUserDataExists ? '✅ Доступна' : '❌ НЕ доступна'}\n\n`;
+    
+    // Проверяем данные в localStorage
+    const localCart = localStorage.getItem('cart');
+    const localCoins = localStorage.getItem('vapeCoins');
+    const localStamps = localStorage.getItem('stamps');
+    
+    info += `🛒 Корзина (localStorage): ${localCart ? JSON.parse(localCart).length + ' товаров' : 'пусто'}\n`;
+    info += `💰 Коины (localStorage): ${localCoins || 0}\n`;
+    info += `🎫 Штампы (localStorage): ${localStamps || 0}\n\n`;
+    
+    // Пытаемся получить данные с сервера
+    if (userDataManagerExists && getUserDataExists) {
+        info += '📡 Проверяю данные на сервере...\n';
+        window.userDataManager.getUserData().then(userData => {
+            if (userData) {
+                let serverInfo = '✅ ДАННЫЕ С СЕРВЕРА:\n\n';
+                serverInfo += `💰 Коины: ${userData.vapeCoins || 0}\n`;
+                serverInfo += `🎫 Штампы: ${userData.stamps || 0}\n`;
+                serverInfo += `🛒 Корзина: ${userData.cart?.length || 0} товаров\n`;
+                serverInfo += `⭐ Избранное: ${userData.favorites?.length || 0} товаров\n`;
+                alert(info + serverInfo);
+            } else {
+                alert(info + '❌ Данные на сервере не найдены');
+            }
+        }).catch(err => {
+            alert(info + `❌ Ошибка загрузки с сервера: ${err.message}`);
+        });
+    } else {
+        alert(info + '❌ userDataManager не загружен, невозможно проверить сервер');
+    }
+}
+
 // Инициализация
 function init() {
     console.log('🚀 Init function called');
@@ -9635,6 +9677,13 @@ function showProfile() {
                     }).join('')}
                 </div>
             ` : `<div style="color: ${colors.textSecondary}; font-size: 14px;">Пока нет просмотренных товаров</div>`}
+        </div>
+        
+        <div style="background: ${colors.bgCard}; padding: 16px; border-radius: 12px; margin-top: 12px; text-align: center;">
+            <button onclick="showDebugInfo()" style="width: 100%; padding: 12px; background: #007AFF; color: white; 
+                border: none; border-radius: 8px; font-size: 14px; font-weight: 600; cursor: pointer;">
+                🔍 Проверить синхронизацию
+            </button>
         </div>
     `;
     
