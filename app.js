@@ -1129,7 +1129,7 @@ function init() {
     if (currentPage === 'catalog' || currentPage === 'product') {
         const navRightContent = document.getElementById('nav-right-content');
         if (navRightContent) {
-            if (selectedPickupLocation) {
+            if (originalPickupLocation) {
                 // ВАЖНО: Форматируем адрес - только первая буква каждого слова заглавная
                 const formattedLocation = formatLocation(selectedPickupLocation);
                 const shortLocation = formattedLocation.length > 25 
@@ -1168,7 +1168,7 @@ function init() {
         console.log('   Загружено товаров:', loadedProducts ? loadedProducts.length : products.length);
         // Товары будут показаны после выбора точки самовывоза
         // Если точка уже выбрана (из localStorage), показываем товары
-        if (selectedPickupLocation) {
+        if (originalPickupLocation) {
             if (typeof displayProducts === 'function') {
                 displayProducts();
             } else if (typeof showCatalog === 'function') {
@@ -1182,7 +1182,7 @@ function init() {
     }).catch(err => {
         console.error('❌ Критическая ошибка загрузки товаров:', err);
         // Даже при ошибке пытаемся показать что есть
-        if (selectedPickupLocation) {
+        if (originalPickupLocation) {
             if (typeof displayProducts === 'function') {
                 displayProducts();
             } else if (typeof showCatalog === 'function') {
@@ -1225,7 +1225,7 @@ function init() {
     if (savedDeliveryAddress) {
         deliveryAddress = savedDeliveryAddress;
     }
-    const savedPickupLocation = localStorage.getItem('selectedPickupLocation');
+    const savedPickupLocation = localStorage.getItem('originalPickupLocation');
     if (savedPickupLocation) {
         // ВАЖНО: Форматируем адрес при загрузке из localStorage
         selectedPickupLocation = formatLocation(savedPickupLocation);
@@ -1233,7 +1233,7 @@ function init() {
         const savedOriginalLocation = localStorage.getItem('originalPickupLocation');
         originalPickupLocation = savedOriginalLocation || savedPickupLocation;
         // Сохраняем отформатированный адрес обратно
-        localStorage.setItem('selectedPickupLocation', selectedPickupLocation);
+        localStorage.setItem('originalPickupLocation', originalPickupLocation);
     } else {
         // Если нет сохраненного адреса, устанавливаем значения по умолчанию
         originalPickupLocation = 'Минск, ст. м. Грушевка';
@@ -2189,7 +2189,7 @@ function showPage(page, skipHistory = false, resetCatalog = false) {
     if (navRightContent) {
         if (page === 'catalog' || page === 'product') {
             // Для каталога и страницы товара ВСЕГДА показываем адрес с SVG иконкой
-            if (selectedPickupLocation) {
+            if (originalPickupLocation) {
                 // ВАЖНО: Форматируем адрес - только первая буква каждого слова заглавная
                 const formattedLocation = formatLocation(selectedPickupLocation);
                 const shortLocation = formattedLocation.length > 25 
@@ -2239,10 +2239,10 @@ function showPage(page, skipHistory = false, resetCatalog = false) {
         // Для каталога и товара обновляем только locationText, но не nav-right-content
         const locationText = document.getElementById('pickup-location-text');
         if (locationText) {
-            if (selectedPickupLocation) {
-                const shortLocation = selectedPickupLocation.length > 20 
-                    ? selectedPickupLocation.substring(0, 17) + '...' 
-                    : selectedPickupLocation;
+            if (originalPickupLocation) {
+                const shortLocation = originalPickupLocation.length > 20 
+                    ? originalPickupLocation.substring(0, 17) + '...' 
+                    : originalPickupLocation;
                 locationText.textContent = shortLocation;
                 locationText.style.paddingRight = '8px';
             } else {
@@ -2255,7 +2255,7 @@ function showPage(page, skipHistory = false, resetCatalog = false) {
     }
     
     // Если на странице каталога и точка не выбрана, показываем сообщение
-    if (page === 'catalog' && !selectedPickupLocation) {
+    if (page === 'catalog' && !originalPickupLocation) {
         showLocationRequiredMessage();
     }
     
@@ -2546,7 +2546,7 @@ function displayProducts(productsToShow = null) {
     if (!container) return;
     
     // Проверяем, выбрана ли точка самовывоза
-    if (!selectedPickupLocation) {
+    if (!originalPickupLocation) {
         showLocationRequiredMessage();
         return;
     }
@@ -2589,8 +2589,8 @@ function displayProducts(productsToShow = null) {
     // Фильтр по городу (если выбрана точка самовывоза)
     // УБИРАЕМ фильтрацию - показываем все товары, даже если их нет в наличии
     // Товары без наличия будут показаны серым цветом с пометкой "Нет в наличии"
-    // if (selectedPickupLocation && deliveryType === 'selfPickup') {
-    //     const selectedCity = getCityFromLocation(selectedPickupLocation);
+    // if (originalPickupLocation && deliveryType === 'selfPickup') {
+    //     const selectedCity = getCityFromLocation(originalPickupLocation);
     //     if (selectedCity) {
     //         filtered = filtered.filter(product => {
     //             // Проверяем, есть ли товар хотя бы на одной точке в выбранном городе
@@ -2613,11 +2613,11 @@ function displayProducts(productsToShow = null) {
     
     // Сортировка по наличию - сначала товары в наличии, потом не в наличии
         filtered = [...filtered].sort((a, b) => {
-        const aInStock = deliveryType === 'selfPickup' && selectedPickupLocation
-            ? isProductInStockAtLocation(a, selectedPickupLocation)
+        const aInStock = deliveryType === 'selfPickup' && originalPickupLocation
+            ? isProductInStockAtLocation(a, originalPickupLocation)
             : (a.inStock !== false && (a.quantity === undefined || a.quantity > 0));
-        const bInStock = deliveryType === 'selfPickup' && selectedPickupLocation
-            ? isProductInStockAtLocation(b, selectedPickupLocation)
+        const bInStock = deliveryType === 'selfPickup' && originalPickupLocation
+            ? isProductInStockAtLocation(b, originalPickupLocation)
             : (b.inStock !== false && (b.quantity === undefined || b.quantity > 0));
         
         // Сначала товары в наличии (true идет перед false)
@@ -2641,8 +2641,8 @@ function displayProducts(productsToShow = null) {
         card.setAttribute('data-product-id', product.id);
         
         // Проверяем наличие товара на выбранной точке самовывоза
-        const isInStock = deliveryType === 'selfPickup' && selectedPickupLocation
-            ? isProductInStockAtLocation(product, selectedPickupLocation)
+        const isInStock = deliveryType === 'selfPickup' && originalPickupLocation
+            ? isProductInStockAtLocation(product, originalPickupLocation)
             : (product.inStock !== false && (product.quantity === undefined || product.quantity > 0));
         
         // Стили для отсутствующих товаров
@@ -2695,7 +2695,7 @@ function displayProducts(productsToShow = null) {
         let lastClickTime = 0;
         card.addEventListener('click', function(e) {
             // Блокируем клик если точка самовывоза не выбрана
-            if (!selectedPickupLocation) {
+            if (!originalPickupLocation) {
                 e.preventDefault();
                 e.stopPropagation();
                 showToast('Сначала выберите точку самовывоза', 'error', 3000);
@@ -2727,7 +2727,7 @@ function displayProducts(productsToShow = null) {
         const priceDisplay = `<div class="product-price" style="${!isInStock ? 'color: #999;' : ''}">${product.price.toFixed(2)} BYN</div>`;
         
         // Фильтруем адреса по городу выбранной точки
-        const selectedCity = selectedPickupLocation ? getCityFromLocation(selectedPickupLocation) : null;
+        const selectedCity = originalPickupLocation ? getCityFromLocation(originalPickupLocation) : null;
         let locationsWithStock = [];
         if (!isInStock) {
             locationsWithStock = getLocationsWithStock(product);
@@ -2771,7 +2771,7 @@ function showProduct(productId, favoriteFlavor = null, favoriteStrength = null) 
     if (!product) return;
     
     // Если точка не выбрана, показываем сообщение, но все равно открываем карточку
-    if (!selectedPickupLocation) {
+    if (!originalPickupLocation) {
         showToast('Сначала выберите точку самовывоза', 'error', 3000);
         selectPickupLocation();
         // Не возвращаемся, продолжаем открытие карточки
@@ -2867,8 +2867,8 @@ function showProduct(productId, favoriteFlavor = null, favoriteStrength = null) 
             
             for (let i = 0; i < product.flavors.length; i++) {
                 const flavor = product.flavors[i];
-                const isInStock = deliveryType === 'selfPickup' && selectedPickupLocation
-                    ? isFlavorInStockAtLocation(product, flavor, selectedPickupLocation)
+                const isInStock = deliveryType === 'selfPickup' && originalPickupLocation
+                    ? isFlavorInStockAtLocation(product, flavor, originalPickupLocation)
                     : (product.inStock !== false && (product.quantity === undefined || product.quantity > 0));
                 
                 if (isInStock) {
@@ -3014,12 +3014,12 @@ function renderProductContent(container, product, favoriteFlavor, favoriteStreng
                                 : getPackageIcon('#999999');
             
             // Проверяем наличие вкуса на выбранной точке
-            const isFlavorInStock = deliveryType === 'selfPickup' && selectedPickupLocation
-                ? isFlavorInStockAtLocation(product, favoriteFlavor, selectedPickupLocation)
+            const isFlavorInStock = deliveryType === 'selfPickup' && originalPickupLocation
+                ? isFlavorInStockAtLocation(product, favoriteFlavor, originalPickupLocation)
                 : (product.inStock !== false && (product.quantity === undefined || product.quantity > 0));
             
             // Получаем список точек, где есть этот вкус (отфильтрованный по городу)
-            const selectedCity = getCityFromLocation(selectedPickupLocation || currentLocation);
+            const selectedCity = getCityFromLocation(originalPickupLocation || currentLocation);
             const flavorLocations = !isFlavorInStock ? getLocationsWithFlavorStockByCity(product, favoriteFlavor, selectedCity) : [];
             
             flavorOptions = `
@@ -3049,11 +3049,11 @@ function renderProductContent(container, product, favoriteFlavor, favoriteStreng
             
             // Сортируем вкусы - сначала в наличии, потом не в наличии
             allFlavors = allFlavors.sort((a, b) => {
-                const aInStock = deliveryType === 'selfPickup' && selectedPickupLocation
-                    ? isFlavorInStockAtLocation(product, a, selectedPickupLocation)
+                const aInStock = deliveryType === 'selfPickup' && originalPickupLocation
+                    ? isFlavorInStockAtLocation(product, a, originalPickupLocation)
                     : (product.inStock !== false && (product.quantity === undefined || product.quantity > 0));
-                const bInStock = deliveryType === 'selfPickup' && selectedPickupLocation
-                    ? isFlavorInStockAtLocation(product, b, selectedPickupLocation)
+                const bInStock = deliveryType === 'selfPickup' && originalPickupLocation
+                    ? isFlavorInStockAtLocation(product, b, originalPickupLocation)
                     : (product.inStock !== false && (product.quantity === undefined || product.quantity > 0));
                 
                 // Сначала вкусы в наличии (true идет перед false)
@@ -3075,8 +3075,8 @@ function renderProductContent(container, product, favoriteFlavor, favoriteStreng
             
             // Проверяем, есть ли выбранный вкус в наличии
             const selectedFlavor = allFlavors[currentSelectedIndex];
-            const isSelectedInStock = deliveryType === 'selfPickup' && selectedPickupLocation
-                ? isFlavorInStockAtLocation(product, selectedFlavor, selectedPickupLocation)
+            const isSelectedInStock = deliveryType === 'selfPickup' && originalPickupLocation
+                ? isFlavorInStockAtLocation(product, selectedFlavor, originalPickupLocation)
                 : (product.inStock !== false && (product.quantity === undefined || product.quantity > 0));
             
             // ВАЖНО: НЕ меняем выбранный вкус, даже если он недоступен
@@ -3136,12 +3136,12 @@ function renderProductContent(container, product, favoriteFlavor, favoriteStreng
                             const isSelected = (flavor === currentSelectedFlavor);
                             
                             // Проверяем наличие вкуса на выбранной точке
-                            const isFlavorInStock = deliveryType === 'selfPickup' && selectedPickupLocation
-                                ? isFlavorInStockAtLocation(product, flavor, selectedPickupLocation)
+                            const isFlavorInStock = deliveryType === 'selfPickup' && originalPickupLocation
+                                ? isFlavorInStockAtLocation(product, flavor, originalPickupLocation)
                                 : (product.inStock !== false && (product.quantity === undefined || product.quantity > 0));
                             
                             // Получаем список точек, где есть этот вкус (отфильтрованный по городу выбранной точки)
-                            const selectedCity = selectedPickupLocation ? getCityFromLocation(selectedPickupLocation) : null;
+                            const selectedCity = originalPickupLocation ? getCityFromLocation(originalPickupLocation) : null;
                             const flavorLocations = !isFlavorInStock ? getLocationsWithFlavorStockByCity(product, flavor, selectedCity) : [];
                             
                             // Определяем изображение для вкуса
@@ -3228,12 +3228,12 @@ function renderProductContent(container, product, favoriteFlavor, favoriteStreng
     let isProductInStock = false;
     const currentSelectedFlavor = viewingProduct.selectedFlavor || selectedFlavor;
     if (currentSelectedFlavor) {
-        isProductInStock = deliveryType === 'selfPickup' && selectedPickupLocation
-            ? isFlavorInStockAtLocation(product, currentSelectedFlavor, selectedPickupLocation)
+        isProductInStock = deliveryType === 'selfPickup' && originalPickupLocation
+            ? isFlavorInStockAtLocation(product, currentSelectedFlavor, originalPickupLocation)
             : (product.inStock !== false && (product.quantity === undefined || product.quantity > 0));
     } else {
-        isProductInStock = deliveryType === 'selfPickup' && selectedPickupLocation
-            ? isProductInStockAtLocation(product, selectedPickupLocation)
+        isProductInStock = deliveryType === 'selfPickup' && originalPickupLocation
+            ? isProductInStockAtLocation(product, originalPickupLocation)
             : (product.inStock !== false && (product.quantity === undefined || product.quantity > 0));
     }
     
@@ -3279,25 +3279,25 @@ function renderProductContent(container, product, favoriteFlavor, favoriteStreng
                 
                 if (selectedFlavor) {
                     // Проверяем наличие конкретного вкуса
-                    isInStock = deliveryType === 'selfPickup' && selectedPickupLocation
-                        ? isFlavorInStockAtLocation(product, selectedFlavor, selectedPickupLocation)
+                    isInStock = deliveryType === 'selfPickup' && originalPickupLocation
+                        ? isFlavorInStockAtLocation(product, selectedFlavor, originalPickupLocation)
                         : (product.inStock !== false && (product.quantity === undefined || product.quantity > 0));
                     
                     if (!isInStock) {
                         // Получаем адреса для конкретного вкуса, отфильтрованные по городу выбранной точки
-                        const selectedCity = selectedPickupLocation ? getCityFromLocation(selectedPickupLocation) : null;
+                        const selectedCity = originalPickupLocation ? getCityFromLocation(originalPickupLocation) : null;
                         locationsWithStock = getLocationsWithFlavorStockByCity(product, selectedFlavor, selectedCity);
                     }
                 } else {
                     // Проверяем общее наличие товара
-                    isInStock = deliveryType === 'selfPickup' && selectedPickupLocation
-                    ? isProductInStockAtLocation(product, selectedPickupLocation)
+                    isInStock = deliveryType === 'selfPickup' && originalPickupLocation
+                    ? isProductInStockAtLocation(product, originalPickupLocation)
                     : (product.inStock !== false && (product.quantity === undefined || product.quantity > 0));
                 
                 if (!isInStock) {
                         locationsWithStock = getLocationsWithStock(product);
                         // Фильтруем по городу если выбран город
-                        const selectedCity = selectedPickupLocation ? getCityFromLocation(selectedPickupLocation) : null;
+                        const selectedCity = originalPickupLocation ? getCityFromLocation(originalPickupLocation) : null;
                         if (selectedCity) {
                             locationsWithStock = locationsWithStock.filter(location => {
                                 if (selectedCity === 'Минск') {
@@ -3335,8 +3335,8 @@ function renderProductContent(container, product, favoriteFlavor, favoriteStreng
                     const selectedFlavorForButton = viewingProduct.selectedFlavor;
                     let canAddToCart = true;
                     if (selectedFlavorForButton) {
-                        canAddToCart = deliveryType === 'selfPickup' && selectedPickupLocation
-                            ? isFlavorInStockAtLocation(product, selectedFlavorForButton, selectedPickupLocation)
+                        canAddToCart = deliveryType === 'selfPickup' && originalPickupLocation
+                            ? isFlavorInStockAtLocation(product, selectedFlavorForButton, originalPickupLocation)
                             : (product.inStock !== false && (product.quantity === undefined || product.quantity > 0));
                     }
                     
@@ -3351,7 +3351,7 @@ function renderProductContent(container, product, favoriteFlavor, favoriteStreng
                     } else {
                         // Если товар открыт из избранного и информация о наличии уже показана в flavorOptions, не дублируем
                         const isFromFavorites = favoriteFlavor !== null || favoriteStrength !== null;
-                        const selectedCity = selectedPickupLocation ? getCityFromLocation(selectedPickupLocation) : null;
+                        const selectedCity = originalPickupLocation ? getCityFromLocation(originalPickupLocation) : null;
                         const flavorLocations = getLocationsWithFlavorStockByCity(product, selectedFlavorForButton, selectedCity);
                         
                         // Показываем информацию о наличии только если она еще не была показана в flavorOptions
@@ -3563,8 +3563,8 @@ function selectFlavor(flavor, index) {
         // ВАЖНО: При клике на недоступный вкус всегда перерисовываем всю карточку,
         // чтобы гарантировать что вся информация о товаре отображается
         // Проверяем наличие выбранного вкуса
-        const isProductInStock = deliveryType === 'selfPickup' && selectedPickupLocation
-            ? (flavor ? isFlavorInStockAtLocation(product, flavor, selectedPickupLocation) : isProductInStockAtLocation(product, selectedPickupLocation))
+        const isProductInStock = deliveryType === 'selfPickup' && originalPickupLocation
+            ? (flavor ? isFlavorInStockAtLocation(product, flavor, originalPickupLocation) : isProductInStockAtLocation(product, originalPickupLocation))
             : (product.inStock !== false && (product.quantity === undefined || product.quantity > 0));
         
         // Если вкус недоступен, перерисовываем всю карточку для гарантии отображения всей информации
@@ -3650,8 +3650,8 @@ function selectFlavor(flavor, index) {
             }
             
             // Проверяем наличие для применения стилей
-            const isProductInStock = deliveryType === 'selfPickup' && selectedPickupLocation
-                ? (flavor ? isFlavorInStockAtLocation(product, flavor, selectedPickupLocation) : isProductInStockAtLocation(product, selectedPickupLocation))
+            const isProductInStock = deliveryType === 'selfPickup' && originalPickupLocation
+                ? (flavor ? isFlavorInStockAtLocation(product, flavor, originalPickupLocation) : isProductInStockAtLocation(product, originalPickupLocation))
                 : (product.inStock !== false && (product.quantity === undefined || product.quantity > 0));
             
             if (productImageUrl) {
@@ -3698,18 +3698,18 @@ function selectFlavor(flavor, index) {
         // buttonContainer уже объявлен выше
         
         if (buttonContainer) {
-            const isProductInStock = deliveryType === 'selfPickup' && selectedPickupLocation
-                ? (flavor ? isFlavorInStockAtLocation(product, flavor, selectedPickupLocation) : isProductInStockAtLocation(product, selectedPickupLocation))
+            const isProductInStock = deliveryType === 'selfPickup' && originalPickupLocation
+                ? (flavor ? isFlavorInStockAtLocation(product, flavor, originalPickupLocation) : isProductInStockAtLocation(product, originalPickupLocation))
                 : (product.inStock !== false && (product.quantity === undefined || product.quantity > 0));
             
             // Получаем информацию о точках где есть товар
             let locationsWithStock = [];
             if (!isProductInStock && flavor) {
-                const selectedCity = selectedPickupLocation ? getCityFromLocation(selectedPickupLocation) : null;
+                const selectedCity = originalPickupLocation ? getCityFromLocation(originalPickupLocation) : null;
                 locationsWithStock = getLocationsWithFlavorStockByCity(product, flavor, selectedCity);
             } else if (!isProductInStock) {
                 locationsWithStock = getLocationsWithStock(product);
-                const selectedCity = selectedPickupLocation ? getCityFromLocation(selectedPickupLocation) : null;
+                const selectedCity = originalPickupLocation ? getCityFromLocation(originalPickupLocation) : null;
                 if (selectedCity) {
                     locationsWithStock = locationsWithStock.filter(location => {
                         if (selectedCity === 'Минск') {
@@ -4016,23 +4016,23 @@ function selectFlavor(flavor, index) {
             let locationsWithStock = [];
             
             if (selectedFlavor) {
-                isInStock = deliveryType === 'selfPickup' && selectedPickupLocation
-                    ? isFlavorInStockAtLocation(product, selectedFlavor, selectedPickupLocation)
+                isInStock = deliveryType === 'selfPickup' && originalPickupLocation
+                    ? isFlavorInStockAtLocation(product, selectedFlavor, originalPickupLocation)
                     : (product.inStock !== false && (product.quantity === undefined || product.quantity > 0));
                 
                 if (!isInStock) {
-                    const selectedCity = selectedPickupLocation ? getCityFromLocation(selectedPickupLocation) : null;
+                    const selectedCity = originalPickupLocation ? getCityFromLocation(originalPickupLocation) : null;
                     locationsWithStock = getLocationsWithFlavorStockByCity(product, selectedFlavor, selectedCity);
                 }
             } else {
-                isInStock = deliveryType === 'selfPickup' && selectedPickupLocation
-                    ? isProductInStockAtLocation(product, selectedPickupLocation)
+                isInStock = deliveryType === 'selfPickup' && originalPickupLocation
+                    ? isProductInStockAtLocation(product, originalPickupLocation)
                     : (product.inStock !== false && (product.quantity === undefined || product.quantity > 0));
                 
                 if (!isInStock) {
                     locationsWithStock = getLocationsWithStock(product);
                     // Фильтруем по городу если выбран город
-                    const selectedCity = selectedPickupLocation ? getCityFromLocation(selectedPickupLocation) : null;
+                    const selectedCity = originalPickupLocation ? getCityFromLocation(originalPickupLocation) : null;
                     if (selectedCity) {
                         locationsWithStock = locationsWithStock.filter(location => {
                             if (selectedCity === 'Минск') {
@@ -4176,11 +4176,11 @@ function showFlavorModal() {
     
     // Сортируем вкусы - сначала в наличии, потом не в наличии
     const sortedFlavors = [...viewingProduct.flavors].sort((a, b) => {
-        const aInStock = deliveryType === 'selfPickup' && selectedPickupLocation
-            ? isFlavorInStockAtLocation(viewingProduct, a, selectedPickupLocation)
+        const aInStock = deliveryType === 'selfPickup' && originalPickupLocation
+            ? isFlavorInStockAtLocation(viewingProduct, a, originalPickupLocation)
             : (viewingProduct.inStock !== false && (viewingProduct.quantity === undefined || viewingProduct.quantity > 0));
-        const bInStock = deliveryType === 'selfPickup' && selectedPickupLocation
-            ? isFlavorInStockAtLocation(viewingProduct, b, selectedPickupLocation)
+        const bInStock = deliveryType === 'selfPickup' && originalPickupLocation
+            ? isFlavorInStockAtLocation(viewingProduct, b, originalPickupLocation)
             : (viewingProduct.inStock !== false && (viewingProduct.quantity === undefined || viewingProduct.quantity > 0));
         
         // Сначала вкусы в наличии (true идет перед false)
@@ -4199,12 +4199,12 @@ function showFlavorModal() {
         const isInitiallySelected = flavor === selectedFlavor || originalIndex === selectedFlavorIndex;
         
         // Проверяем наличие вкуса на выбранной точке
-        const isFlavorInStock = deliveryType === 'selfPickup' && selectedPickupLocation
-            ? isFlavorInStockAtLocation(viewingProduct, flavor, selectedPickupLocation)
+        const isFlavorInStock = deliveryType === 'selfPickup' && originalPickupLocation
+            ? isFlavorInStockAtLocation(viewingProduct, flavor, originalPickupLocation)
             : (viewingProduct.inStock !== false && (viewingProduct.quantity === undefined || viewingProduct.quantity > 0));
         
         // Получаем список точек, где есть этот вкус (отфильтрованный по городу выбранной точки)
-        const selectedCity = selectedPickupLocation ? getCityFromLocation(selectedPickupLocation) : null;
+        const selectedCity = originalPickupLocation ? getCityFromLocation(originalPickupLocation) : null;
         const flavorLocations = !isFlavorInStock ? getLocationsWithFlavorStockByCity(viewingProduct, flavor, selectedCity) : [];
         
         const flavorCard = document.createElement('div');
@@ -4599,13 +4599,13 @@ function addToCart(productId, strength = null, flavor = null) {
     let isInStock = false;
     if (selectedFlavor) {
         // Проверяем наличие конкретного вкуса
-        isInStock = deliveryType === 'selfPickup' && selectedPickupLocation
-            ? isFlavorInStockAtLocation(product, selectedFlavor, selectedPickupLocation)
+        isInStock = deliveryType === 'selfPickup' && originalPickupLocation
+            ? isFlavorInStockAtLocation(product, selectedFlavor, originalPickupLocation)
             : (product.inStock !== false && (product.quantity === undefined || product.quantity > 0));
     } else {
         // Проверяем общее наличие товара
-        isInStock = deliveryType === 'selfPickup' && selectedPickupLocation
-            ? isProductInStockAtLocation(product, selectedPickupLocation)
+        isInStock = deliveryType === 'selfPickup' && originalPickupLocation
+            ? isProductInStockAtLocation(product, originalPickupLocation)
             : (product.inStock !== false && (product.quantity === undefined || product.quantity > 0));
     }
     
@@ -4645,9 +4645,9 @@ function addToCart(productId, strength = null, flavor = null) {
         // ВАЖНО: Получаем максимальное количество из данных товара (но не больше 9)
         let maxQuantity = 9; // По умолчанию максимум 9
         
-        if (deliveryType === 'selfPickup' && selectedPickupLocation) {
+        if (deliveryType === 'selfPickup' && originalPickupLocation) {
             // Получаем максимальное количество для конкретного вкуса на выбранной точке
-            maxQuantity = getMaxQuantityForFlavorAtLocation(product, selectedFlavor, selectedPickupLocation);
+            maxQuantity = getMaxQuantityForFlavorAtLocation(product, selectedFlavor, originalPickupLocation);
         } else if (product.quantity !== undefined) {
             // Если нет точки, используем общее количество (но не больше 9)
             maxQuantity = Math.min(product.quantity, 9);
@@ -5192,7 +5192,9 @@ function selectPickupLocation() {
             const fullLocation = cityName + ', ' + locationName;
             // ВАЖНО: Форматируем адрес для отображения - только первая буква каждого слова заглавная
             const formattedLocationName = formatLocation(locationName);
-            const isSelected = fullLocation === selectedPickupLocation;
+            // Форматируем полный адрес для сравнения
+            const formattedFullLocation = formatLocation(fullLocation);
+            const isSelected = formattedFullLocation === selectedPickupLocation;
             const locationItem = createSelectItem(formattedLocationName, isSelected, function() {
                 // Обновляем выбранную точку самовывоза
                 const previousLocation = selectedPickupLocation;
@@ -5244,9 +5246,9 @@ function selectPickupLocation() {
                     const navRightContent = document.getElementById('nav-right-content');
                     if (navRightContent) {
                         // ВАЖНО: Используем уже отформатированный адрес (formatLocation уже применен выше)
-                        const shortLocation = selectedPickupLocation.length > 25 
-                            ? selectedPickupLocation.substring(0, 22) + '...' 
-                            : selectedPickupLocation;
+                        const shortLocation = originalPickupLocation.length > 25 
+                            ? originalPickupLocation.substring(0, 22) + '...' 
+                            : originalPickupLocation;
                         navRightContent.innerHTML = `<span style="display: inline-flex; align-items: center; gap: 4px; font-size: 12px; font-weight: 500; letter-spacing: 0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;">${getLocationIcon('#ffffff').replace('width="24" height="24"', 'width="14" height="14"')}<span style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 175px; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;">${shortLocation}</span></span>`;
                         navRightContent.style.cursor = 'pointer';
                         navRightContent.style.textAlign = 'center';
@@ -5280,25 +5282,25 @@ function selectPickupLocation() {
                         
                         if (item.flavor) {
                             // Проверяем наличие конкретного вкуса
-                            isInStock = deliveryType === 'selfPickup' && selectedPickupLocation
-                                ? isFlavorInStockAtLocation(product, item.flavor, selectedPickupLocation)
+                            isInStock = deliveryType === 'selfPickup' && originalPickupLocation
+                                ? isFlavorInStockAtLocation(product, item.flavor, originalPickupLocation)
                                 : (product.inStock !== false && (product.quantity === undefined || product.quantity > 0));
                             
                             // Получаем максимальное количество для конкретного вкуса
-                            if (deliveryType === 'selfPickup' && selectedPickupLocation) {
-                                maxQuantity = getMaxQuantityForFlavorAtLocation(product, item.flavor, selectedPickupLocation);
+                            if (deliveryType === 'selfPickup' && originalPickupLocation) {
+                                maxQuantity = getMaxQuantityForFlavorAtLocation(product, item.flavor, originalPickupLocation);
                             } else if (product.quantity !== undefined) {
                                 maxQuantity = Math.min(product.quantity, 9);
                             }
                         } else {
                             // Проверяем общее наличие товара
-                            isInStock = deliveryType === 'selfPickup' && selectedPickupLocation
-                                ? isProductInStockAtLocation(product, selectedPickupLocation)
+                            isInStock = deliveryType === 'selfPickup' && originalPickupLocation
+                                ? isProductInStockAtLocation(product, originalPickupLocation)
                                 : (product.inStock !== false && (product.quantity === undefined || product.quantity > 0));
                             
                             // Получаем максимальное количество для товара
-                            if (deliveryType === 'selfPickup' && selectedPickupLocation) {
-                                maxQuantity = getMaxQuantityForFlavorAtLocation(product, null, selectedPickupLocation);
+                            if (deliveryType === 'selfPickup' && originalPickupLocation) {
+                                maxQuantity = getMaxQuantityForFlavorAtLocation(product, null, originalPickupLocation);
                             } else if (product.quantity !== undefined) {
                                 maxQuantity = Math.min(product.quantity, 9);
                             }
@@ -5769,7 +5771,7 @@ function generateTimeSlots() {
     const isTimeSlotFullyBooked = (startHour, endHour) => {
         if (deliveryType !== 'selfPickup') return false; // Для доставки не проверяем
         
-        const bookedTimes = getBookedTimesForDate(targetDay, selectedPickupLocation);
+        const bookedTimes = getBookedTimesForDate(targetDay, originalPickupLocation);
         if (bookedTimes.length === 0) return false;
         
         // Генерируем все возможные времена в промежутке (каждые 10 минут)
@@ -5797,14 +5799,14 @@ function generateTimeSlots() {
     
     // Асинхронно проверяем заказы с сервера и обновляем UI
     // Только для самовывоза проверяем занятость времени
-    if (deliveryType === 'selfPickup' && selectedPickupLocation) {
-        const currentPickupLocation = encodeURIComponent(selectedPickupLocation);
+    if (deliveryType === 'selfPickup' && originalPickupLocation) {
+        const currentPickupLocation = encodeURIComponent(originalPickupLocation);
         fetch(`${SERVER_URL}/api/orders/booked-times?date=${targetDay}&location=${currentPickupLocation}`)
             .then(response => response.json())
             .then(data => {
                 if (data.success && Array.isArray(data.bookedTimes)) {
                     const serverBookedTimes = data.bookedTimes;
-                    const localBookedTimes = getBookedTimesForDate(targetDay, selectedPickupLocation);
+                    const localBookedTimes = getBookedTimesForDate(targetDay, originalPickupLocation);
                     const allBookedTimes = [...new Set([...localBookedTimes, ...serverBookedTimes])];
                 
                 // Обновляем кнопки временных промежутков
@@ -5948,9 +5950,9 @@ function selectDeliveryDay(dayKey) {
 // Установить точное время доставки
 async function setDeliveryExactTime(time) {
     // ВАЖНО: Проверяем на сервере, не занято ли это время другим пользователем
-    if (deliveryType === 'selfPickup' && selectedPickupLocation && selectedDeliveryDay) {
+    if (deliveryType === 'selfPickup' && originalPickupLocation && selectedDeliveryDay) {
         try {
-            const currentPickupLocation = encodeURIComponent(selectedPickupLocation);
+            const currentPickupLocation = encodeURIComponent(originalPickupLocation);
             const response = await fetch(`${SERVER_URL}/api/orders/booked-times?date=${selectedDeliveryDay}&location=${currentPickupLocation}`);
             const data = await response.json();
             
@@ -6191,9 +6193,9 @@ function setDeliveryType(type) {
     // При смене типа доставки инициализируем значения по умолчанию
     if (type === 'selfPickup') {
         // Для самовывоза используем сохраненную точку или дефолтную
-        if (!selectedPickupLocation) {
-            selectedPickupLocation = 'Минск, ст. м. Грушевка';
-            localStorage.setItem('selectedPickupLocation', selectedPickupLocation);
+        if (!originalPickupLocation) {
+            originalPickupLocation = 'Минск, ст. м. Грушевка';
+            localStorage.setItem('originalPickupLocation', originalPickupLocation);
         }
     } else {
         // Для доставки используем сохраненный адрес или оставляем пустым
@@ -6274,7 +6276,7 @@ function getBookedTimesForDate(dateKey, pickupLocation = null) {
         if (!Array.isArray(allOrders)) return [];
         
         // Используем текущий выбранный адрес самовывоза если не передан
-        const currentPickupLocation = pickupLocation || selectedPickupLocation || '';
+        const currentPickupLocation = pickupLocation || originalPickupLocation || '';
         
         // ВАЖНО: Нормализуем адреса для сравнения (без учета регистра и форматирования)
         const normalizeLocation = (loc) => {
@@ -6407,12 +6409,12 @@ async function showExactTimeSelectionModal(timeSlot) {
         let bookedTimes = [];
         if (deliveryType === 'selfPickup') {
             // Сначала получаем локальные заказы
-            bookedTimes = getBookedTimesForDate(dateKey, selectedPickupLocation);
+            bookedTimes = getBookedTimesForDate(dateKey, originalPickupLocation);
             
             // ВАЖНО: Сразу загружаем занятые времена с сервера синхронно (через await)
             // Это нужно для того, чтобы занятые времена отображались серым сразу при открытии модального окна
-            if (selectedPickupLocation) {
-                const currentPickupLocation = encodeURIComponent(selectedPickupLocation);
+            if (originalPickupLocation) {
+                const currentPickupLocation = encodeURIComponent(originalPickupLocation);
                 try {
                     const response = await fetch(`${SERVER_URL}/api/orders/booked-times?date=${dateKey}&location=${currentPickupLocation}`);
                     const data = await response.json();
@@ -6529,12 +6531,12 @@ async function showExactTimeSelectionModal(timeSlot) {
         let bookedTimes = [];
         if (deliveryType === 'selfPickup') {
             // Сначала получаем локальные заказы
-            bookedTimes = getBookedTimesForDate(dateKey, selectedPickupLocation);
+            bookedTimes = getBookedTimesForDate(dateKey, originalPickupLocation);
             
             // ВАЖНО: Сразу загружаем занятые времена с сервера синхронно (через await)
             // Это нужно для того, чтобы занятые времена отображались серым сразу при открытии модального окна
-            if (selectedPickupLocation) {
-                const currentPickupLocation = encodeURIComponent(selectedPickupLocation);
+            if (originalPickupLocation) {
+                const currentPickupLocation = encodeURIComponent(originalPickupLocation);
                 try {
                     const response = await fetch(`${SERVER_URL}/api/orders/booked-times?date=${dateKey}&location=${currentPickupLocation}`);
                     const data = await response.json();
@@ -6579,15 +6581,15 @@ async function showExactTimeSelectionModal(timeSlot) {
     // Это нужно для проверки заказов других пользователей и синхронизации между устройствами
     // Только для самовывоза проверяем занятость времени
     const updateBookedTimes = () => {
-    if (deliveryType === 'selfPickup' && selectedPickupLocation) {
-        const currentPickupLocation = encodeURIComponent(selectedPickupLocation);
+    if (deliveryType === 'selfPickup' && originalPickupLocation) {
+        const currentPickupLocation = encodeURIComponent(originalPickupLocation);
             fetch(`${SERVER_URL}/api/orders/booked-times?date=${dateKey}&location=${currentPickupLocation}`)
             .then(response => response.json())
             .then(data => {
                 if (data.success && Array.isArray(data.bookedTimes)) {
                     // Объединяем с локальными заказами
                     const serverBookedTimes = data.bookedTimes;
-                    const localBookedTimes = getBookedTimesForDate(dateKey, selectedPickupLocation);
+                    const localBookedTimes = getBookedTimesForDate(dateKey, originalPickupLocation);
                     const allBookedTimes = [...new Set([...localBookedTimes, ...serverBookedTimes])];
                     
                         // ВАЖНО: Обновляем модальное окно если оно открыто
@@ -6695,7 +6697,7 @@ async function showExactTimeSelectionModal(timeSlot) {
 // Показать модальное окно выбора времени
 function showTimeSelectionModal() {
     // Проверяем, что адрес/точка выбрана
-    if (deliveryType === 'selfPickup' && !selectedPickupLocation) {
+    if (deliveryType === 'selfPickup' && !originalPickupLocation) {
         showToast('Сначала выберите точку самовывоза', 'warning', 2000);
         return;
     }
@@ -6907,9 +6909,9 @@ function showCart() {
     }
     
     // Всегда загружаем актуальный адрес из localStorage перед проверкой наличия
-    const savedLocation = localStorage.getItem('selectedPickupLocation');
+    const savedLocation = localStorage.getItem('originalPickupLocation');
     if (savedLocation) {
-        selectedPickupLocation = savedLocation;
+        originalPickupLocation = savedLocation;
     }
     
     const colors = getThemeColors();
@@ -6996,7 +6998,7 @@ function showCart() {
         const savedOriginalLocation = localStorage.getItem('originalPickupLocation');
         originalPickupLocation = savedOriginalLocation || savedPickupLocation;
         // Сохраняем отформатированный адрес обратно
-        localStorage.setItem('selectedPickupLocation', selectedPickupLocation);
+        localStorage.setItem('originalPickupLocation', originalPickupLocation);
     }
     
     // Принудительно обновляем deliveryType из localStorage если нужно
@@ -7030,11 +7032,11 @@ function showCart() {
             
             ${deliveryType === 'selfPickup' ? `
                 <div style="background: linear-gradient(135deg, #007AFF 0%, #0056b3 100%); padding: 16px; border-radius: 12px; color: white; margin-bottom: 12px;">
-                    <div style="display: flex; align-items: center; gap: 12px; margin-bottom: ${selectedPickupLocation ? '12px' : '0'};">
+                    <div style="display: flex; align-items: center; gap: 12px; margin-bottom: ${originalPickupLocation ? '12px' : '0'};">
                 <span style="width: 24px; height: 24px; display: flex; align-items: center; justify-content: center;">${getLocationIcon('#ffffff')}</span>
                 <div style="flex: 1;">
                     <div style="font-weight: 600; margin-bottom: 4px; font-size: 14px; opacity: 0.9;">Точка самовывоза</div>
-                            <div style="font-size: 16px; font-weight: 700;" id="selected-pickup-location-display">${selectedPickupLocation}</div>
+                            <div style="font-size: 16px; font-weight: 700;" id="selected-pickup-location-display">${originalPickupLocation}</div>
                 </div>
                         <button onclick="selectPickupLocation()" style="padding: 8px 16px; border: 1px solid rgba(255,255,255,0.3); 
                     border-radius: 20px; background: rgba(255,255,255,0.2); cursor: pointer; font-size: 14px; color: white;
@@ -7044,7 +7046,7 @@ function showCart() {
                             Выбрать
                         </button>
                     </div>
-                    ${selectedPickupLocation ? `
+                    ${originalPickupLocation ? `
                     <div onclick="showTimeSelectionModal()" id="time-selection-pickup" style="margin-top: 12px; padding: 12px; background: rgba(255,255,255,0.15); border-radius: 10px; cursor: pointer; transition: all 0.3s ease; border: 1px solid rgba(255,255,255,0.2);" 
                         onmouseover="this.style.background='rgba(255,255,255,0.25)'"
                         onmouseout="this.style.background='rgba(255,255,255,0.15)'">
@@ -7228,14 +7230,14 @@ function showCart() {
             const itemTotalCoins = paymentMethod === 'coins' ? (coinsPrice * item.quantity) : 0;
             
             // Проверяем наличие товара на выбранной точке
-            // ВАЖНО: Используем актуальный selectedPickupLocation из переменной (уже обновлен из localStorage выше)
+            // ВАЖНО: Используем актуальный originalPickupLocation из переменной (уже обновлен из localStorage выше)
             const product = products.find(p => p.id === item.productId || p.id === item.id);
             let isItemInStock = true;
             let maxQuantity = 9; // По умолчанию максимум 9
             
             if (product) {
                 // Получаем актуальный адрес из переменной (уже обновлен из localStorage выше)
-                const currentLocation = selectedPickupLocation || '';
+                const currentLocation = originalPickupLocation || '';
                 if (deliveryType === 'selfPickup' && currentLocation) {
                     // Проверяем наличие конкретного вкуса если он указан
                     if (item.flavor) {
@@ -7449,9 +7451,9 @@ function changeQuantity(index, change) {
     // ВАЖНО: Получаем максимальное количество из данных товара (но не больше 9)
     let maxQuantity = 9; // По умолчанию максимум 9
     
-    if (deliveryType === 'selfPickup' && selectedPickupLocation) {
+    if (deliveryType === 'selfPickup' && originalPickupLocation) {
         // Получаем максимальное количество для конкретного вкуса на выбранной точке
-        maxQuantity = getMaxQuantityForFlavorAtLocation(product, cartItem.flavor, selectedPickupLocation);
+        maxQuantity = getMaxQuantityForFlavorAtLocation(product, cartItem.flavor, originalPickupLocation);
     } else if (product.quantity !== undefined) {
         // Если нет точки, используем общее количество (но не больше 9)
         maxQuantity = Math.min(product.quantity, 9);
@@ -7494,8 +7496,8 @@ function changeQuantity(index, change) {
         const product = products.find(p => p.id === cartItem.id || p.id === cartItem.productId);
         let maxQuantity = 9;
         
-        if (product && deliveryType === 'selfPickup' && selectedPickupLocation) {
-            maxQuantity = getMaxQuantityForFlavorAtLocation(product, cartItem.flavor, selectedPickupLocation);
+        if (product && deliveryType === 'selfPickup' && originalPickupLocation) {
+            maxQuantity = getMaxQuantityForFlavorAtLocation(product, cartItem.flavor, originalPickupLocation);
         } else if (product && product.quantity !== undefined) {
             maxQuantity = Math.min(product.quantity, 9);
         }
@@ -7737,10 +7739,10 @@ function setPaymentMethod(index, method) {
 function updateCartItemsDisplay() {
     if (currentPage !== 'cart') return;
     
-    // Убеждаемся что selectedPickupLocation обновлен из localStorage
-    const savedLocation = localStorage.getItem('selectedPickupLocation');
+    // Убеждаемся что originalPickupLocation обновлен из localStorage
+    const savedLocation = localStorage.getItem('originalPickupLocation');
     if (savedLocation) {
-        selectedPickupLocation = savedLocation;
+        originalPickupLocation = savedLocation;
     }
     
     // Убеждаемся что deliveryType обновлен из localStorage
@@ -7764,11 +7766,11 @@ function updateCartItemsDisplay() {
             
             // Проверяем наличие товара на новом адресе
             let isItemInStock = true;
-            if (deliveryType === 'selfPickup' && selectedPickupLocation) {
+            if (deliveryType === 'selfPickup' && originalPickupLocation) {
                 if (item.flavor) {
-                    isItemInStock = isFlavorInStockAtLocation(product, item.flavor, selectedPickupLocation);
+                    isItemInStock = isFlavorInStockAtLocation(product, item.flavor, originalPickupLocation);
                 } else {
-                    isItemInStock = isProductInStockAtLocation(product, selectedPickupLocation);
+                    isItemInStock = isProductInStockAtLocation(product, originalPickupLocation);
                 }
             } else {
                 isItemInStock = product.inStock !== false && (product.quantity === undefined || product.quantity > 0);
@@ -7838,7 +7840,7 @@ function updateCartItemsDisplay() {
         // Обновляем отображение точки самовывоза в корзине
         const locationDisplay = document.getElementById('selected-pickup-location-display');
         if (locationDisplay) {
-            locationDisplay.textContent = selectedPickupLocation;
+            locationDisplay.textContent = originalPickupLocation;
         }
         
         // Восстанавливаем позицию скролла
@@ -8028,7 +8030,7 @@ function checkout() {
     
     // Проверяем адрес/точку самовывоза
     if (deliveryType === 'selfPickup') {
-        if (!selectedPickupLocation) {
+        if (!originalPickupLocation) {
             hasErrors = true;
             const pickupBlock = document.querySelector('[id*="pickup-location"]');
             if (pickupBlock) {
@@ -8082,13 +8084,13 @@ function checkout() {
         let isInStock = false;
         if (item.flavor) {
             // Проверяем наличие конкретного вкуса
-            isInStock = deliveryType === 'selfPickup' && selectedPickupLocation
-                ? isFlavorInStockAtLocation(product, item.flavor, selectedPickupLocation)
+            isInStock = deliveryType === 'selfPickup' && originalPickupLocation
+                ? isFlavorInStockAtLocation(product, item.flavor, originalPickupLocation)
                 : (product.inStock !== false && (product.quantity === undefined || product.quantity > 0));
         } else {
             // Проверяем общее наличие товара
-            isInStock = deliveryType === 'selfPickup' && selectedPickupLocation
-                ? isProductInStockAtLocation(product, selectedPickupLocation)
+            isInStock = deliveryType === 'selfPickup' && originalPickupLocation
+                ? isProductInStockAtLocation(product, originalPickupLocation)
                 : (product.inStock !== false && (product.quantity === undefined || product.quantity > 0));
         }
         
@@ -8132,7 +8134,7 @@ function checkout() {
     
     // Добавляем информацию о типе доставки и времени
     if (deliveryType === 'selfPickup') {
-        orderText += `\nLOCATION Точка самовывоза: ${selectedPickupLocation}`;
+        orderText += `\nLOCATION Точка самовывоза: ${originalPickupLocation}`;
         
         // Определяем дату доставки с учетом московского времени - всегда показываем дату, а не слово "завтра"
         let dateText = '';
@@ -8225,13 +8227,13 @@ function checkout() {
         // Отправляем заказ на сервер
         const orderData = {
             items: [...cart],
-            location: deliveryType === 'selfPickup' ? selectedPickupLocation : deliveryAddress,
+            location: deliveryType === 'selfPickup' ? originalPickupLocation : deliveryAddress,
             deliveryType: deliveryType,
             deliveryTime: deliveryTime,
             deliveryExactTime: deliveryExactTime,
             selectedDeliveryDay: selectedDeliveryDay,
             deliveryAddress: deliveryType === 'delivery' ? deliveryAddress : null,
-            pickupLocation: deliveryType === 'selfPickup' ? selectedPickupLocation : null,
+            pickupLocation: deliveryType === 'selfPickup' ? originalPickupLocation : null,
             total: totalMoney,
             vapeCoinsSpent: totalCoinsNeeded > 0 ? totalCoinsNeeded : 0,
             userId: tg?.initDataUnsafe?.user?.id?.toString() || 'unknown',
@@ -8265,13 +8267,13 @@ function checkout() {
                     createdAt: createdAt, // Время создания заказа в московском времени
                     status: 'pending', // Ожидает подтверждения менеджером
                     items: [...cart],
-                    location: deliveryType === 'selfPickup' ? selectedPickupLocation : deliveryAddress,
+                    location: deliveryType === 'selfPickup' ? originalPickupLocation : deliveryAddress,
                     deliveryType: deliveryType,
                     deliveryTime: deliveryTime,
                     deliveryExactTime: deliveryExactTime,
                     selectedDeliveryDay: selectedDeliveryDay,
                     deliveryAddress: deliveryType === 'delivery' ? deliveryAddress : null,
-                    pickupLocation: deliveryType === 'selfPickup' ? selectedPickupLocation : null,
+                    pickupLocation: deliveryType === 'selfPickup' ? originalPickupLocation : null,
                     total: totalMoney,
                     vapeCoinsSpent: totalCoinsNeeded > 0 ? totalCoinsNeeded : 0
                 };
@@ -8301,13 +8303,13 @@ function checkout() {
                                 createdAt: createdAt,
                                 status: 'pending',
                                 items: [...cart],
-                                location: deliveryType === 'selfPickup' ? selectedPickupLocation : deliveryAddress,
+                                location: deliveryType === 'selfPickup' ? originalPickupLocation : deliveryAddress,
                                 deliveryType: deliveryType,
                                 deliveryTime: deliveryTime,
                                 deliveryExactTime: deliveryExactTime,
                                 selectedDeliveryDay: selectedDeliveryDay,
                                 deliveryAddress: deliveryType === 'delivery' ? deliveryAddress : null,
-                                pickupLocation: deliveryType === 'selfPickup' ? selectedPickupLocation : null,
+                                pickupLocation: deliveryType === 'selfPickup' ? originalPickupLocation : null,
                                 total: totalMoney,
                                 vapeCoinsSpent: totalCoinsNeeded > 0 ? totalCoinsNeeded : 0
                             });
@@ -8331,7 +8333,7 @@ function checkout() {
                     
                     console.log('📦 Отправляем обновление количества товаров:', JSON.stringify(updateItems, null, 2));
                     console.log('📍 Location (оригинальное):', deliveryType === 'selfPickup' ? originalPickupLocation : null);
-                    console.log('📍 Location (отформатированное):', deliveryType === 'selfPickup' ? selectedPickupLocation : null);
+                    console.log('📍 Location (отформатированное):', deliveryType === 'selfPickup' ? originalPickupLocation : null);
                     
                     const updateResponse = await fetch(`${SERVER_URL}/api/orders/update-stock`, {
                         method: 'POST',
@@ -8386,13 +8388,13 @@ function checkout() {
                 date: orderDate,
                 status: 'pending',
                 items: [...cart],
-                location: deliveryType === 'selfPickup' ? selectedPickupLocation : deliveryAddress,
+                location: deliveryType === 'selfPickup' ? originalPickupLocation : deliveryAddress,
                 deliveryType: deliveryType,
                 deliveryTime: deliveryTime,
                 deliveryExactTime: deliveryExactTime,
                 selectedDeliveryDay: selectedDeliveryDay,
                 deliveryAddress: deliveryType === 'delivery' ? deliveryAddress : null,
-                pickupLocation: deliveryType === 'selfPickup' ? selectedPickupLocation : null,
+                pickupLocation: deliveryType === 'selfPickup' ? originalPickupLocation : null,
                 total: totalMoney,
                 vapeCoinsSpent: totalCoinsNeeded > 0 ? totalCoinsNeeded : 0
             };
@@ -10003,16 +10005,16 @@ function showFavorites() {
         let aInStock = true;
         let bInStock = true;
         
-        if (deliveryType === 'selfPickup' && selectedPickupLocation) {
+        if (deliveryType === 'selfPickup' && originalPickupLocation) {
             if (aFlavor) {
-                aInStock = isFlavorInStockAtLocation(aProduct, aFlavor, selectedPickupLocation);
+                aInStock = isFlavorInStockAtLocation(aProduct, aFlavor, originalPickupLocation);
             } else {
-                aInStock = isProductInStockAtLocation(aProduct, selectedPickupLocation);
+                aInStock = isProductInStockAtLocation(aProduct, originalPickupLocation);
             }
             if (bFlavor) {
-                bInStock = isFlavorInStockAtLocation(bProduct, bFlavor, selectedPickupLocation);
+                bInStock = isFlavorInStockAtLocation(bProduct, bFlavor, originalPickupLocation);
             } else {
-                bInStock = isProductInStockAtLocation(bProduct, selectedPickupLocation);
+                bInStock = isProductInStockAtLocation(bProduct, originalPickupLocation);
             }
         } else {
             aInStock = aProduct.inStock !== false && (aProduct.quantity === undefined || aProduct.quantity > 0);
@@ -10044,12 +10046,12 @@ function showFavorites() {
         
         // Проверяем наличие товара на выбранной точке
         let isInStock = true;
-        if (deliveryType === 'selfPickup' && selectedPickupLocation) {
+        if (deliveryType === 'selfPickup' && originalPickupLocation) {
             // Проверяем наличие конкретного вкуса если он указан
             if (flavor) {
-                isInStock = isFlavorInStockAtLocation(product, flavor, selectedPickupLocation);
+                isInStock = isFlavorInStockAtLocation(product, flavor, originalPickupLocation);
             } else {
-                isInStock = isProductInStockAtLocation(product, selectedPickupLocation);
+                isInStock = isProductInStockAtLocation(product, originalPickupLocation);
             }
         } else {
             isInStock = product.inStock !== false && (product.quantity === undefined || product.quantity > 0);
@@ -10118,12 +10120,12 @@ function showFavorites() {
                             let locationsWithStock = [];
                             if (flavor) {
                                 // Проверяем наличие конкретного вкуса
-                                const selectedCity = selectedPickupLocation ? getCityFromLocation(selectedPickupLocation) : null;
+                                const selectedCity = originalPickupLocation ? getCityFromLocation(originalPickupLocation) : null;
                                 locationsWithStock = getLocationsWithFlavorStockByCity(product, flavor, selectedCity);
                             } else {
                                 locationsWithStock = getLocationsWithStock(product);
                                 // Фильтруем по городу если выбран город
-                                const selectedCity = selectedPickupLocation ? getCityFromLocation(selectedPickupLocation) : null;
+                                const selectedCity = originalPickupLocation ? getCityFromLocation(originalPickupLocation) : null;
                                 if (selectedCity) {
                                     locationsWithStock = locationsWithStock.filter(location => {
                                         if (selectedCity === 'Минск') {
@@ -13780,13 +13782,13 @@ function addToCartFromFavorites(productId, flavor = null, strength = null) {
     let isInStock = false;
     if (flavorValue) {
         // Проверяем наличие конкретного вкуса
-        isInStock = deliveryType === 'selfPickup' && selectedPickupLocation
-            ? isFlavorInStockAtLocation(product, flavorValue, selectedPickupLocation)
+        isInStock = deliveryType === 'selfPickup' && originalPickupLocation
+            ? isFlavorInStockAtLocation(product, flavorValue, originalPickupLocation)
             : (product.inStock !== false && (product.quantity === undefined || product.quantity > 0));
     } else {
         // Проверяем общее наличие товара
-        isInStock = deliveryType === 'selfPickup' && selectedPickupLocation
-            ? isProductInStockAtLocation(product, selectedPickupLocation)
+        isInStock = deliveryType === 'selfPickup' && originalPickupLocation
+            ? isProductInStockAtLocation(product, originalPickupLocation)
             : (product.inStock !== false && (product.quantity === undefined || product.quantity > 0));
     }
     
