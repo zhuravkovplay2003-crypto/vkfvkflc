@@ -172,8 +172,8 @@ function saveManagers(managers) {
         console.log('✅ Менеджеры сохранены в БД');
         
         // Также сохраняем в файл для совместимости
-        try {
-            fs.writeFileSync(MANAGERS_FILE, JSON.stringify(managers, null, 2));
+    try {
+        fs.writeFileSync(MANAGERS_FILE, JSON.stringify(managers, null, 2));
         } catch (fileError) {
             console.warn('Не удалось сохранить менеджеров в файл (не критично):', fileError);
         }
@@ -785,6 +785,50 @@ app.post('/api/orders/:orderId/cancel', (req, res) => {
             console.error('Error notifying managers about cancellation:', err);
         });
         
+        // Обновляем количество товаров в Google Sheets (увеличиваем обратно)
+        try {
+            const updateItems = order.items.map(item => ({
+                productId: item.productId,
+                quantity: item.quantity,
+                flavor: item.flavor || null,
+                location: order.deliveryType === 'selfPickup' ? order.pickupLocation : null
+            }));
+            
+            const fakeReq = {
+                body: {
+                    orderId: order.id,
+                    items: updateItems,
+                    action: 'increase',
+                    location: order.deliveryType === 'selfPickup' ? order.pickupLocation : null
+                }
+            };
+            
+            const fakeRes = {
+                status: (code) => ({ json: (data) => {
+                    if (code === 200) {
+                        console.log('✅ Количество товаров возвращено в Google Sheets при отмене клиентом');
+                    }
+                }}),
+                json: (data) => {
+                    if (data.success) {
+                        console.log('✅ Количество товаров возвращено в Google Sheets при отмене клиентом');
+                    }
+                }
+            };
+            
+            const updateStockHandler = app._router.stack.find(layer => 
+                layer.route && layer.route.path === '/api/orders/update-stock' && layer.route.methods.post
+            );
+            
+            if (updateStockHandler) {
+                updateStockHandler.route.stack[0].handle(fakeReq, fakeRes).catch(err => {
+                    console.error('Ошибка обновления количества при отмене клиентом:', err);
+                });
+            }
+        } catch (error) {
+            console.error('Ошибка обновления количества товаров при отмене клиентом:', error);
+        }
+        
         res.json({ success: true, message: 'Order cancelled' });
     } catch (error) {
         console.error('Error cancelling order:', error);
@@ -796,10 +840,18 @@ app.post('/api/orders/:orderId/cancel', (req, res) => {
 // Endpoint для обновления Google таблицы после заказа
 app.post('/api/orders/update-stock', async (req, res) => {
     try {
-        const { orderId, items } = req.body;
+        const { orderId, items, action = 'decrease', location } = req.body;
         
         if (!items || !Array.isArray(items) || items.length === 0) {
             return res.status(400).json({ success: false, error: 'Не указаны товары для обновления' });
+        }
+        
+        // action может быть 'decrease' (уменьшить) или 'increase' (увеличить)
+        const isDecrease = action === 'decrease';
+        const isIncrease = action === 'increase';
+        
+        if (!isDecrease && !isIncrease) {
+            return res.status(400).json({ success: false, error: 'Неверное действие. Используйте "decrease" или "increase"' });
         }
         
         // Конфигурация Google таблицы (из app.js)
@@ -948,7 +1000,12 @@ app.post('/api/orders/update-stock', async (req, res) => {
                     if (locationColIndex >= 0 && variantRowIndex >= 2) {
                         // Обновляем количество на адресе
                         const currentQuantity = parseInt(variant[variantHeaders[locationColIndex]] || '0');
-                        const newQuantity = Math.max(0, currentQuantity - quantity);
+                        let newQuantity;
+                        if (isDecrease) {
+                            newQuantity = Math.max(0, currentQuantity - quantity);
+                        } else {
+                            newQuantity = currentQuantity + quantity;
+                        }
                         
                         updates.push({
                             sheetId: GOOGLE_SHEETS_CONFIG.variantsGid,
@@ -962,7 +1019,12 @@ app.post('/api/orders/update-stock', async (req, res) => {
             // Обновляем общее количество товара (если есть колонка)
             if (quantityColIndex >= 0) {
                 const currentQuantity = parseInt(product[headers[quantityColIndex]] || '0');
-                const newQuantity = Math.max(0, currentQuantity - quantity);
+                let newQuantity;
+                if (isDecrease) {
+                    newQuantity = Math.max(0, currentQuantity - quantity);
+                } else {
+                    newQuantity = currentQuantity + quantity;
+                }
                 
                 updates.push({
                     sheetId: GOOGLE_SHEETS_CONFIG.productsGid,
@@ -971,8 +1033,8 @@ app.post('/api/orders/update-stock', async (req, res) => {
                 });
             }
             
-            // Обновляем графу "продано шт" (если есть колонка)
-            if (soldColIndex >= 0) {
+            // Обновляем графу "продано шт" (только при уменьшении, при увеличении не трогаем)
+            if (soldColIndex >= 0 && isDecrease) {
                 const currentSold = parseInt(product[headers[soldColIndex]] || '0');
                 const newSold = currentSold + quantity;
                 
@@ -1320,6 +1382,90 @@ bot.on('callback_query', async (ctx) => {
                 `К сожалению, заказ не может быть выполнен. Обратитесь в поддержку для уточнения деталей.`;
             
             await notifyClient(order, 'rejected', clientNotification);
+            
+            // Обновляем количество товаров в Google Sheets (увеличиваем обратно)
+            // Вызываем внутренний обработчик напрямую
+            try {
+                const updateItems = order.items.map(item => ({
+                    productId: item.productId,
+                    quantity: item.quantity,
+                    flavor: item.flavor || null,
+                    location: order.deliveryType === 'selfPickup' ? order.pickupLocation : null
+                }));
+                
+                // Создаем фейковый req/res объект для внутреннего вызова
+                const fakeReq = {
+                    body: {
+                        orderId: order.id,
+                        items: updateItems,
+                        action: 'increase',
+                        location: order.deliveryType === 'selfPickup' ? order.pickupLocation : null
+                    }
+                };
+                
+                const fakeRes = {
+                    status: (code) => ({ json: (data) => {
+                        if (code === 200) {
+                            console.log('✅ Количество товаров возвращено в Google Sheets при отмене менеджером');
+                        } else {
+                            console.error('Ошибка обновления количества при отмене:', code, data);
+                        }
+                    }}),
+                    json: (data) => {
+                        if (data.success) {
+                            console.log('✅ Количество товаров возвращено в Google Sheets при отмене менеджером');
+                        } else {
+                            console.error('Ошибка обновления количества при отмене:', data);
+                        }
+                    }
+                };
+                
+                // Находим обработчик update-stock и вызываем его
+                const updateStockHandler = app._router.stack.find(layer => 
+                    layer.route && layer.route.path === '/api/orders/update-stock' && layer.route.methods.post
+                );
+                
+                if (updateStockHandler) {
+                    updateStockHandler.route.stack[0].handle(fakeReq, fakeRes).catch(err => {
+                        console.error('Ошибка обновления количества товаров при отмене менеджером:', err);
+                    });
+                } else {
+                    // Если не нашли обработчик, используем HTTP запрос
+                    const https = require('https');
+                    const updateStockData = JSON.stringify(fakeReq.body);
+                    const updateStockOptions = {
+                        hostname: 'localhost',
+                        port: process.env.PORT || 3000,
+                        path: '/api/orders/update-stock',
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'Content-Length': Buffer.byteLength(updateStockData)
+                        }
+                    };
+                    
+                    const updateStockReq = https.request(updateStockOptions, (res) => {
+                        let data = '';
+                        res.on('data', (chunk) => { data += chunk; });
+                        res.on('end', () => {
+                            if (res.statusCode === 200) {
+                                console.log('✅ Количество товаров возвращено в Google Sheets при отмене менеджером');
+                            } else {
+                                console.error('Ошибка обновления количества при отмене:', res.statusCode);
+                            }
+                        });
+                    });
+                    
+                    updateStockReq.on('error', (error) => {
+                        console.error('Ошибка запроса обновления количества:', error);
+                    });
+                    
+                    updateStockReq.write(updateStockData);
+                    updateStockReq.end();
+                }
+            } catch (error) {
+                console.error('Ошибка обновления количества товаров при отмене менеджером:', error);
+            }
         } else if (action === 'transfer') {
             // Заказ передан клиенту
             if (order.status !== 'confirmed') {
@@ -1656,8 +1802,8 @@ app.listen(PORT, () => {
 
 // Webhook endpoint для Telegram
 app.post('/webhook', (req, res) => {
-    bot.handleUpdate(req.body);
-    res.sendStatus(200);
+        bot.handleUpdate(req.body);
+        res.sendStatus(200);
 });
 
 // Запуск бота
@@ -1685,25 +1831,25 @@ if (isProduction && webhookUrl) {
         });
 } else {
     // Используем polling для разработки
-    // Сначала удаляем webhook, если он был установлен, чтобы избежать конфликта 409
-    bot.telegram.deleteWebhook({ drop_pending_updates: true })
-        .then(() => {
-            console.log('✅ Webhook removed, starting polling...');
-            return bot.launch();
-        })
-        .catch(err => {
-            // Если удаление webhook не удалось, все равно пытаемся запустить polling
-            console.log('⚠️ Webhook removal failed or not needed, trying to start polling...');
-            return bot.launch();
-        })
-        .then(() => {
-            console.log('🤖 Telegram bot started (polling mode)');
-        })
-        .catch(err => {
-            console.error('❌ Error starting bot:', err);
-            // Не завершаем процесс, чтобы сервер продолжал работать
-            console.log('⚠️ Bot failed to start, but server continues running');
-        });
+// Сначала удаляем webhook, если он был установлен, чтобы избежать конфликта 409
+bot.telegram.deleteWebhook({ drop_pending_updates: true })
+    .then(() => {
+        console.log('✅ Webhook removed, starting polling...');
+        return bot.launch();
+    })
+    .catch(err => {
+        // Если удаление webhook не удалось, все равно пытаемся запустить polling
+        console.log('⚠️ Webhook removal failed or not needed, trying to start polling...');
+        return bot.launch();
+    })
+    .then(() => {
+        console.log('🤖 Telegram bot started (polling mode)');
+    })
+    .catch(err => {
+        console.error('❌ Error starting bot:', err);
+        // Не завершаем процесс, чтобы сервер продолжал работать
+        console.log('⚠️ Bot failed to start, but server continues running');
+    });
 }
 
 // Запускаем автоматический ping каждые 10 минут
@@ -1741,14 +1887,14 @@ setInterval(() => {
 // Graceful shutdown
 process.once('SIGINT', () => {
     if (!isProduction || !webhookUrl) {
-        bot.stop('SIGINT');
+    bot.stop('SIGINT');
     }
     db.closeDatabase();
     process.exit(0);
 });
 process.once('SIGTERM', () => {
     if (!isProduction || !webhookUrl) {
-        bot.stop('SIGTERM');
+    bot.stop('SIGTERM');
     }
     db.closeDatabase();
     process.exit(0);
