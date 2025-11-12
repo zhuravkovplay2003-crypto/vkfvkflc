@@ -555,11 +555,16 @@ function transformProductsData(productsData, variantsData) {
         // Сохраняем информацию о количестве на точках самовывоза
         if (Object.keys(stockByLocation).length > 0) {
             product.stockByLocation = stockByLocation;
+            console.log(`✅ Товар ${product.id} (${product.name}): найдено ${Object.keys(stockByLocation).length} точек самовывоза`);
+            console.log(`📋 Точки:`, Object.keys(stockByLocation));
+        } else {
+            console.log(`⚠️ Товар ${product.id} (${product.name}): не найдено точек самовывоза`);
         }
         
         // Сохраняем информацию о количестве по вкусам и точкам
         if (Object.keys(stockByFlavorAndLocation).length > 0) {
             product.stockByFlavorAndLocation = stockByFlavorAndLocation;
+            console.log(`✅ Товар ${product.id}: найдено ${Object.keys(stockByFlavorAndLocation).length} вкусов с данными по точкам`);
         }
         
         if (strengths.size > 0) product.strengths = Array.from(strengths);
@@ -658,15 +663,40 @@ function isProductInStockAtLocation(product, location) {
     }
     
     // Проверяем количество на конкретной точке
-    const quantityAtLocation = product.stockByLocation[location];
+    // ВАЖНО: Нормализуем location для сравнения (без учета регистра и форматирования)
+    const normalizeLocation = (loc) => {
+        if (!loc) return '';
+        return loc.trim().toLowerCase().replace(/\s+/g, ' ');
+    };
+    const normalizedLocation = normalizeLocation(location);
+    
+    // Ищем точку в stockByLocation (проверяем точное совпадение и нормализованное)
+    let quantityAtLocation = undefined;
+    
+    // Сначала проверяем точное совпадение
+    if (product.stockByLocation[location] !== undefined) {
+        quantityAtLocation = product.stockByLocation[location];
+    } else {
+        // Проверяем все ключи на совпадение (без учета регистра)
+        for (const key in product.stockByLocation) {
+            if (normalizeLocation(key) === normalizedLocation) {
+                quantityAtLocation = product.stockByLocation[key];
+                break;
+            }
+        }
+    }
     
     // Если для этой точки нет данных, считаем что товар есть (используем общее количество)
     if (quantityAtLocation === undefined) {
+        console.log(`⚠️ Нет данных о количестве для точки "${location}" у товара ${product.id}`);
+        console.log(`📋 Доступные точки:`, Object.keys(product.stockByLocation || {}));
         return product.quantity === undefined || product.quantity > 0;
     }
     
     // Товар есть, если количество больше 0
-    return quantityAtLocation > 0;
+    const isInStock = quantityAtLocation > 0;
+    console.log(`📊 Товар ${product.id} на точке "${location}": количество=${quantityAtLocation}, в наличии=${isInStock}`);
+    return isInStock;
 }
 
 // ВАЖНО: Форматируем адрес - только первая буква каждого слова заглавная
@@ -712,6 +742,7 @@ function getMaxQuantityForFlavorAtLocation(product, flavor, location) {
             for (const key in flavorStock) {
                 if (normalizeLocation(key) === normalizedLocation) {
                     quantityAtLocation = flavorStock[key];
+                    console.log(`✅ Найдено совпадение для вкуса "${flavor}" на точке "${key}" (искали "${location}")`);
                     break;
                 }
             }
@@ -722,6 +753,9 @@ function getMaxQuantityForFlavorAtLocation(product, flavor, location) {
             maxQuantity = Math.min(Number(quantityAtLocation), 9);
             console.log(`getMaxQuantityForFlavorAtLocation: найдено для вкуса "${flavor}" на адресе "${location}": ${maxQuantity}`);
             return maxQuantity;
+        } else {
+            console.log(`⚠️ Не найдено количество для вкуса "${flavor}" на точке "${location}"`);
+            console.log(`📋 Доступные точки для этого вкуса:`, Object.keys(flavorStock || {}));
         }
     }
     
@@ -737,6 +771,7 @@ function getMaxQuantityForFlavorAtLocation(product, flavor, location) {
             for (const key in product.stockByLocation) {
                 if (normalizeLocation(key) === normalizedLocation) {
                     quantityAtLocation = product.stockByLocation[key];
+                    console.log(`✅ Найдено совпадение для товара ${product.id} на точке "${key}" (искали "${location}")`);
                     break;
                 }
             }
@@ -799,9 +834,37 @@ function isFlavorInStockAtLocation(product, flavor, location) {
     
     // Сначала проверяем наличие конкретного вкуса на конкретной точке
     if (product.stockByFlavorAndLocation && product.stockByFlavorAndLocation[flavor]) {
-        const quantityAtLocation = product.stockByFlavorAndLocation[flavor][location];
+        // ВАЖНО: Нормализуем location для сравнения
+        const normalizeLocation = (loc) => {
+            if (!loc) return '';
+            return loc.trim().toLowerCase().replace(/\s+/g, ' ');
+        };
+        const normalizedLocation = normalizeLocation(location);
+        
+        const flavorStock = product.stockByFlavorAndLocation[flavor];
+        let quantityAtLocation = undefined;
+        
+        // Сначала проверяем точное совпадение
+        if (flavorStock[location] !== undefined) {
+            quantityAtLocation = flavorStock[location];
+        } else {
+            // Проверяем все ключи на совпадение (без учета регистра)
+            for (const key in flavorStock) {
+                if (normalizeLocation(key) === normalizedLocation) {
+                    quantityAtLocation = flavorStock[key];
+                    console.log(`✅ Найдено совпадение для вкуса "${flavor}" на точке "${key}" (искали "${location}")`);
+                    break;
+                }
+            }
+        }
+        
         if (quantityAtLocation !== undefined) {
-            return quantityAtLocation > 0;
+            const isInStock = quantityAtLocation > 0;
+            console.log(`📊 Товар ${product.id} (вкус: ${flavor}) на точке "${location}": количество=${quantityAtLocation}, в наличии=${isInStock}`);
+            return isInStock;
+        } else {
+            console.log(`⚠️ Не найдено количество для вкуса "${flavor}" на точке "${location}"`);
+            console.log(`📋 Доступные точки для этого вкуса:`, Object.keys(flavorStock || {}));
         }
     }
     
@@ -811,15 +874,40 @@ function isFlavorInStockAtLocation(product, flavor, location) {
     }
     
     // Проверяем количество на конкретной точке (общее для товара)
-    const quantityAtLocation = product.stockByLocation[location];
+    // ВАЖНО: Нормализуем location для сравнения (без учета регистра и форматирования)
+    const normalizeLocation = (loc) => {
+        if (!loc) return '';
+        return loc.trim().toLowerCase().replace(/\s+/g, ' ');
+    };
+    const normalizedLocation = normalizeLocation(location);
+    
+    // Ищем точку в stockByLocation (проверяем точное совпадение и нормализованное)
+    let quantityAtLocation = undefined;
+    
+    // Сначала проверяем точное совпадение
+    if (product.stockByLocation[location] !== undefined) {
+        quantityAtLocation = product.stockByLocation[location];
+    } else {
+        // Проверяем все ключи на совпадение (без учета регистра)
+        for (const key in product.stockByLocation) {
+            if (normalizeLocation(key) === normalizedLocation) {
+                quantityAtLocation = product.stockByLocation[key];
+                break;
+            }
+        }
+    }
     
     // Если для этой точки нет данных, считаем что товар есть (используем общее количество)
     if (quantityAtLocation === undefined) {
+        console.log(`⚠️ Нет данных о количестве для точки "${location}" у товара ${product.id} (вкус: ${flavor})`);
+        console.log(`📋 Доступные точки:`, Object.keys(product.stockByLocation || {}));
         return product.quantity === undefined || product.quantity > 0;
     }
     
     // Товар есть, если количество больше 0
-    return quantityAtLocation > 0;
+    const isInStock = quantityAtLocation > 0;
+    console.log(`📊 Товар ${product.id} (вкус: ${flavor}) на точке "${location}": количество=${quantityAtLocation}, в наличии=${isInStock}`);
+    return isInStock;
 }
 
 // Получить список точек, где есть конкретный вкус
