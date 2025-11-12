@@ -928,25 +928,36 @@ app.post('/api/orders/update-stock', async (req, res) => {
         // Обновляем количество для каждого товара
         const updates = [];
         
+        console.log(`📦 Обрабатываем ${items.length} товаров для обновления`);
+        
         for (const item of items) {
             const productId = item.productId?.toString() || '';
             const quantity = parseInt(item.quantity) || 0;
             const flavor = item.flavor || null;
             const location = item.location || null;
             
-            if (!productId || quantity <= 0) continue;
+            console.log(`\n🔍 Товар: productId=${productId}, quantity=${quantity}, flavor=${flavor}, location=${location}`);
+            
+            if (!productId || quantity <= 0) {
+                console.log(`⚠️ Пропускаем товар: неверный productId или quantity`);
+                continue;
+            }
             
             // Находим товар в таблице
             const product = allProducts.find(p => 
                 p.id === productId || 
                 p['ID'] === productId ||
-                p['id'] === productId
+                p['id'] === productId ||
+                p['ID']?.toString() === productId
             );
             
             if (!product) {
-                console.log(`Товар с ID ${productId} не найден в таблице`);
+                console.log(`❌ Товар с ID ${productId} не найден в таблице`);
+                console.log(`📋 Доступные ID товаров (первые 5):`, productsData.slice(0, 5).map(p => p.id || p['ID'] || p['id']));
                 continue;
             }
+            
+            console.log(`✅ Товар найден:`, product.name || product['Название'] || 'Без названия');
             
             // Находим строку товара (нумерация с 2, так как первая строка - заголовки)
             const productRowIndex = productsData.findIndex(p => 
@@ -975,27 +986,36 @@ app.post('/api/orders/update-stock', async (req, res) => {
             
             // Если есть данные по адресу и вкусу, нужно обновить в вариантах
             if (flavor && location && variantsData.length > 0) {
+                console.log(`🔍 Ищем вариант: productId=${productId}, flavor=${flavor}, location=${location}`);
+                
                 // Ищем вариант в таблице вариантов
                 const variant = variantsData.find(v => 
-                    (v.productId === productId || v['ID товара'] === productId) &&
+                    (v.productId === productId || v['ID товара'] === productId || v['ID товара']?.toString() === productId) &&
                     (v.flavor === flavor || v['Вкус'] === flavor || v['вкус'] === flavor)
                 );
                 
                 if (variant) {
+                    console.log(`✅ Вариант найден:`, variant);
                     const variantRowIndex = variantsData.findIndex(v => 
-                        (v.productId === productId || v['ID товара'] === productId) &&
+                        (v.productId === productId || v['ID товара'] === productId || v['ID товара']?.toString() === productId) &&
                         (v.flavor === flavor || v['Вкус'] === flavor || v['вкус'] === flavor)
                     ) + 2;
                     
                     const variantHeaders = variantsText.split('\n')[0].split(',').map(h => h.trim().replace(/^"|"$/g, ''));
+                    console.log(`📋 Заголовки вариантов:`, variantHeaders);
                     
                     // Ищем колонку с количеством для конкретного адреса
                     // Формат может быть: "Минск, ст. м. Грушевка" или просто название адреса
                     const locationColIndex = variantHeaders.findIndex(h => {
                         const hLower = h.toLowerCase();
                         const locLower = location.toLowerCase();
-                        return hLower.includes(locLower) || locLower.includes(hLower);
+                        // Более гибкий поиск - ищем частичное совпадение
+                        return hLower.includes(locLower) || locLower.includes(hLower) || 
+                               hLower.replace(/\s+/g, '').includes(locLower.replace(/\s+/g, '')) ||
+                               locLower.replace(/\s+/g, '').includes(hLower.replace(/\s+/g, ''));
                     });
+                    
+                    console.log(`📍 Индекс колонки для location "${location}": ${locationColIndex}`);
                     
                     if (locationColIndex >= 0 && variantRowIndex >= 2) {
                         // Обновляем количество на адресе
@@ -1007,13 +1027,23 @@ app.post('/api/orders/update-stock', async (req, res) => {
                             newQuantity = currentQuantity + quantity;
                         }
                         
+                        console.log(`📊 Обновление варианта: ${currentQuantity} -> ${newQuantity} (${action})`);
+                        
                         updates.push({
                             sheetId: GOOGLE_SHEETS_CONFIG.variantsGid,
                             range: `${String.fromCharCode(65 + locationColIndex)}${variantRowIndex}`,
                             value: newQuantity.toString()
                         });
+                    } else {
+                        console.log(`⚠️ Не найдена колонка для location "${location}" или неверный индекс строки ${variantRowIndex}`);
                     }
+                } else {
+                    console.log(`⚠️ Вариант не найден для productId=${productId}, flavor=${flavor}`);
                 }
+            } else {
+                if (!flavor) console.log(`⚠️ Не указан flavor для товара ${productId}`);
+                if (!location) console.log(`⚠️ Не указан location для товара ${productId}`);
+                if (variantsData.length === 0) console.log(`⚠️ Нет данных вариантов`);
             }
             
             // Обновляем общее количество товара (если есть колонка)
@@ -1049,11 +1079,19 @@ app.post('/api/orders/update-stock', async (req, res) => {
         // Пытаемся обновить таблицу через Google Sheets API
         let updatedCount = 0;
         
+        console.log(`📊 Подготовлено ${updates.length} обновлений для заказа ${orderId}`);
+        console.log(`📋 Действие: ${action}`);
+        if (updates.length > 0) {
+            console.log('📝 Обновления:', JSON.stringify(updates.slice(0, 3), null, 2)); // Показываем первые 3
+        }
+        
         try {
             // Проверяем наличие credentials
             const credentialsPath = path.join(__dirname, 'credentials.json');
+            console.log(`🔑 Проверяем credentials.json по пути: ${credentialsPath}`);
             
             if (fs.existsSync(credentialsPath)) {
+                console.log('✅ Файл credentials.json найден');
                 // Используем Service Account для аутентификации
                 const credentials = JSON.parse(fs.readFileSync(credentialsPath, 'utf8'));
                 const auth = new google.auth.GoogleAuth({
@@ -1126,8 +1164,10 @@ app.post('/api/orders/update-stock', async (req, res) => {
                 console.log('⚠️ Файл credentials.json не найден. Обновления не выполнены.');
                 console.log('Для работы обновления нужно:');
                 console.log('1. Создать Service Account в Google Cloud Console');
-                console.log('2. Скачать JSON ключ и сохранить как credentials.json');
+                console.log('2. Скачать JSON ключ и сохранить как credentials.json в папку serv/');
                 console.log('3. Дать доступ Service Account к таблице');
+                console.log(`📁 Текущая директория: ${__dirname}`);
+                console.log(`📁 Путь к credentials: ${credentialsPath}`);
             }
         } catch (error) {
             console.error('Ошибка при обновлении через Google Sheets API:', error.message);
