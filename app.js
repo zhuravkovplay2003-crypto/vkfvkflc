@@ -24,7 +24,7 @@ let favoritesScrollPosition = 0; // Позиция скролла страниц
 let currentLocation = 'Минск, ст. м. Грушевка';
 let viewingProduct = null;
 let ageVerified = false;
-let favoritesCategory = 'all'; // Категория в избранном: 'all', 'liquids', 'accessories', 'disposable', 'vape'
+let favoritesCategory = 'all'; // Категория в избранном: 'all', 'жидкости', 'расходники', 'одноразки', 'устройства'
 let deliveryType = 'selfPickup'; // 'selfPickup' или 'delivery'
 let deliveryTime = null; // Время доставки в формате 'YYYY-MM-DD|HH:MM-HH:MM'
 let deliveryExactTime = null; // Точное время доставки в формате 'HH:MM'
@@ -2019,8 +2019,8 @@ function showPage(page, skipHistory = false, resetCatalog = false) {
             }
         } else {
             // Для других страниц подсвечиваем соответствующую кнопку
-            if (onclick && onclick.includes(`'${page}'`)) {
-                btn.classList.add('active');
+        if (onclick && onclick.includes(`'${page}'`)) {
+            btn.classList.add('active');
             }
         }
     });
@@ -2240,7 +2240,7 @@ function showPage(page, skipHistory = false, resetCatalog = false) {
         
         // Очищаем viewingProduct если переходим на каталог (только если не восстанавливаем товар)
         if (!localStorage.getItem('lastViewedProduct')) {
-            viewingProduct = null;
+        viewingProduct = null;
         }
         
         if (searchSection) searchSection.style.display = 'flex';
@@ -2474,9 +2474,10 @@ function displayProducts(productsToShow = null) {
     
     // Фильтр по категории
     if (!productsToShow && currentCategory !== 'all') {
-        if (currentCategory === 'vape') {
-            // Для категории "Вейп" фильтруем по нескольким условиям
+        if (currentCategory === 'устройства') {
+            // Для категории "Устройства" фильтруем по нескольким условиям (поддержка старых и новых названий)
             filtered = products.filter(p => 
+                p.category === 'устройства' || 
                 p.category === 'vape' || 
                 p.category === 'devices' || 
                 (p.name && p.name.toLowerCase().includes('вейп')) ||
@@ -2513,7 +2514,7 @@ function displayProducts(productsToShow = null) {
     // }
     
     // Сортировка по наличию - сначала товары в наличии, потом не в наличии
-    filtered = [...filtered].sort((a, b) => {
+        filtered = [...filtered].sort((a, b) => {
         const aInStock = deliveryType === 'selfPickup' && selectedPickupLocation
             ? isProductInStockAtLocation(a, selectedPickupLocation)
             : (a.inStock !== false && (a.quantity === undefined || a.quantity > 0));
@@ -2784,7 +2785,7 @@ function showProduct(productId, favoriteFlavor = null, favoriteStrength = null) 
                 viewingProduct.selectedFlavorIndex = firstAvailableFlavorIndex;
                 viewingProduct.selectedFlavor = firstAvailableFlavor;
             } else {
-                viewingProduct.selectedFlavorIndex = 0;
+            viewingProduct.selectedFlavorIndex = 0;
                 viewingProduct.selectedFlavor = product.flavors[0];
             }
         }
@@ -2898,7 +2899,7 @@ function renderProductContent(container, product, favoriteFlavor, favoriteStreng
     
     let flavorOptions = '';
     // Не показываем выбор вкусов для устройств (devices, accessories) - только для жидкостей
-    if (product.flavors && product.flavors.length > 0 && product.category !== 'devices' && product.category !== 'accessories') {
+    if (product.flavors && product.flavors.length > 0 && product.category !== 'devices' && product.category !== 'accessories' && product.category !== 'устройства' && product.category !== 'расходники') {
         // Определяем выбранный вкус
         const selectedFlavorIndex = viewingProduct.selectedFlavorIndex !== undefined ? viewingProduct.selectedFlavorIndex : 0;
         const selectedFlavor = viewingProduct.selectedFlavor || product.flavors[selectedFlavorIndex];
@@ -3078,8 +3079,8 @@ function renderProductContent(container, product, favoriteFlavor, favoriteStreng
                                     border: ${isSelected ? '3px solid #007AFF' : (!isFlavorInStock ? '2px solid #999' : '2px solid #e5e5e5')}; 
                                     margin-bottom: 8px; overflow: visible; position: relative; flex-shrink: 0; box-shadow: ${isSelected ? '0 2px 8px rgba(0,122,255,0.3)' : '0 1px 3px rgba(0,0,0,0.1)'}; ${!isFlavorInStock ? 'opacity: 0.6; filter: grayscale(100%);' : ''}">
                                     <div style="width: 100%; height: 100%; border-radius: 50%; overflow: hidden; position: relative;">
-                                        ${flavorImageContent}
-                                    </div>
+                                    ${flavorImageContent}
+                                </div>
                                     ${isSelected ? '<div style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 24px; height: 24px; background: #007AFF; border-radius: 50%; display: flex; align-items: center; justify-content: center; z-index: 10; box-shadow: 0 2px 4px rgba(0,0,0,0.2);"><span style="color: white; font-size: 14px; font-weight: bold; line-height: 1;">✓</span></div>' : ''}
                                 </div>
                                 <div style="font-size: 12px; color: ${isSelected ? '#007AFF' : (!isFlavorInStock ? '#999' : '#000')}; font-weight: ${isSelected ? '600' : '400'}; text-align: center; width: 100%; min-height: 32px; display: flex; align-items: center; justify-content: center; line-height: 1.2;">
@@ -3146,7 +3147,7 @@ function renderProductContent(container, product, favoriteFlavor, favoriteStreng
             </div>
             <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px;">
                 <span style="padding: 6px 12px; background: #000; color: #fff; border-radius: 12px; font-size: 12px;">
-                    ${product.category === 'liquids' ? 'Жидкость' : product.category === 'accessories' ? 'Расходник' : 'Одноразка'}
+                    ${product.category === 'жидкости' ? 'Жидкость' : product.category === 'расходники' ? 'Расходник' : product.category === 'одноразки' ? 'Одноразка' : product.category === 'устройства' ? 'Устройство' : (product.category === 'liquids' ? 'Жидкость' : product.category === 'accessories' ? 'Расходник' : product.category === 'disposable' ? 'Одноразка' : product.category === 'vape' || product.category === 'devices' ? 'Устройство' : '')}
                 </span>
                 <div style="display: flex; gap: 12px;">
                     <button onclick="shareProduct(${product.id})" style="width: 36px; height: 36px; 
@@ -3218,10 +3219,10 @@ function renderProductContent(container, product, favoriteFlavor, favoriteStreng
                     
                     return `
                         <div style="margin-top: 20px;">
-                            <button disabled style="width: 100%; padding: 16px; 
-                                background: #cccccc; color: white; border: none; border-radius: 12px; 
+                        <button disabled style="width: 100%; padding: 16px; 
+                            background: #cccccc; color: white; border: none; border-radius: 12px; 
                                 font-size: 16px; font-weight: 600; cursor: not-allowed; opacity: 0.6;">
-                                Нет в наличии
+                            Нет в наличии
                             </button>
                             ${showLocationInfo && locationsWithStock.length > 0 ? `
                                 <div style="margin-top: 12px; padding: 12px; background: #f5f5f5; border-radius: 12px; font-size: 13px; color: #666; line-height: 1.5;">
@@ -3436,7 +3437,7 @@ function selectFlavor(flavor, index) {
             }
         }
         viewingProduct.selectedFlavorIndex = correctIndex;
-        viewingProduct.selectedFlavor = flavor;
+    viewingProduct.selectedFlavor = flavor;
     } else {
         viewingProduct.selectedFlavorIndex = index !== undefined ? index : 0;
         viewingProduct.selectedFlavor = flavor;
@@ -3732,36 +3733,36 @@ function selectFlavor(flavor, index) {
         });
     } else {
         // Если контейнер не найден, пытаемся обновить только изображение
-        if (product && product.flavorImages && product.flavorImages[flavor]) {
-            const imageContainer = document.getElementById('product-image-container');
-            if (imageContainer) {
-                const flavorImageUrl = product.flavorImages[flavor];
-                // Всегда создаем новый img элемент для гарантированного обновления
-                // Используем уникальный timestamp для каждого обновления
-                const timestamp = Date.now() + Math.random();
-                const newSrc = flavorImageUrl + '?t=' + timestamp;
-                
-                // Полностью очищаем контейнер
-                imageContainer.innerHTML = '';
-                
-                const newImg = document.createElement('img');
-                newImg.src = newSrc;
-                newImg.alt = product.name;
-                newImg.style.cssText = 'width: 100%; height: 100%; object-fit: cover; border-radius: 12px;';
-                newImg.onerror = function() {
-                    imageContainer.innerHTML = getPackageIcon('#999999');
-                    imageContainer.style.fontSize = '0';
-                    imageContainer.style.display = 'flex';
-                    imageContainer.style.alignItems = 'center';
-                    imageContainer.style.justifyContent = 'center';
-                };
-                newImg.onload = function() {
-                    // Убеждаемся, что изображение загрузилось
-                    imageContainer.style.fontSize = '0';
-                };
-                
-                imageContainer.appendChild(newImg);
+    if (product && product.flavorImages && product.flavorImages[flavor]) {
+        const imageContainer = document.getElementById('product-image-container');
+        if (imageContainer) {
+            const flavorImageUrl = product.flavorImages[flavor];
+            // Всегда создаем новый img элемент для гарантированного обновления
+            // Используем уникальный timestamp для каждого обновления
+            const timestamp = Date.now() + Math.random();
+            const newSrc = flavorImageUrl + '?t=' + timestamp;
+            
+            // Полностью очищаем контейнер
+            imageContainer.innerHTML = '';
+            
+            const newImg = document.createElement('img');
+            newImg.src = newSrc;
+            newImg.alt = product.name;
+            newImg.style.cssText = 'width: 100%; height: 100%; object-fit: cover; border-radius: 12px;';
+            newImg.onerror = function() {
+                imageContainer.innerHTML = getPackageIcon('#999999');
                 imageContainer.style.fontSize = '0';
+                imageContainer.style.display = 'flex';
+                imageContainer.style.alignItems = 'center';
+                imageContainer.style.justifyContent = 'center';
+            };
+            newImg.onload = function() {
+                // Убеждаемся, что изображение загрузилось
+                imageContainer.style.fontSize = '0';
+            };
+            
+            imageContainer.appendChild(newImg);
+            imageContainer.style.fontSize = '0';
             }
         }
     }
@@ -3959,7 +3960,7 @@ function selectFlavor(flavor, index) {
                         <div style="margin-top: 12px; padding: 12px; background: #f5f5f5; border-radius: 12px; font-size: 13px; color: #666; line-height: 1.5;">
                             <div style="font-weight: 600; margin-bottom: 4px; color: #333;">Есть в наличии на:</div>
                             <div>${locationsWithStock.join(', ')}</div>
-                                </div>
+                            </div>
                     ` : '<div style="margin-top: 12px; padding: 12px; background: #fff3f3; border-radius: 12px; font-size: 13px; color: #f44336; line-height: 1.5; text-align: center; font-weight: 600;">Товара нет ни на одной точке</div>';
                     buttonContainer.innerHTML = `
                         <button disabled style="width: 100%; padding: 16px; 
@@ -4095,7 +4096,7 @@ function showFlavorModal() {
     let currentlySelectedFlavor = selectedFlavor;
     let currentlySelectedIndex = selectedFlavorIndex;
     
-        sortedFlavors.forEach((flavor, displayIdx) => {
+    sortedFlavors.forEach((flavor, displayIdx) => {
         const originalIndex = viewingProduct.flavors.indexOf(flavor);
         const isInitiallySelected = flavor === selectedFlavor || originalIndex === selectedFlavorIndex;
         
@@ -4206,17 +4207,17 @@ function showFlavorModal() {
             }
             
             setTimeout(() => {
-                document.body.style.overflow = '';
-                modal.remove();
-                
+            document.body.style.overflow = '';
+            modal.remove();
+            
                 // Плавно скроллим к выбранному вкусу в скроллбаре (работает и для недоступных вкусов)
                 requestAnimationFrame(() => {
-                    setTimeout(() => {
-                        const flavorSection = document.querySelector('[onclick="showFlavorModal()"]')?.closest('div[style*="margin: 20px 0"]');
-                        if (flavorSection) {
+            setTimeout(() => {
+                const flavorSection = document.querySelector('[onclick="showFlavorModal()"]')?.closest('div[style*="margin: 20px 0"]');
+                if (flavorSection) {
                             // Используем originalIndex для поиска элемента (работает для всех вкусов, включая недоступные)
-                            const flavorElement = document.getElementById(`flavor-${originalIndex}`);
-                            if (flavorElement) {
+                    const flavorElement = document.getElementById(`flavor-${originalIndex}`);
+                    if (flavorElement) {
                                 const flavorsContainer = flavorSection.querySelector('.flavors-scroll-container') || 
                                                          flavorSection.querySelector('div[style*="overflow-x: auto"]');
                                 if (flavorsContainer) {
@@ -6453,41 +6454,41 @@ async function showExactTimeSelectionModal(timeSlot) {
     // Это нужно для проверки заказов других пользователей и синхронизации между устройствами
     // Только для самовывоза проверяем занятость времени
     const updateBookedTimes = () => {
-        if (deliveryType === 'selfPickup' && selectedPickupLocation) {
-            const currentPickupLocation = encodeURIComponent(selectedPickupLocation);
+    if (deliveryType === 'selfPickup' && selectedPickupLocation) {
+        const currentPickupLocation = encodeURIComponent(selectedPickupLocation);
             fetch(`${SERVER_URL}/api/orders/booked-times?date=${dateKey}&location=${currentPickupLocation}`)
-                .then(response => response.json())
-                .then(data => {
-                    if (data.success && Array.isArray(data.bookedTimes)) {
-                        // Объединяем с локальными заказами
-                        const serverBookedTimes = data.bookedTimes;
-                        const localBookedTimes = getBookedTimesForDate(dateKey, selectedPickupLocation);
-                        const allBookedTimes = [...new Set([...localBookedTimes, ...serverBookedTimes])];
-                        
+            .then(response => response.json())
+            .then(data => {
+                if (data.success && Array.isArray(data.bookedTimes)) {
+                    // Объединяем с локальными заказами
+                    const serverBookedTimes = data.bookedTimes;
+                    const localBookedTimes = getBookedTimesForDate(dateKey, selectedPickupLocation);
+                    const allBookedTimes = [...new Set([...localBookedTimes, ...serverBookedTimes])];
+                    
                         // ВАЖНО: Обновляем модальное окно если оно открыто
-                        const modal = document.querySelector('.exact-time-modal-overlay');
-                        if (modal) {
-                            const container = document.getElementById('exact-time-slots-container');
-                            if (container) {
-                                // Обновляем кнопки с обновленными данными
-                                const timeSlots = container.querySelectorAll('button');
-                                timeSlots.forEach(btn => {
-                                    const timeStr = btn.textContent.split(' ')[0].trim(); // Берем только время без "(занято)"
+                    const modal = document.querySelector('.exact-time-modal-overlay');
+                    if (modal) {
+                        const container = document.getElementById('exact-time-slots-container');
+                        if (container) {
+                            // Обновляем кнопки с обновленными данными
+                            const timeSlots = container.querySelectorAll('button');
+                            timeSlots.forEach(btn => {
+                                const timeStr = btn.textContent.split(' ')[0].trim(); // Берем только время без "(занято)"
                                     if (allBookedTimes.includes(timeStr) && !btn.disabled && !btn.textContent.includes('(занято)')) {
-                                        btn.disabled = true;
-                                        btn.style.cssText = 'padding: 10px 16px; border: 2px solid #999; border-radius: 10px; background: #e0e0e0; cursor: not-allowed; font-size: 14px; font-weight: 600; color: #999; transition: all 0.3s; white-space: nowrap; margin-right: 8px; margin-bottom: 8px; opacity: 0.5;';
+                                    btn.disabled = true;
+                                    btn.style.cssText = 'padding: 10px 16px; border: 2px solid #999; border-radius: 10px; background: #e0e0e0; cursor: not-allowed; font-size: 14px; font-weight: 600; color: #999; transition: all 0.3s; white-space: nowrap; margin-right: 8px; margin-bottom: 8px; opacity: 0.5;';
                                         btn.textContent = timeStr + ' (занято)';
-                                        btn.removeAttribute('onclick');
-                                    }
-                                });
-                            }
+                                    btn.removeAttribute('onclick');
+                                }
+                            });
                         }
                     }
-                })
-                .catch(err => {
-                    console.error('Error fetching booked times from server:', err);
-                });
-        }
+                }
+            })
+            .catch(err => {
+                console.error('Error fetching booked times from server:', err);
+            });
+    }
     };
     
     // Первая проверка сразу
@@ -6811,8 +6812,8 @@ function showCart() {
     const wasCartOpen = container.innerHTML.trim() !== '' && container.querySelector('div[style*="border-radius: 16px"]');
     if (!wasCartOpen) {
         // Только при первом открытии корзины сбрасываем скролл
-        window.scrollTo(0, 0);
-        container.scrollTop = 0;
+    window.scrollTo(0, 0);
+    container.scrollTop = 0;
     }
     // При обновлении корзины сохраняем позицию скролла (уже сохранена выше в scrollPosition)
     
@@ -7161,7 +7162,7 @@ function showCart() {
                             <div id="cart-item-stock-message-${idx}" style="margin-top: 8px; padding: 10px 14px; background: #fff3f3; border-radius: 8px; 
                                 font-size: 14px; color: #f44336; font-weight: 700; border: 2px solid #ffcdd2; text-align: center;">
                                 На данном адресе этого товара нет в наличии
-                            </div>
+                    </div>
                         ` : ''}
                     </div>
                     <button onclick="removeFromCart(${idx})" style="width: 36px; height: 36px; 
@@ -7766,18 +7767,18 @@ function updateCartTotals() {
         // Обновляем итоговую сумму
         const totalSection = summarySection.querySelector('div[style*="text-align: right"]');
         if (totalSection) {
-            let html = '';
-            if (totalMoney > 0) {
-                html += `<div style="font-weight: 700; font-size: 22px; color: #007AFF; margin-bottom: 4px;">
-                    ${totalMoney.toFixed(2)} BYN
-                </div>`;
-            }
-            if (totalCoins > 0) {
-                html += `<div style="font-weight: 700; font-size: 22px; color: #FF9800;">
-                    ${totalCoins.toFixed(1)} коинов
-                </div>`;
-            }
-            if (html) {
+                let html = '';
+                if (totalMoney > 0) {
+                    html += `<div style="font-weight: 700; font-size: 22px; color: #007AFF; margin-bottom: 4px;">
+                        ${totalMoney.toFixed(2)} BYN
+                    </div>`;
+                }
+                if (totalCoins > 0) {
+                    html += `<div style="font-weight: 700; font-size: 22px; color: #FF9800;">
+                        ${totalCoins.toFixed(1)} коинов
+                    </div>`;
+                }
+                if (html) {
                 totalSection.innerHTML = html;
             }
         }
@@ -8151,8 +8152,8 @@ function checkout() {
                 const existingOrder = orders.find(o => o.id === result.orderId);
                 if (!existingOrder) {
                     // Сохраняем заказ локально только если его еще нет
-                    orders.unshift(order);
-                    localStorage.setItem('orders', JSON.stringify(orders));
+                orders.unshift(order);
+                localStorage.setItem('orders', JSON.stringify(orders));
                 } else {
                     console.log('⚠️ Заказ уже существует, пропускаем дублирование');
                 }
@@ -8205,7 +8206,9 @@ function checkout() {
                                 flavor: item.flavor || null,
                                 quantity: item.quantity,
                                 location: deliveryType === 'selfPickup' ? selectedPickupLocation : null
-                            }))
+                            })),
+                            action: 'decrease',
+                            location: deliveryType === 'selfPickup' ? selectedPickupLocation : null
                         })
                     });
                     
@@ -8256,8 +8259,8 @@ function checkout() {
             // ВАЖНО: Проверяем, нет ли уже такого заказа (предотвращаем дублирование)
             const existingOrder = orders.find(o => o.id === orderId);
             if (!existingOrder) {
-                orders.unshift(order);
-                localStorage.setItem('orders', JSON.stringify(orders));
+            orders.unshift(order);
+            localStorage.setItem('orders', JSON.stringify(orders));
             } else {
                 console.log('⚠️ Заказ уже существует, пропускаем дублирование');
             }
@@ -8641,9 +8644,9 @@ function checkOrderStatus(orderId) {
                             }
                             // Обновляем отображение заказов только если на странице заказов
                             if (currentPage === 'orders') {
-                                setTimeout(() => {
-                                    showOrders();
-                                }, 100);
+                            setTimeout(() => {
+                                showOrders();
+                            }, 100);
                             }
                         } else if (data.status === 'rejected') {
                             // Показываем уведомление об отклонении заказа
@@ -8658,9 +8661,9 @@ function checkOrderStatus(orderId) {
                             }
                             // Обновляем отображение заказов только если на странице заказов
                             if (currentPage === 'orders') {
-                                setTimeout(() => {
-                                    showOrders();
-                                }, 100);
+                            setTimeout(() => {
+                                showOrders();
+                            }, 100);
                             }
                         } else if (data.status === 'transferred') {
                             console.log('Order status changed to transferred:', orderId);
@@ -8744,12 +8747,12 @@ function checkOrderStatus(orderId) {
                                 }
                             }
                             
-                        // Начисляем штампы за заказ (2 товара = 1 штамп, только за товары оплаченные деньгами)
+                            // Начисляем штампы за заказ (2 товара = 1 штамп, только за товары оплаченные деньгами)
                         // ВАЖНО: stampsAlreadyAdded уже проверен выше
-                        let stampsToAdd = 0;
-                        let bonusCoins = 0;
-                        
-                        if (!stampsAlreadyAdded) {
+                            let stampsToAdd = 0;
+                            let bonusCoins = 0;
+                            
+                            if (!stampsAlreadyAdded) {
                                 // Загружаем актуальное количество штампов
                                 const savedStamps = localStorage.getItem('stamps');
                                 let totalStampsValue = savedStamps ? parseInt(savedStamps) : 0;
@@ -8953,10 +8956,10 @@ function checkOrderStatus(orderId) {
                             }
                             
                             // Обновляем отображение заказов ОДИН РАЗ, только если на странице заказов
-                            if (currentPage === 'orders') {
-                                setTimeout(() => {
-                                    showOrders();
-                                }, 100);
+                        if (currentPage === 'orders') {
+                            setTimeout(() => {
+                            showOrders();
+                            }, 100);
                             }
                         }
                         
@@ -9797,23 +9800,23 @@ function showFavorites() {
             const product = products.find(p => p.id == productId);
             if (!product) return false;
             
-            // Маппинг категорий
-            const categoryMap = {
-                'liquids': 'liquids',
-                'accessories': 'accessories',
-                'disposable': 'disposable',
-                'vape': 'vape' // или 'devices' в зависимости от структуры
-            };
-            
-            // Проверяем соответствие категории
-            if (favoritesCategory === 'vape') {
-                // Для категории "Вейп" проверяем несколько вариантов
-                return product.category === 'vape' || product.category === 'devices' || 
+            // Проверяем соответствие категории (поддержка русских и английских названий)
+            if (favoritesCategory === 'устройства') {
+                // Для категории "Устройства" проверяем несколько вариантов
+                return product.category === 'устройства' || 
+                       product.category === 'vape' || 
+                       product.category === 'devices' || 
                        (product.name && product.name.toLowerCase().includes('вейп')) ||
                        (product.description && product.description.toLowerCase().includes('вейп'));
+            } else if (favoritesCategory === 'жидкости') {
+                return product.category === 'жидкости' || product.category === 'liquids';
+            } else if (favoritesCategory === 'расходники') {
+                return product.category === 'расходники' || product.category === 'accessories';
+            } else if (favoritesCategory === 'одноразки') {
+                return product.category === 'одноразки' || product.category === 'disposable';
             }
             
-            return product.category === categoryMap[favoritesCategory];
+            return false;
         });
     }
     
@@ -10064,7 +10067,12 @@ function setFavoritesCategory(category) {
     document.querySelectorAll('#favorites-tabs-section .category-btn').forEach(btn => {
         btn.classList.remove('active');
     });
-    const activeBtn = document.getElementById(`favorites-tab-${category}`);
+    // Поддержка старых и новых ID кнопок
+    const activeBtn = document.getElementById(`favorites-tab-${category}`) || 
+                     (category === 'жидкости' ? document.getElementById('favorites-tab-liquids') : null) ||
+                     (category === 'расходники' ? document.getElementById('favorites-tab-accessories') : null) ||
+                     (category === 'одноразки' ? document.getElementById('favorites-tab-disposable') : null) ||
+                     (category === 'устройства' ? document.getElementById('favorites-tab-vape') : null);
     if (activeBtn) {
         activeBtn.classList.add('active');
     }
@@ -10423,15 +10431,15 @@ async function showOrders() {
     
     // Если сервер недоступен или userDataManager не загружен, загружаем из localStorage
     if (orders.length === 0) {
-        const savedOrders = localStorage.getItem('orders');
-        if (savedOrders) {
-            try {
-                const parsedOrders = JSON.parse(savedOrders);
-                if (Array.isArray(parsedOrders)) {
-                    orders = parsedOrders;
-                }
-            } catch (e) {
-                console.error('Error loading orders from localStorage:', e);
+    const savedOrders = localStorage.getItem('orders');
+    if (savedOrders) {
+        try {
+            const parsedOrders = JSON.parse(savedOrders);
+            if (Array.isArray(parsedOrders)) {
+                orders = parsedOrders;
+            }
+        } catch (e) {
+            console.error('Error loading orders from localStorage:', e);
             }
         }
     }
@@ -10442,10 +10450,10 @@ async function showOrders() {
         const statusPromises = orders.map(async (order) => {
             if (!order.id) return;
             
-            try {
-                const response = await fetch(`${SERVER_URL}/api/orders/${order.id}/status`);
-                const data = await response.json();
-                
+                try {
+                    const response = await fetch(`${SERVER_URL}/api/orders/${order.id}/status`);
+                    const data = await response.json();
+                    
                 if (data.success && data.status) {
                     const oldStatus = order.status;
                     
@@ -10469,8 +10477,8 @@ async function showOrders() {
         await Promise.all(statusPromises);
         
         // Сохраняем обновленные заказы
-        localStorage.setItem('orders', JSON.stringify(orders));
-        
+                        localStorage.setItem('orders', JSON.stringify(orders));
+                        
         // Теперь запускаем проверку статуса для активных заказов
         orders.forEach(order => {
             if (order.id && (order.status === 'pending' || order.status === 'processing' || order.status === 'confirmed')) {
@@ -10498,14 +10506,14 @@ async function showOrders() {
     // Это гарантирует актуальную информацию на всех устройствах
     checkAllOrdersStatus().then(() => {
         // После проверки статусов перезагружаем заказы из localStorage
-        const savedOrders = localStorage.getItem('orders');
-        if (savedOrders) {
-            try {
-                const parsedOrders = JSON.parse(savedOrders);
-                if (Array.isArray(parsedOrders)) {
-                    orders = parsedOrders;
-                }
-            } catch (e) {
+                            const savedOrders = localStorage.getItem('orders');
+                            if (savedOrders) {
+                                try {
+                                    const parsedOrders = JSON.parse(savedOrders);
+                                    if (Array.isArray(parsedOrders)) {
+                                        orders = parsedOrders;
+                                    }
+                                } catch (e) {
                 console.error('Error loading orders from localStorage:', e);
             }
         }
@@ -10525,12 +10533,12 @@ async function showOrders() {
     
     // Функция для отрисовки содержимого заказов
     function renderOrdersContent() {
-        const colors = getThemeColors();
-        
-        container.className = '';
-        container.style.padding = '16px';
-        container.style.background = colors.bg;
-        container.style.color = colors.text;
+    const colors = getThemeColors();
+    
+    container.className = '';
+    container.style.padding = '16px';
+    container.style.background = colors.bg;
+    container.style.color = colors.text;
     
     // Фильтруем заказы по выбранной вкладке
     let filteredOrders = [];
@@ -11007,13 +11015,13 @@ async function showOrders() {
         `;
         }).join('')}
     `;
-        
-        // Анимация появления контейнера
-        setTimeout(() => {
-            container.style.opacity = '1';
-            container.style.transform = 'translateY(0)';
-            container.style.transition = 'opacity 0.4s ease, transform 0.4s ease';
-        }, 10);
+    
+    // Анимация появления контейнера
+    setTimeout(() => {
+        container.style.opacity = '1';
+        container.style.transform = 'translateY(0)';
+        container.style.transition = 'opacity 0.4s ease, transform 0.4s ease';
+    }, 10);
         
         // ВАЖНО: Сбрасываем флаг после завершения отрисовки
         setTimeout(() => {
@@ -11286,6 +11294,32 @@ function cancelOrder(orderId) {
                             const result = await response.json();
                             console.log('Order cancellation sent to server:', result);
                             
+                            // Обновляем количество товаров в Google Sheets (увеличиваем обратно)
+                            try {
+                                const updateItems = order.items.map(item => ({
+                                    productId: item.productId,
+                                    quantity: item.quantity,
+                                    flavor: item.flavor || null,
+                                    location: order.deliveryType === 'selfPickup' ? order.pickupLocation : null
+                                }));
+                                
+                                await fetch(`${SERVER_URL}/api/orders/update-stock`, {
+                                    method: 'POST',
+                                    headers: {
+                                        'Content-Type': 'application/json'
+                                    },
+                                    body: JSON.stringify({
+                                        orderId: order.id,
+                                        items: updateItems,
+                                        action: 'increase',
+                                        location: order.deliveryType === 'selfPickup' ? order.pickupLocation : null
+                                    })
+                                });
+                                console.log('✅ Количество товаров возвращено в Google Sheets');
+                            } catch (error) {
+                                console.error('Ошибка обновления количества товаров при отмене:', error);
+                            }
+                            
                             // ВАЖНО: Синхронизируем отмену с сервером через userDataManager после успешной отмены на сервере
                             if (window.userDataManager && window.userDataManager.updateUserData) {
                                 window.userDataManager.updateUserData({ orders: orders }).catch(err => {
@@ -11307,7 +11341,7 @@ function cancelOrder(orderId) {
                 
                 // ВАЖНО: НЕ переключаемся на вкладку "Отмененные" - остаемся на текущей вкладке
                 // Просто обновляем отображение заказов
-                showOrders();
+        showOrders();
                 
                 // Обновляем профиль если открыт
                 if (currentPage === 'profile') {
@@ -12874,8 +12908,8 @@ function buyWithVapeCoins(productId) {
                 // ВАЖНО: Проверяем, нет ли уже такого заказа (предотвращаем дублирование)
                 const existingOrder = orders.find(o => o.id === orderId);
                 if (!existingOrder) {
-                    orders.unshift(order);
-                    localStorage.setItem('orders', JSON.stringify(orders));
+                orders.unshift(order);
+                localStorage.setItem('orders', JSON.stringify(orders));
                 } else {
                     console.log('⚠️ Заказ уже существует, пропускаем дублирование:', orderId);
                 }
