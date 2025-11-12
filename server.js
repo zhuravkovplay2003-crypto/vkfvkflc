@@ -970,6 +970,7 @@ app.post('/api/orders/update-stock', async (req, res) => {
             // Предполагаем структуру: ID, Название, Количество, Продано шт, и т.д.
             // Нужно найти индексы колонок по заголовкам
             const headers = productsText.split('\n')[0].split(',').map(h => h.trim().replace(/^"|"$/g, ''));
+            console.log(`📋 Заголовки таблицы товаров:`, headers);
             
             // Ищем колонки
             const quantityColIndex = headers.findIndex(h => 
@@ -977,29 +978,45 @@ app.post('/api/orders/update-stock', async (req, res) => {
                 h.toLowerCase().includes('quantity') ||
                 h.toLowerCase().includes('остаток')
             );
+            console.log(`📊 Индекс колонки "Количество": ${quantityColIndex}`);
             
             const soldColIndex = headers.findIndex(h => 
                 h.toLowerCase().includes('продано') || 
                 h.toLowerCase().includes('sold') ||
                 h.toLowerCase().includes('продаж')
             );
+            console.log(`💰 Индекс колонки "Продано": ${soldColIndex}`);
             
-            // Если есть данные по адресу и вкусу, нужно обновить в вариантах
-            if (flavor && location && variantsData.length > 0) {
-                console.log(`🔍 Ищем вариант: productId=${productId}, flavor=${flavor}, location=${location}`);
+            // ОБЯЗАТЕЛЬНО нужно обновить количество в вариантах, даже если нет flavor
+            // Количество хранится в таблице "Варианты товаров" в колонках точек
+            if (location && variantsData.length > 0) {
+                console.log(`🔍 Ищем вариант: productId=${productId}, flavor=${flavor || 'без вкуса'}, location=${location}`);
                 
                 // Ищем вариант в таблице вариантов
-                const variant = variantsData.find(v => 
-                    (v.productId === productId || v['ID товара'] === productId || v['ID товара']?.toString() === productId) &&
-                    (v.flavor === flavor || v['Вкус'] === flavor || v['вкус'] === flavor)
-                );
+                // Если есть flavor, ищем по нему, иначе берем первый вариант для этого товара
+                let variant;
+                if (flavor) {
+                    variant = variantsData.find(v => 
+                        (v.productId === productId || v['ID товара'] === productId || v['ID товара']?.toString() === productId) &&
+                        (v.flavor === flavor || v['Вкус'] === flavor || v['вкус'] === flavor)
+                    );
+                } else {
+                    // Если нет flavor, берем первый вариант для этого товара
+                    variant = variantsData.find(v => 
+                        v.productId === productId || v['ID товара'] === productId || v['ID товара']?.toString() === productId
+                    );
+                }
                 
                 if (variant) {
                     console.log(`✅ Вариант найден:`, variant);
-                    const variantRowIndex = variantsData.findIndex(v => 
-                        (v.productId === productId || v['ID товара'] === productId || v['ID товара']?.toString() === productId) &&
-                        (v.flavor === flavor || v['Вкус'] === flavor || v['вкус'] === flavor)
-                    ) + 2;
+                    const variantRowIndex = variantsData.findIndex(v => {
+                        if (flavor) {
+                            return (v.productId === productId || v['ID товара'] === productId || v['ID товара']?.toString() === productId) &&
+                                   (v.flavor === flavor || v['Вкус'] === flavor || v['вкус'] === flavor);
+                        } else {
+                            return v.productId === productId || v['ID товара'] === productId || v['ID товара']?.toString() === productId;
+                        }
+                    }) + 2;
                     
                     const variantHeaders = variantsText.split('\n')[0].split(',').map(h => h.trim().replace(/^"|"$/g, ''));
                     console.log(`📋 Заголовки вариантов:`, variantHeaders);
@@ -1007,15 +1024,21 @@ app.post('/api/orders/update-stock', async (req, res) => {
                     // Ищем колонку с количеством для конкретного адреса
                     // Формат может быть: "Минск, ст. м. Грушевка" или просто название адреса
                     const locationColIndex = variantHeaders.findIndex(h => {
-                        const hLower = h.toLowerCase();
-                        const locLower = location.toLowerCase();
+                        const hLower = h.toLowerCase().trim();
+                        const locLower = location.toLowerCase().trim();
                         // Более гибкий поиск - ищем частичное совпадение
-                        return hLower.includes(locLower) || locLower.includes(hLower) || 
-                               hLower.replace(/\s+/g, '').includes(locLower.replace(/\s+/g, '')) ||
-                               locLower.replace(/\s+/g, '').includes(hLower.replace(/\s+/g, ''));
+                        // Убираем все пробелы и сравниваем
+                        const hClean = hLower.replace(/\s+/g, '');
+                        const locClean = locLower.replace(/\s+/g, '');
+                        return hLower === locLower || 
+                               hLower.includes(locLower) || 
+                               locLower.includes(hLower) ||
+                               hClean.includes(locClean) ||
+                               locClean.includes(hClean);
                     });
                     
                     console.log(`📍 Индекс колонки для location "${location}": ${locationColIndex}`);
+                    console.log(`📍 Все заголовки с location:`, variantHeaders.filter(h => h.toLowerCase().includes('минск') || h.toLowerCase().includes('грушевка')));
                     
                     if (locationColIndex >= 0 && variantRowIndex >= 2) {
                         // Обновляем количество на адресе
@@ -1028,6 +1051,7 @@ app.post('/api/orders/update-stock', async (req, res) => {
                         }
                         
                         console.log(`📊 Обновление варианта: ${currentQuantity} -> ${newQuantity} (${action})`);
+                        console.log(`📝 Ячейка: ${String.fromCharCode(65 + locationColIndex)}${variantRowIndex}`);
                         
                         updates.push({
                             sheetId: GOOGLE_SHEETS_CONFIG.variantsGid,
@@ -1036,34 +1060,29 @@ app.post('/api/orders/update-stock', async (req, res) => {
                         });
                     } else {
                         console.log(`⚠️ Не найдена колонка для location "${location}" или неверный индекс строки ${variantRowIndex}`);
+                        console.log(`⚠️ Доступные заголовки:`, variantHeaders);
                     }
                 } else {
-                    console.log(`⚠️ Вариант не найден для productId=${productId}, flavor=${flavor}`);
+                    console.log(`⚠️ Вариант не найден для productId=${productId}, flavor=${flavor || 'без вкуса'}`);
+                    console.log(`⚠️ Доступные варианты для этого товара:`, variantsData.filter(v => 
+                        v.productId === productId || v['ID товара'] === productId || v['ID товара']?.toString() === productId
+                    ).map(v => ({ id: v['ID товара'], flavor: v['Вкус'] || v.flavor })));
                 }
             } else {
-                if (!flavor) console.log(`⚠️ Не указан flavor для товара ${productId}`);
-                if (!location) console.log(`⚠️ Не указан location для товара ${productId}`);
-                if (variantsData.length === 0) console.log(`⚠️ Нет данных вариантов`);
+                if (!location) {
+                    console.log(`⚠️ Не указан location для товара ${productId} - количество не может быть обновлено`);
+                    console.log(`⚠️ Количество хранится в таблице "Варианты товаров" в колонках точек`);
+                }
+                if (variantsData.length === 0) {
+                    console.log(`⚠️ Нет данных вариантов - таблица "Варианты товаров" пуста`);
+                }
             }
             
-            // Обновляем общее количество товара (если есть колонка)
-            if (quantityColIndex >= 0) {
-                const currentQuantity = parseInt(product[headers[quantityColIndex]] || '0');
-                let newQuantity;
-                if (isDecrease) {
-                    newQuantity = Math.max(0, currentQuantity - quantity);
-                } else {
-                    newQuantity = currentQuantity + quantity;
-                }
-                
-                updates.push({
-                    sheetId: GOOGLE_SHEETS_CONFIG.productsGid,
-                    range: `${String.fromCharCode(65 + quantityColIndex)}${productRowIndex}`,
-                    value: newQuantity.toString()
-                });
-            }
+            // НЕ обновляем общее количество в таблице "Товары", так как там нет такой колонки
+            // Количество хранится только в таблице "Варианты товаров" в колонках точек
             
             // Обновляем графу "продано шт" (только при уменьшении, при увеличении не трогаем)
+            // Только если такая колонка есть
             if (soldColIndex >= 0 && isDecrease) {
                 const currentSold = parseInt(product[headers[soldColIndex]] || '0');
                 const newSold = currentSold + quantity;
@@ -1073,6 +1092,9 @@ app.post('/api/orders/update-stock', async (req, res) => {
                     range: `${String.fromCharCode(65 + soldColIndex)}${productRowIndex}`,
                     value: newSold.toString()
                 });
+                console.log(`💰 Обновляем "Продано": ${currentSold} -> ${newSold}`);
+            } else if (isDecrease) {
+                console.log(`⚠️ Колонка "Продано" не найдена, пропускаем обновление`);
             }
         }
         
@@ -1143,19 +1165,24 @@ app.post('/api/orders/update-stock', async (req, res) => {
                         // Получаем имя листа по sheetId
                         const sheetName = sheetNameMap[sheetIdStr] || 'Лист1';
                         
-                        await sheets.spreadsheets.values.batchUpdate({
+                        const updateData = sheetUpdates.map(update => ({
+                            range: `${sheetName}!${update.range}`,
+                            values: update.values
+                        }));
+                        
+                        console.log(`📤 Отправляем обновления для листа "${sheetName}":`, JSON.stringify(updateData.slice(0, 2), null, 2));
+                        
+                        const result = await sheets.spreadsheets.values.batchUpdate({
                             spreadsheetId: GOOGLE_SHEETS_CONFIG.sheetId,
                             requestBody: {
                                 valueInputOption: 'USER_ENTERED',
-                                data: sheetUpdates.map(update => ({
-                                    range: `${sheetName}!${update.range}`,
-                                    values: update.values
-                                }))
+                                data: updateData
                             }
                         });
                         
                         updatedCount += sheetUpdates.length;
                         console.log(`✅ Обновлено ${sheetUpdates.length} ячеек в листе "${sheetName}"`);
+                        console.log(`📊 Результат обновления:`, JSON.stringify(result.data, null, 2));
                     } catch (error) {
                         console.error(`Ошибка обновления листа ${sheetGid}:`, error.message);
                     }
