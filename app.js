@@ -8323,9 +8323,16 @@ function checkout() {
                     });
                     
                     if (updateResponse.ok) {
-                        console.log('✅ Google таблица обновлена');
+                        const updateResult = await updateResponse.json();
+                        console.log('✅ Google таблица обновлена:', updateResult);
+                        if (updateResult.updated === 0) {
+                            console.warn('⚠️ ВНИМАНИЕ: Обновления не выполнены! Проверьте настройку credentials.json на сервере.');
+                        } else {
+                            console.log(`✅ Успешно обновлено ${updateResult.updated} ячеек из ${updateResult.updates} подготовленных`);
+                        }
                     } else {
-                        console.error('Ошибка обновления Google таблицы:', await updateResponse.text());
+                        const errorText = await updateResponse.text();
+                        console.error('❌ Ошибка обновления Google таблицы:', errorText);
                     }
                 } catch (error) {
                     console.error('Ошибка обновления Google таблицы:', error);
@@ -13866,4 +13873,3 @@ if (window.location.hash && window.location.hash.startsWith('#product=')) {
         }, 500);
     }
 }
-
