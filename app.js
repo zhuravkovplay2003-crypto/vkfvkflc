@@ -8194,6 +8194,16 @@ function checkout() {
                 
                 // ВАЖНО: Обновляем Google таблицу - вычитаем проданное количество и записываем в графу "продано шт"
                 try {
+                    const updateItems = cart.map(item => ({
+                        productId: item.id || item.productId,
+                        flavor: item.flavor || null,
+                        quantity: item.quantity,
+                        location: deliveryType === 'selfPickup' ? selectedPickupLocation : null
+                    }));
+                    
+                    console.log('📦 Отправляем обновление количества товаров:', JSON.stringify(updateItems, null, 2));
+                    console.log('📍 Location:', deliveryType === 'selfPickup' ? selectedPickupLocation : null);
+                    
                     const updateResponse = await fetch(`${SERVER_URL}/api/orders/update-stock`, {
                         method: 'POST',
                         headers: {
@@ -8201,12 +8211,7 @@ function checkout() {
                         },
                         body: JSON.stringify({
                             orderId: result.orderId,
-                            items: cart.map(item => ({
-                                productId: item.id || item.productId,
-                                flavor: item.flavor || null,
-                                quantity: item.quantity,
-                                location: deliveryType === 'selfPickup' ? selectedPickupLocation : null
-                            })),
+                            items: updateItems,
                             action: 'decrease',
                             location: deliveryType === 'selfPickup' ? selectedPickupLocation : null
                         })
