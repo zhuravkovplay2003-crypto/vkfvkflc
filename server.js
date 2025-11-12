@@ -1063,6 +1063,7 @@ app.post('/api/orders/update-stock', async (req, res) => {
                     // В таблице колонки: "Минск, ст. м. Грушевка", "Минск, ст. м. Площадь Победы", "Могилёв, ул. Ленинская, 20" и т.д.
                     // Нормализуем строки для сравнения: убираем пробелы, точки, запятые, приводим к нижнему регистру
                     const normalizeLocation = (str) => {
+                        if (!str) return '';
                         return str.toLowerCase()
                             .replace(/\s+/g, '')
                             .replace(/\./g, '')
@@ -1093,7 +1094,7 @@ app.post('/api/orders/update-stock', async (req, res) => {
                         
                         // Для Минска: ищем совпадение по станции метро или адресу
                         if (locLower.includes('минск')) {
-                            // Извлекаем ключевое слово из location (после "ст. м." или "ст. М.")
+                            // Извлекаем ключевое слово из location (после "ст. м." или "ст. М." или "Ст. М.")
                             const locationKey = locLower
                                 .replace(/минск[,\s]*ст[.\s]*м?[.\s]*/i, '')
                                 .replace(/минск[,\s]*/i, '')
@@ -1112,13 +1113,18 @@ app.post('/api/orders/update-stock', async (req, res) => {
                                 return true;
                             }
                             
-                            // Проверяем конкретные станции метро
+                            // Проверяем конкретные станции метро (более надежный способ)
                             const stations = ['грушевка', 'победы', 'немига', 'октябрьская', 'партизанская', 'тракторный'];
-                            const hasStation = stations.some(station => 
-                                locLower.includes(station) && hLower.includes(station)
-                            );
+                            const hasStation = stations.some(station => {
+                                const locHasStation = locLower.includes(station);
+                                const headerHasStation = hLower.includes(station);
+                                if (locHasStation && headerHasStation) {
+                                    console.log(`✅ Совпадение по станции метро: "${station}"`);
+                                    return true;
+                                }
+                                return false;
+                            });
                             if (hasStation) {
-                                console.log(`✅ Совпадение по станции метро`);
                                 return true;
                             }
                         }
