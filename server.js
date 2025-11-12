@@ -955,6 +955,17 @@ app.post('/api/orders/update-stock', async (req, res) => {
         // Обновляем количество для каждого товара
         const updates = [];
         
+        // Функция для преобразования индекса колонки в буквенное обозначение (A, B, ..., Z, AA, AB, ...)
+        const getColumnLetter = (colIndex) => {
+            let result = '';
+            let index = colIndex;
+            while (index >= 0) {
+                result = String.fromCharCode(65 + (index % 26)) + result;
+                index = Math.floor(index / 26) - 1;
+            }
+            return result;
+        };
+        
         console.log(`📦 Обрабатываем ${items.length} товаров для обновления`);
         
         for (const item of items) {
@@ -1161,11 +1172,13 @@ app.post('/api/orders/update-stock', async (req, res) => {
                         }
                         
                         console.log(`📊 Обновление варианта: ${currentQuantity} -> ${newQuantity} (${action})`);
-                        console.log(`📝 Ячейка: ${String.fromCharCode(65 + locationColIndex)}${variantRowIndex}`);
+                        
+                        const columnLetter = getColumnLetter(locationColIndex);
+                        console.log(`📝 Ячейка: ${columnLetter}${variantRowIndex}`);
                         
                         updates.push({
                             sheetId: GOOGLE_SHEETS_CONFIG.variantsGid,
-                            range: `${String.fromCharCode(65 + locationColIndex)}${variantRowIndex}`,
+                            range: `${columnLetter}${variantRowIndex}`,
                             value: newQuantity.toString()
                         });
                     } else {
@@ -1199,7 +1212,7 @@ app.post('/api/orders/update-stock', async (req, res) => {
                 
                 updates.push({
                     sheetId: GOOGLE_SHEETS_CONFIG.productsGid,
-                    range: `${String.fromCharCode(65 + soldColIndex)}${productRowIndex}`,
+                    range: `${getColumnLetter(soldColIndex)}${productRowIndex}`,
                     value: newSold.toString()
                 });
                 console.log(`💰 Обновляем "Продано": ${currentSold} -> ${newSold}`);
