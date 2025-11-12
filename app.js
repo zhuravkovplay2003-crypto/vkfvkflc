@@ -4955,23 +4955,47 @@ function showSortMenu() {
 function selectPickupLocation() {
     console.log('selectPickupLocation called');
     
-    // Структура локаций по городам
+    // Извлекаем уникальные точки самовывоза из всех товаров
+    const allLocations = new Set();
+    
+    if (products && products.length > 0) {
+        products.forEach(product => {
+            if (product.stockByLocation && Object.keys(product.stockByLocation).length > 0) {
+                Object.keys(product.stockByLocation).forEach(location => {
+                    allLocations.add(location);
+                });
+            }
+        });
+    }
+    
+    console.log('📍 Найдено точек самовывоза из товаров:', Array.from(allLocations));
+    
+    // Группируем точки по городам
     const cities = {
-        'Минск': [
-            'ст. м. Грушевка',
-            'ст. м. Площадь Победы',
-            'ст. м. Немига',
-            'ст. м. Октябрьская',
-            'ст. м. Партизанская',
-            'ст. м. Тракторный завод'
-        ],
-        'Могилёв': [
-            'ул. Ленинская, 20',
-            'пр-т Мира, 15',
-            'ул. Первомайская, 8',
-            'ул. Челюскинцев, 12'
-        ]
+        'Минск': [],
+        'Могилёв': []
     };
+    
+    allLocations.forEach(fullLocation => {
+        // Извлекаем название точки без города
+        let locationName = '';
+        
+        if (fullLocation.startsWith('Минск')) {
+            // Убираем "Минск, " из начала
+            locationName = fullLocation.replace(/^Минск,\s*/, '');
+            cities['Минск'].push(locationName);
+        } else if (fullLocation.startsWith('Могилёв') || fullLocation.startsWith('Могилев')) {
+            // Убираем "Могилёв, " или "Могилев, " из начала
+            locationName = fullLocation.replace(/^Могилёв,\s*/, '').replace(/^Могилев,\s*/, '');
+            cities['Могилёв'].push(locationName);
+        }
+    });
+    
+    // Убираем дубликаты и сортируем
+    cities['Минск'] = [...new Set(cities['Минск'])].sort();
+    cities['Могилёв'] = [...new Set(cities['Могилёв'])].sort();
+    
+    console.log('📍 Точки по городам:', cities);
     
     // Удаляем предыдущее модальное окно если есть
     const existingModal = document.querySelector('.location-modal-overlay');
