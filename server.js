@@ -869,18 +869,45 @@ app.post('/api/orders/update-stock', async (req, res) => {
         
         const fetchCSV = (csvUrl) => {
             return new Promise((resolve, reject) => {
-                const parsedUrl = url.parse(csvUrl);
-                https.get(parsedUrl, (res) => {
-                    let data = '';
-                    res.on('data', (chunk) => { data += chunk; });
-                    res.on('end', () => {
-                        if (res.statusCode === 200) {
-                            resolve(data);
-                        } else {
-                            reject(new Error(`HTTP ${res.statusCode}`));
+                const makeRequest = (requestUrl, redirectCount = 0) => {
+                    if (redirectCount > 5) {
+                        return reject(new Error('Too many redirects'));
+                    }
+                    
+                    const parsedUrl = url.parse(requestUrl);
+                    const options = {
+                        hostname: parsedUrl.hostname,
+                        port: parsedUrl.port || 443,
+                        path: parsedUrl.path,
+                        method: 'GET',
+                        followRedirect: false
+                    };
+                    
+                    https.get(options, (res) => {
+                        // Обрабатываем редиректы (301, 302, 307, 308)
+                        if (res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
+                            const redirectUrl = res.headers.location;
+                            console.log(`🔄 Редирект ${res.statusCode} на: ${redirectUrl}`);
+                            // Если относительный URL, делаем его абсолютным
+                            const absoluteUrl = redirectUrl.startsWith('http') 
+                                ? redirectUrl 
+                                : `${parsedUrl.protocol}//${parsedUrl.hostname}${redirectUrl}`;
+                            return makeRequest(absoluteUrl, redirectCount + 1);
                         }
-                    });
-                }).on('error', reject);
+                        
+                        let data = '';
+                        res.on('data', (chunk) => { data += chunk; });
+                        res.on('end', () => {
+                            if (res.statusCode >= 200 && res.statusCode < 300) {
+                                resolve(data);
+                            } else {
+                                reject(new Error(`HTTP ${res.statusCode}: ${data.substring(0, 200)}`));
+                            }
+                        });
+                    }).on('error', reject);
+                };
+                
+                makeRequest(csvUrl);
             });
         };
         
@@ -1022,19 +1049,102 @@ app.post('/api/orders/update-stock', async (req, res) => {
                     console.log(`📋 Заголовки вариантов:`, variantHeaders);
                     
                     // Ищем колонку с количеством для конкретного адреса
-                    // Формат может быть: "Минск, ст. м. Грушевка" или просто название адреса
+                    // В таблице колонки: "Минск, ст. м. Грушевка", "Минск, ст. м. Площадь Победы", "Могилёв, ул. Ленинская, 20" и т.д.
+                    // Нормализуем строки для сравнения: убираем пробелы, точки, запятые, приводим к нижнему регистру
+                    const normalizeLocation = (str) => {
+                        return str.toLowerCase()
+                            .replace(/\s+/g, '')
+                            .replace(/\./g, '')
+                            .replace(/,/g, '')
+                            .replace(/ст\.?/g, 'ст')
+                            .replace(/м\.?/g, 'м')
+                            .replace(/ул\.?/g, 'ул')
+                            .replace(/пр-т/g, 'проспект')
+                            .replace(/пр\./g, 'проспект')
+                            .trim();
+                    };
+                    
+                    const locNormalized = normalizeLocation(location);
+                    console.log(`🔍 Нормализованный location: "${locNormalized}"`);
+                    console.log(`📋 Все заголовки вариантов:`, variantHeaders);
+                    
                     const locationColIndex = variantHeaders.findIndex(h => {
-                        const hLower = h.toLowerCase().trim();
-                        const locLower = location.toLowerCase().trim();
-                        // Более гибкий поиск - ищем частичное совпадение
-                        // Убираем все пробелы и сравниваем
-                        const hClean = hLower.replace(/\s+/g, '');
-                        const locClean = locLower.replace(/\s+/g, '');
-                        return hLower === locLower || 
-                               hLower.includes(locLower) || 
-                               locLower.includes(hLower) ||
-                               hClean.includes(locClean) ||
-                               locClean.includes(hClean);
+                        const hNormalized = normalizeLocation(h);
+                        // Проверяем точное совпадение после нормализации
+                        if (hNormalized === locNormalized) {
+                            console.log(`✅ Точное совпадение: "${h}" === "${location}"`);
+                            return true;
+                        }
+                        
+                        // Проверяем частичное совпадение по ключевым словам
+                        const hLower = h.toLowerCase();
+                        const locLower = location.toLowerCase();
+                        
+                        // Для Минска: ищем совпадение по станции метро или адресу
+                        if (locLower.includes('минск')) {
+                            // Извлекаем ключевое слово из location (после "ст. м." или "ст. М.")
+                            const locationKey = locLower
+                                .replace(/минск[,\s]*ст[.\s]*м?[.\s]*/i, '')
+                                .replace(/минск[,\s]*/i, '')
+                                .trim();
+                            
+                            // Извлекаем ключевое слово из заголовка
+                            const headerKey = hLower
+                                .replace(/минск[,\s]*ст[.\s]*м?[.\s]*/i, '')
+                                .replace(/минск[,\s]*/i, '')
+                                .trim();
+                            
+                            // Проверяем совпадение ключевых слов
+                            if (locationKey && headerKey && 
+                                (locationKey.includes(headerKey) || headerKey.includes(locationKey))) {
+                                console.log(`✅ Совпадение по ключевому слову: "${locationKey}" в "${headerKey}"`);
+                                return true;
+                            }
+                            
+                            // Проверяем конкретные станции метро
+                            const stations = ['грушевка', 'победы', 'немига', 'октябрьская', 'партизанская', 'тракторный'];
+                            const hasStation = stations.some(station => 
+                                locLower.includes(station) && hLower.includes(station)
+                            );
+                            if (hasStation) {
+                                console.log(`✅ Совпадение по станции метро`);
+                                return true;
+                            }
+                        }
+                        
+                        // Для Могилёва: ищем совпадение по улице
+                        if (locLower.includes('могилёв') || locLower.includes('могилев')) {
+                            // Извлекаем улицу из location
+                            const locationStreet = locLower
+                                .replace(/могилёв[,\s]*/i, '')
+                                .replace(/могилев[,\s]*/i, '')
+                                .trim();
+                            
+                            // Извлекаем улицу из заголовка
+                            const headerStreet = hLower
+                                .replace(/могилёв[,\s]*/i, '')
+                                .replace(/могилев[,\s]*/i, '')
+                                .trim();
+                            
+                            // Проверяем совпадение улиц
+                            if (locationStreet && headerStreet && 
+                                (locationStreet.includes(headerStreet) || headerStreet.includes(locationStreet))) {
+                                console.log(`✅ Совпадение по улице Могилёва: "${locationStreet}" в "${headerStreet}"`);
+                                return true;
+                            }
+                            
+                            // Проверяем конкретные улицы Могилёва
+                            const mogilevStreets = ['ленинская', 'мира', 'первомайская', 'челюскинцев'];
+                            const hasStreet = mogilevStreets.some(street => 
+                                locLower.includes(street) && hLower.includes(street)
+                            );
+                            if (hasStreet) {
+                                console.log(`✅ Совпадение по улице Могилёва`);
+                                return true;
+                            }
+                        }
+                        
+                        return false;
                     });
                     
                     console.log(`📍 Индекс колонки для location "${location}": ${locationColIndex}`);
