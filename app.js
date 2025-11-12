@@ -30,7 +30,8 @@ let deliveryTime = null; // Время доставки в формате 'YYYY-
 let deliveryExactTime = null; // Точное время доставки в формате 'HH:MM'
 let selectedDeliveryDay = null; // Выбранный день доставки в формате 'YYYY-MM-DD'
 let deliveryAddress = ''; // Адрес доставки для курьерской доставки
-let selectedPickupLocation = 'Минск, ст. м. Грушевка'; // Выбранная точка самовывоза в корзине
+let selectedPickupLocation = 'Минск, ст. м. Грушевка'; // Выбранная точка самовывоза в корзине (отформатированная для отображения)
+let originalPickupLocation = 'Минск, ст. м. Грушевка'; // Оригинальное название точки из таблицы (для отправки на сервер)
 let selectedCity = ''; // Выбранный город для доставки
 let viewedProducts = []; // Недавно просмотренные товары
 let darkMode = false; // Тема приложения (темная/светлая)
@@ -1228,8 +1229,14 @@ function init() {
     if (savedPickupLocation) {
         // ВАЖНО: Форматируем адрес при загрузке из localStorage
         selectedPickupLocation = formatLocation(savedPickupLocation);
+        // Восстанавливаем оригинальное название из localStorage
+        const savedOriginalLocation = localStorage.getItem('originalPickupLocation');
+        originalPickupLocation = savedOriginalLocation || savedPickupLocation;
         // Сохраняем отформатированный адрес обратно
         localStorage.setItem('selectedPickupLocation', selectedPickupLocation);
+    } else {
+        // Если нет сохраненного адреса, устанавливаем значения по умолчанию
+        originalPickupLocation = 'Минск, ст. м. Грушевка';
     }
     const savedSelectedCity = localStorage.getItem('selectedCity');
     if (savedSelectedCity) {
@@ -5198,9 +5205,12 @@ function selectPickupLocation() {
                     }
                 }
                 
-                // Обновляем адрес
+                // Обновляем адрес (отформатированный для отображения)
                 selectedPickupLocation = formattedLocation;
+                // Сохраняем оригинальное название из таблицы (без форматирования)
+                originalPickupLocation = fullLocation;
                 localStorage.setItem('selectedPickupLocation', selectedPickupLocation);
+                localStorage.setItem('originalPickupLocation', originalPickupLocation);
                 
                 // Обновляем отображение точки в шапке
                 updatePickupLocationDisplay();
@@ -6958,6 +6968,9 @@ function showCart() {
     if (savedPickupLocation) {
         // ВАЖНО: Форматируем адрес при загрузке из localStorage
         selectedPickupLocation = formatLocation(savedPickupLocation);
+        // Восстанавливаем оригинальное название из localStorage
+        const savedOriginalLocation = localStorage.getItem('originalPickupLocation');
+        originalPickupLocation = savedOriginalLocation || savedPickupLocation;
         // Сохраняем отформатированный адрес обратно
         localStorage.setItem('selectedPickupLocation', selectedPickupLocation);
     }
@@ -8289,11 +8302,12 @@ function checkout() {
                         productId: item.id || item.productId,
                         flavor: item.flavor || null,
                         quantity: item.quantity,
-                        location: deliveryType === 'selfPickup' ? selectedPickupLocation : null
+                        location: deliveryType === 'selfPickup' ? originalPickupLocation : null
                     }));
                     
                     console.log('📦 Отправляем обновление количества товаров:', JSON.stringify(updateItems, null, 2));
-                    console.log('📍 Location:', deliveryType === 'selfPickup' ? selectedPickupLocation : null);
+                    console.log('📍 Location (оригинальное):', deliveryType === 'selfPickup' ? originalPickupLocation : null);
+                    console.log('📍 Location (отформатированное):', deliveryType === 'selfPickup' ? selectedPickupLocation : null);
                     
                     const updateResponse = await fetch(`${SERVER_URL}/api/orders/update-stock`, {
                         method: 'POST',
@@ -8304,7 +8318,7 @@ function checkout() {
                             orderId: result.orderId,
                             items: updateItems,
                             action: 'decrease',
-                            location: deliveryType === 'selfPickup' ? selectedPickupLocation : null
+                            location: deliveryType === 'selfPickup' ? originalPickupLocation : null
                         })
                     });
                     
@@ -13852,3 +13866,4 @@ if (window.location.hash && window.location.hash.startsWith('#product=')) {
         }, 500);
     }
 }
+
